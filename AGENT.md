@@ -7,7 +7,7 @@ This file must be read at the start of every AI assistant pass. It records the s
 ## Project Identity
 
 - **Name:** dwb-skim
-- **Product baseline:** donor copy of `dwb player`, not yet renamed or trimmed into the final skim product
+- **Product baseline:** renamed donor-derived baseline for `dwb - skim`; skim-specific behavior and trimming remain future work
 - **Language:** Swift
 - **Frameworks:** AppKit, VLCKit via Swift Package Manager
 - **Platform:** macOS 13+
@@ -18,30 +18,38 @@ This file must be read at the start of every AI assistant pass. It records the s
 
 ## Build And Package Baseline
 
-- **Canonical build command:** `./scripts/build-app.sh`
-- **Canonical package command:** `./scripts/package-release.sh`
-- **Canonical installer command:** `./scripts/build-installer.sh`
-- **Canonical signing helper:** `./scripts/sign-app.sh`
-- **Expected build artifact:** `dist/dwb player.app`
-- **Build metadata artifact:** `dist/dwb-player-app-build-info.txt`
+- **Canonical build command:** `xcodebuild -project dwb/dwb-skim.xcodeproj -scheme dwb-skim -configuration Debug -destination 'platform=macOS' build`
+- **Canonical package command:** none currently present; future packaging pass must define the package interface before use
+- **Canonical installer command:** none currently present; future installer/release pass must define the installer interface before use
+- **Canonical signing helper:** none currently present; signing/notarization remain out of scope unless explicitly requested
+- **Expected debug build artifact:** DerivedData app bundle named `dwb - skim.app` produced by the canonical xcodebuild command
+- **Build metadata artifact:** none currently present
 - **Project generator:** `dwb/project.yml` via `xcodegen`
-- **Xcode project:** `dwb/dwb.xcodeproj`
-- **Primary schemes:** `dwb`, `dwbTests`
+- **Xcode project:** `dwb/dwb-skim.xcodeproj`
+- **Primary schemes:** `dwb-skim`, `dwb-skimTests`
 
-The current donor copy does not include the `scripts/` build helpers yet. Until a future pass restores or replaces them, treat the README-documented commands as the intended interface and do not invent alternate build entry points inside workflow-only passes.
+Current build identity after P02:
+- App target/scheme: `dwb-skim`
+- Test target/scheme: `dwb-skimTests`
+- Public product/app bundle name: `dwb - skim.app`
+- App bundle identifier: `com.dwb.skim`
+- Test bundle identifier: `com.dwb.skimTests`
+- Swift module names: `dwb_skim`, `dwb_skimTests`
+
+The donor build/package/signing helper scripts are absent. Use the canonical direct xcodebuild command above for current build verification. A future packaging/release pass may add dedicated helper scripts, but workflow-only passes must not invent or install tooling.
 
 ---
 
 ## Source Structure
 
-- `README.md` documents the donor app, release posture, and intended build/package commands.
-- `DONOR_MANIFEST.md` describes what was copied into this extracted project and what was intentionally excluded.
+- `README.md` documents the current `dwb - skim` app identity, local build/test commands, feature scope, and remaining work.
+- `DONOR_MANIFEST.md` preserves donor provenance and notes which extraction/rename work has been completed.
 - `dwb/project.yml` is the XcodeGen source of truth for targets, versions, bundle IDs, deployment target, and VLCKit dependency.
-- `dwb/dwb/` contains the AppKit application code:
+- `dwb/dwb-skim/` contains the AppKit application code:
   - `App/` for lifecycle, settings, defaults, bookmarks, and debug tooling
   - `Player/` for playback, queue, layout, controls, and media support
   - `Resources/` for `Info.plist` and assets
-- `dwb/dwbTests/` contains donor unit tests that currently ship with the extracted copy.
+- `dwb/dwb-skimTests/` contains the unit tests for the renamed app.
 - `docs/images/` contains README screenshots only.
 
 ---
@@ -52,7 +60,7 @@ The current donor copy does not include the `scripts/` build helpers yet. Until 
 - Preserve programmatic UI patterns in the donor codebase.
 - Preserve per-window playback ownership; do not introduce shared global playback state across windows without an explicit design pass.
 - Keep VLCKit as the playback dependency unless a future pass explicitly scopes dependency changes.
-- This repository is presently a donor-derived baseline. Do not assume the app name, bundle IDs, target names, UI copy, or release posture have already been migrated to `dwb-skim`.
+- This repository is a renamed donor-derived baseline. The app name, bundle IDs, target names, schemes, public strings, and documentation were migrated in P02; skim-specific behavior, trimming, packaging, signing, and release posture still require future passes.
 
 ---
 
