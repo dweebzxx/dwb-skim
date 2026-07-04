@@ -69,3 +69,24 @@ scripts/ai-tool-preflight.zsh
 dwb/dwbTests/
 scripts/test.sh
 .github/workflows/
+
+# v2.3 private-repo workflow Tier 2 block
+/AGENTS.md
+/CLAUDE.md
+/metadata-schema.json
+/scripts
+/.codex/
+/.claude/
+/audit/
+/.private/
+/.antigravitycli/
+/README-dwb-skim-donor.md
+/DONOR_MANIFEST.md
+build-report-logs/launchers/
+build-report-logs/logs/
+build-report-logs/prompts/
+build-report-logs/reports/
+build-report-logs/metadata-reports/
+.env
+.env.*
+!.env.example
