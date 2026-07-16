@@ -1,4 +1,4 @@
-name: dwb
+name: dwb-skim
 options:
   minimumXcodeGenVersion: "2.0"
   deploymentTarget:
@@ -21,24 +21,27 @@ packages:
     from: "3.6.0"
 
 targets:
-  dwb:
+  dwb-skim:
     type: application
+    productName: "dwb - skim"
     platform: macOS
     deploymentTarget: "13.0"
     sources:
-      - path: dwb
+      - path: dwb-skim
         excludes:
           - Resources/Info.plist
     resources:
-      - path: dwb/Resources/Info.plist
-      - path: dwb/Resources/Assets.xcassets
+      - path: dwb-skim/Resources/Info.plist
+      - path: dwb-skim/Resources/Assets.xcassets
     settings:
       base:
-        INFOPLIST_FILE: dwb/Resources/Info.plist
+        INFOPLIST_FILE: dwb-skim/Resources/Info.plist
         MARKETING_VERSION: "4.2.2"
         CURRENT_PROJECT_VERSION: "4.2.2"
-        PRODUCT_BUNDLE_IDENTIFIER: com.dwb.dwb
-        PRODUCT_NAME: "dwb player"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwb.skim
+        PRODUCT_NAME: "dwb - skim"
+        PRODUCT_MODULE_NAME: dwb_skim
+        SWIFT_MODULE_NAME: dwb_skim
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: "YES"
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -46,36 +49,45 @@ targets:
       - package: vlckit-spm
         product: VLCKitSPM
 
-  dwbTests:
+  dwb-skimTests:
     type: bundle.unit-test
+    productName: "dwb-skimTests"
     platform: macOS
     deploymentTarget: "13.0"
     sources:
-      - path: dwbTests
-      - path: dwb/Player/MediaFileSupportCore.swift
-      - path: dwb/Player/PlaybackCompletionPolicy.swift
-      - path: dwb/Player/QueueDisplayProjection.swift
-      - path: dwb/App/DebugLogSanitizer.swift
-      - path: dwb/App/BookmarkStore.swift
-      - path: dwb/App/SettingsDefaultsRegistry.swift
+      - path: dwb-skimTests
+      - path: dwb-skim/Player/MediaFileSupportCore.swift
+      - path: dwb-skim/Player/PlaybackCompletionPolicy.swift
+      - path: dwb-skim/Player/QueueOrderPlanner.swift
+      - path: dwb-skim/Player/QueueDisplayProjection.swift
+      - path: dwb-skim/Player/SkimFileRenamer.swift
+      - path: dwb-skim/Player/SkimReviewStatusDescriptor.swift
+      - path: dwb-skim/Player/SkimReviewState.swift
+      - path: dwb-skim/App/DebugLogSanitizer.swift
+      - path: dwb-skim/App/BookmarkStore.swift
+      - path: dwb-skim/App/SettingsDefaultsRegistry.swift
+      - path: dwb-skim/Player/SkimColors.swift
+      - path: dwb-skim/Player/SkimPreviewPlaybackPlan.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: "YES"
-        PRODUCT_BUNDLE_IDENTIFIER: com.dwb.dwbTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.dwb.skimTests
+        PRODUCT_MODULE_NAME: dwb_skimTests
+        SWIFT_MODULE_NAME: dwb_skimTests
         CODE_SIGNING_REQUIRED: "NO"
         CODE_SIGNING_ALLOWED: "NO"
         DEVELOPMENT_TEAM: ""
 
 schemes:
-  dwb:
+  dwb-skim:
     build:
       targets:
-        dwb: all
+        dwb-skim: all
 
-  dwbTests:
+  dwb-skimTests:
     build:
       targets:
-        dwbTests: all
+        dwb-skimTests: all
     test:
       targets:
-        - dwbTests
+        - dwb-skimTests

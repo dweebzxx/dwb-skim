@@ -1,28 +1,30 @@
 <p align="center">
-  <img src="docs/images/dwb-icon.png" alt="dwb player app icon" width="144">
+  <img src="docs/images/dwb-skim-icon.png" alt="dwb - skim app icon" width="144">
 </p>
 
-<h1 align="center">dwb player</h1>
+<h1 align="center">dwb - skim</h1>
 
 <p align="center">
-  A native macOS media player for fast local queueing, multi-window playback, and practical file controls.
+  A native macOS media player baseline for local queueing, multi-window playback, and future skim-focused iteration.
 </p>
 
 <p align="center">
-  <img src="docs/images/dwb-hero.png" alt="dwb player main playback window with bottom rail controls" width="900">
+  <img src="docs/images/dwb-skim-hero.png" alt="dwb - skim main playback window with bottom rail controls" width="900">
 </p>
 
 ## Overview
 
-dwb player is a native Swift/AppKit media player for macOS 13 and newer. Version 4.2.2 focuses on local media playback, fast queue building, independent player windows, Finder-style file ordering, and direct controls for working through files on disk.
+`dwb - skim` is a native Swift/AppKit macOS app targeting macOS 13 and newer. This repository now uses the `dwb-skim` project identity while preserving the donor app's current playback architecture, queue model, and VLCKit integration as the baseline for future skim-specific work.
 
-Playback is powered by VLCKit through Swift Package Manager. dwb player is local-only: it does not provide streaming, cloud sync, telemetry, transcoding, or media-library management.
+Playback is powered by VLCKit through Swift Package Manager. The current app remains local-only: it does not provide streaming, cloud sync, telemetry, transcoding, or media-library management.
 
-## Current Release Highlights
+## Current State
 
-- Standardized public app naming to `dwb player` across the interface and documentation.
-- Refreshed Settings and About sections with updated attributions and links.
-- Hardened multi-window autoplay transitions by reusing the VLCKit player during normal auto-advance to prevent configuration hangs.
+- Project slug, Xcode project, app target, test target, and shared schemes use `dwb-skim`.
+- The public product name is `dwb - skim`.
+- Bundle identifiers use the existing `com.dwb` owner prefix with skim-specific suffixes.
+- The codebase is still behaviorally close to the donor app; this pass only completes identity migration.
+- Skim-specific review behavior is planned in [`docs/skim-m1-plan.md`](docs/skim-m1-plan.md); this pass establishes only the accent/status color token baseline (Dark Teal `#254F58` as primary accent, Burnt Orange `#8F4218` for delete, Periwinkle `#4C62A8` for rename/other).
 
 ## Features
 
@@ -30,169 +32,88 @@ Playback is powered by VLCKit through Swift Package Manager. dwb player is local
 
 - Native Swift and AppKit macOS application with a programmatic UI.
 - VLCKit-backed local video playback.
-- Common local video formats: `mp4`, `m4v`, `mov`, `avi`, `flv`, `f4v`, `wmv`, `asf`, `mkv`, `ts`, `mts`, `m2ts`, `m2t`, `mpg`, `3gp`, `3g2`, `vob`, `ogv`, and `ogm`.
-- Still-image and animated GIF playback with configurable slideshow duration and GIF loop count. Supported image formats: `jpg`, `jpeg`, `jfif`, `png`, `gif`, `tiff`, `tif`, `bmp`, `heic`, `heif`, and `webp`.
 - Drag-and-drop, Finder/Open With, Dock open, menu open, and recursive folder expansion for supported local media files.
-- Folder import uses Finder-style natural filename ordering by display filename, with deterministic path tie-breaks.
-- Top-insert behavior for explicitly opened or dropped files, so new files can be queued quickly.
 - Play/pause, previous/next, configurable rewind/forward skip controls, scrubber seeking, fullscreen, Fit/Fill/Stretch scale modes, Keep Window On Top, and optional titlebar auto-hide.
-- Per-window volume, mute, playback speed, opacity, and playback state. Persisted volume is used as the default for new windows.
-- Repeat One plus a three-state shuffle cycle: Off, Shuffle, and Endless Shuffle.
-- Stop isolation, stop-to-Queue-Page flow, paused-near-end completion handling, and queue restart from the beginning after natural completion.
+- Per-window volume, mute, playback speed, opacity, and playback state.
+- Repeat One plus queue order settings for Sequential, Shuffle, Weighted (waited-since-played), and Loop Queue.
+- Skim Preview settings for fixed or random per-item preview duration, random duration bounds, start position, and skip-intro.
 
 ### Queue
 
-- Full Queue Page with filename, duration, file size, search/filter, bookmark filter, and total queue duration.
-- Manual queue ordering by row drag, plus sort modes for Name A-Z, Name Z-A, Size Low-High, Size High-Low, Duration Short-Long, and Duration Long-Short.
-- Name A-Z and Name Z-A sorting use the same Finder-style natural filename comparison as folder import.
-- Single-click row selection and double-click-to-play.
-- Multi-select queue operations, selected-row Delete/Backspace removal, Remove All, Clear Queue, and rescan.
-- Reveal in Finder and rename current file actions from the app menu or queue context actions.
-- Bookmark toggles in the playback controls, queue rows, and Queue Page filter.
-- Quick Queue support, including an optional setting to open the Queue Page when a player window opens.
-
-### Prefix Rename
-
-- Dual configurable prefix rename for videos, images, and GIFs.
-- The primary prefix is applied with `Q`; the secondary prefix is applied with `Option-Q`.
-- Player and Queue Page prefix buttons can apply the configured prefix without opening a rename dialog.
-- Player and bottom-rail prefix buttons show the first configured character plus `_`; Queue Page footer prefix labels show the trimmed full prefix up to 8 characters, truncating longer labels with an ellipsis.
-- Queue highlighting recognizes both prefixes and prefers the longer matching prefix when both could match.
-- Prefix identity colors are Dark Teal 500 `#488FA0` for primary and Burnt Orange 300 `#D4906A` for secondary.
-- `x_` is only a possible user-configured prefix value; it is not a hard-coded rename mode.
+- Queue page with filename, duration, file size, search/filter, bookmark filter, and total queue duration.
+- Manual queue ordering by row drag plus multiple sort modes.
+- Settings-controlled queue playback order: Sequential, Shuffle, Weighted (favoring items that have waited longest since playback), plus Loop Queue.
+- Multi-select queue operations, removal actions, and queue rescan support.
+- Reveal in Finder, rename-current-file, and bookmark actions integrated into the app UI.
 
 ### Windows And Controls
 
 - Multiple independent player windows, each with its own VLCKit player state.
-- Command-4 Four Window Grid layout for arranging four player windows.
-- Unified bottom rail as the active control surface, with optional transport buttons, auto-hide behavior, bookmark control, prefix controls, and More menu fallback.
-- More menu fallback for rail actions that do not fit in the active bottom rail.
-- Complete Video Mode for windowed fill playback.
-- Window opacity slider from 35% to 100%.
-
-### Settings, Menus, And About
-
-- Settings window sections: Playback, Controls, Queue & Files, Shortcuts, Advanced, and About.
-- Configurable skip duration, slideshow duration, GIF loop count, accepted media types, optional playback-bar buttons, Queue Page behavior, rename options, titlebar behavior, Complete Video Mode, rail behavior, playback speed, and window opacity.
-- About section identifies `dwb player`, shows the app version/build, mentions the MIT License, identifies AppKit and VLCKit, and links to the GitHub repository and issue tracker.
-- Programmatic menus cover dwb player, File, Playback, Video, and Window actions including Settings, Open, Reveal in Finder, Rename, Remove Current from Queue, Clear Queue, New Window, playback controls, speed, scale mode, Four Window Grid, Keep Window On Top, and Auto-hide Titlebar.
-- Developer/debugging support through the Debug Console with filtering, snapshots, export, and optional verbose autoplay tracing.
+- Four Window Grid layout for arranging four player windows.
+- Unified bottom rail with transport, bookmark, prefix, and fallback menu actions.
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/images/dwb-four-window-grid.png" alt="Four independent dwb player windows arranged in a grid" width="900">
-</p>
+The README still references screenshot assets, but the image files are currently missing from `docs/images/` in the working tree. Their expected skim-era names are:
 
-<p align="center">
-  <img src="docs/images/dwb-queue.png" alt="dwb player Queue Page with search, sort, prefix actions, and total duration" width="900">
-</p>
-
-<p align="center">
-  <img src="docs/images/dwb-settings.png" alt="dwb player Settings window over four playback windows" width="900">
-</p>
+- `docs/images/dwb-skim-icon.png`
+- `docs/images/dwb-skim-hero.png`
+- `docs/images/dwb-skim-four-window-grid.png`
+- `docs/images/dwb-skim-queue.png`
+- `docs/images/dwb-skim-settings.png`
 
 ## Requirements
 
 - macOS 13 or newer
 - Xcode with command line tools
 - Swift 5.9-compatible toolchain
-- Network access for Swift Package Manager on first build so Xcode can fetch the pinned VLCKit package and binary artifact recorded in `Package.resolved`
-- Optional: `xcodegen` to regenerate `dwb/dwb.xcodeproj` from `dwb/project.yml`
+- Network access for Swift Package Manager on first build so Xcode can fetch the pinned VLCKit dependency
+- Optional: `xcodegen` to regenerate `dwb/dwb-skim.xcodeproj` from `dwb/project.yml`
 
 ## Build From Source
 
-Build the app from the repository root:
+Use the public project helpers from the repository root:
 
 ```sh
-./scripts/build-app.sh
+dwb/tools/generate-project.zsh
+dwb/tools/clean-build-app.zsh
 ```
 
-The script builds the `dwb` scheme in Release configuration and copies the app bundle to:
+`clean-build-app.zsh` builds the app via `xcodebuild` and then copies the resulting bundle to `dist/dwb - skim.app` at the repository root for easy access.
 
-```text
-dist/dwb player.app
-```
-
-The default build path is the standard Xcode/SwiftPM path for the pinned `vlckit-spm` 3.6.0 dependency. Local generated Xcode state under `.tmp/derivedData/` may be cleared when stale absolute package artifact paths are detected after moving the repository. A cached VLCKit products fallback is disabled by default and is only for local development with `DWB_ALLOW_DEV_CACHED_VLCKIT_FALLBACK=1`; it is not release provenance.
-
-It also writes local build metadata to:
-
-```text
-dist/dwb-player-app-build-info.txt
-```
-
-Create a local ZIP package, checksum, manifest, and draft release notes:
+To run the unit tests:
 
 ```sh
-./scripts/package-release.sh
+dwb/tools/clean-test.zsh
 ```
 
-Release packaging artifacts are written under a versioned folder such as `dist/release/dwb-player-4.2.2/`. The ZIP workflow verifies the built app and extracted app locally, but it does not publish a GitHub Release, upload assets, notarize, staple, tag, or commit anything.
-
-Public binary release mode is intentionally separate from local packaging. A future credentialed release pass must provide a Developer ID Application identity, notarytool credentials or profile, explicit notarization upload approval, and final Gatekeeper verification:
+The equivalent direct clean commands are:
 
 ```sh
-DWB_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)" \
-DWB_NOTARY_KEYCHAIN_PROFILE="profile-name" \
-DWB_ALLOW_NOTARIZATION_UPLOAD=1 \
-./scripts/package-release.sh --release
+xcodebuild -project dwb/dwb-skim.xcodeproj -scheme dwb-skim -configuration Debug -destination 'platform=macOS' -derivedDataPath .tmp/DerivedData-dwb-skim-app clean build
+xcodebuild -project dwb/dwb-skim.xcodeproj -scheme dwb-skimTests -configuration Debug -destination 'platform=macOS' -derivedDataPath .tmp/DerivedData-dwb-skim-tests clean build
+xcodebuild -project dwb/dwb-skim.xcodeproj -scheme dwb-skimTests -configuration Debug -destination 'platform=macOS' -derivedDataPath .tmp/DerivedData-dwb-skim-tests clean test
 ```
-
-Installer release mode additionally requires a Developer ID Installer identity:
-
-```sh
-DWB_SIGNING_IDENTITY="Developer ID Application: Example, Inc. (TEAMID)" \
-DWB_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Example, Inc. (TEAMID)" \
-DWB_NOTARY_KEYCHAIN_PROFILE="profile-name" \
-DWB_ALLOW_NOTARIZATION_UPLOAD=1 \
-./scripts/build-installer.sh --release
-```
-
-Run the release input checks without signing, packaging, notarizing, or uploading:
-
-```sh
-./scripts/package-release.sh --check-release-inputs
-./scripts/build-installer.sh --check-release-inputs
-```
-
-If `project.yml` changes and you need to regenerate the Xcode project:
-
-```sh
-cd dwb
-xcodegen generate --spec project.yml
-cd ..
-./scripts/build-app.sh
-```
-
-## Release Status / Signing Note
-
-This repository currently provides source code only. It does not publish signed or notarized release downloads, installer packages, App Store builds, or binary release assets. P83 defined the release hardening posture but did not publish a binary and did not use Apple credentials.
-
-Local source builds and tests do not require Apple Developer Program membership. Local builds are ad-hoc signed for local `codesign` verification by default, but they are not Developer ID signed, notarized, stapled, sandboxed, or Gatekeeper-ready. Public binary release remains optional/deferred and requires Developer ID Application signing with Hardened Runtime, notarization, stapling where applicable, and recorded `spctl` verification of the exact release artifact before publication.
-
-App Sandbox is not adopted yet. It remains a future design decision because local media playback, folder import, persisted local paths, and rename workflows need a deliberate security-scoped bookmark and file-access design before sandboxing can be enabled honestly. See [docs/SIGNING.md](docs/SIGNING.md) for the full signing, notarization, installer, and sandbox posture.
 
 ## Project Structure
 
 ```text
 dwb/
   project.yml
-  dwb.xcodeproj/
-  dwb/
+  dwb-skim.xcodeproj/
+  dwb-skim/
     App/
     Player/
     Resources/
+  dwb-skimTests/
 docs/images/
-scripts/
-  build-app.sh
-
-  build-installer.sh
-  package-release.sh
-  sign-app.sh
 ```
 
 `dist/`, `.tmp/`, `DerivedData/`, build logs, archives, package outputs, signing material, and local user state are intentionally ignored by git.
+
+## Provenance
+
+This repository was extracted from the `dwb player` donor app and then renamed to `dwb-skim` / `dwb - skim`. Historical provenance remains in [README-dwb-skim-donor.md](README-dwb-skim-donor.md) and [DONOR_MANIFEST.md](DONOR_MANIFEST.md).
 
 ## License
 
