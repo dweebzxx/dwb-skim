@@ -55,38 +55,32 @@ dwb/*.xcworkspace
 
 # Node and environment
 node_modules/
-.env
-.env.*
 
-# Local-only workflow and internal artifacts
-.agents/
-audit/
-assets/
-AGENT.md
-metadata-schema.json
-scripts/ai-post-pass.zsh
-scripts/ai-tool-preflight.zsh
-dwb/dwbTests/
-scripts/test.sh
-.github/workflows/
-
-# v2.3 private-repo workflow Tier 2 block
+# v2.4.0 private-repo workflow Tier 2 block (whole-directory model)
 /AGENTS.md
 /CLAUDE.md
 /metadata-schema.json
-/scripts
+/canonical-blocks-v2.4.0.md
+/skills-lock.json
+/.agents/
+/.agents
 /.codex/
 /.claude/
 /audit/
 /.private/
 /.antigravitycli/
+/build-report-logs/launchers/
+/build-report-logs/logs/
+/build-report-logs/prompts/
+/build-report-logs/reports/
+/build-report-logs/metadata-reports/
+/scripts/
+/scripts
+
+# Project-specific Tier 2 assets
 /README-dwb-skim-donor.md
 /DONOR_MANIFEST.md
-build-report-logs/launchers/
-build-report-logs/logs/
-build-report-logs/prompts/
-build-report-logs/reports/
-build-report-logs/metadata-reports/
+
 .env
 .env.*
 !.env.example
