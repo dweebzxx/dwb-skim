@@ -1,9 +1,7 @@
 import Cocoa
 
 enum PlayerBrandColors {
-    // Periwinkle (#4C62A8): rename/other status only (see SkimColors). Used here
-    // for the bookmark button/toggle, which is an "other" state, not the primary
-    // skim accent.
+    // Periwinkle (#4C62A8): keep/bookmark categorical accent (see SkimColors).
     static let periwinkle = SkimColors.periwinkle
 
     // Burnt Orange (#8F4218): delete/destructive status color (see SkimColors).
@@ -11,19 +9,10 @@ enum PlayerBrandColors {
 }
 
 enum PrefixBrandColors {
-    // Brand color system categorical mapping for dark graphite UI:
-    // Primary custom prefix = Dark Teal 500 (#488FA0).
-    static let primaryCustomPrefixColor = NSColor(calibratedRed: 72.0 / 255.0,
-                                                  green: 143.0 / 255.0,
-                                                  blue: 160.0 / 255.0,
-                                                  alpha: 1.0)
+    // Configured custom prefixes are rename actions and share the semantic token.
+    static let primaryCustomPrefixColor = SkimColors.rename
 
-    // Secondary custom prefix = Burnt Orange 300 (#D4906A). This stop is more
-    // legible than Burnt Orange 500 on the app's dark graphite surfaces.
-    static let secondaryCustomPrefixColor = NSColor(calibratedRed: 212.0 / 255.0,
-                                                    green: 144.0 / 255.0,
-                                                    blue: 106.0 / 255.0,
-                                                    alpha: 1.0)
+    static let secondaryCustomPrefixColor = SkimColors.rename
 }
 
 /// Compact keyboard-shortcut tag rendered beside a control (e.g. "Q" next to the
@@ -65,6 +54,8 @@ final class RailButton: NSButton {
         case normal
         case emphasized
         case utility
+        case skimActive
+        case skimInactive
         case prefixPrimary
         case prefixSecondary
         case bookmark
@@ -174,6 +165,14 @@ final class RailButton: NSButton {
             hoverFill   = 0.16
             hoverBorder = 0.20
             tint = NSColor(calibratedRed: 0.78, green: 0.88, blue: 1.0, alpha: 1.0)
+        case .skimActive:
+            hoverFill = 0.18
+            hoverBorder = 0.22
+            tint = SkimColors.darkTeal
+        case .skimInactive:
+            hoverFill = 0.12
+            hoverBorder = 0.16
+            tint = NSColor.white.withAlphaComponent(0.54)
         case .prefixPrimary:
             hoverFill   = 0.16
             hoverBorder = 0.20

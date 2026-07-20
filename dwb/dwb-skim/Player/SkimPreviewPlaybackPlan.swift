@@ -5,12 +5,12 @@ import Foundation
 /// This type intentionally does not read from `SettingsWindowController` or
 /// `SettingsDefaultsRegistry` — callers supply concrete values so the planner
 /// stays pure and testable.
-enum SkimPreviewStartMode {
+enum SkimPreviewStartMode: String, Equatable {
     case beginning
     case random
 }
 
-enum SkimPreviewDurationMode {
+enum SkimPreviewDurationMode: String, Equatable {
     case fixed
     case random
 }

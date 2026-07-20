@@ -29,4 +29,11 @@ final class SkimColorsTests: XCTestCase {
         XCTAssertEqual(c.g, 98.0 / 255.0, accuracy: 0.001)
         XCTAssertEqual(c.b, 168.0 / 255.0, accuracy: 0.001)
     }
+
+    func testRenameSemanticTokenMatchesDarkTealHex254F58() {
+        let c = components(SkimColors.rename)
+        XCTAssertEqual(c.r, 37.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(c.g, 79.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(c.b, 88.0 / 255.0, accuracy: 0.001)
+    }
 }

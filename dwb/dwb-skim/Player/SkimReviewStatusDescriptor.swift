@@ -20,9 +20,9 @@ enum SkimReviewStatus: Equatable {
 
     var color: NSColor? {
         switch self {
-        case .keep: return SkimColors.darkTeal
+        case .keep: return SkimColors.periwinkle
         case .delete: return SkimColors.burntOrange
-        case .rename: return SkimColors.periwinkle
+        case .rename: return SkimColors.rename
         case .unmarked: return nil
         }
     }

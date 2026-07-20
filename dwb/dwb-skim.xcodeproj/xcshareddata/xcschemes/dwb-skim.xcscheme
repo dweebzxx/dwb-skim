@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D3FCFFEF66126B933E630AF3"
-               BuildableName = "dwb - skim.app"
+               BuildableName = "dwb skim.app"
                BlueprintName = "dwb-skim"
                ReferencedContainer = "container:dwb-skim.xcodeproj">
             </BuildableReference>
@@ -33,7 +33,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D3FCFFEF66126B933E630AF3"
-            BuildableName = "dwb - skim.app"
+            BuildableName = "dwb skim.app"
             BlueprintName = "dwb-skim"
             ReferencedContainer = "container:dwb-skim.xcodeproj">
          </BuildableReference>
@@ -56,7 +56,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D3FCFFEF66126B933E630AF3"
-            BuildableName = "dwb - skim.app"
+            BuildableName = "dwb skim.app"
             BlueprintName = "dwb-skim"
             ReferencedContainer = "container:dwb-skim.xcodeproj">
          </BuildableReference>
@@ -73,7 +73,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D3FCFFEF66126B933E630AF3"
-            BuildableName = "dwb - skim.app"
+            BuildableName = "dwb skim.app"
             BlueprintName = "dwb-skim"
             ReferencedContainer = "container:dwb-skim.xcodeproj">
          </BuildableReference>

@@ -1,6 +1,17 @@
 import Cocoa
 import VLCKitSPM
 
+private final class SkimPlayerWindow: NSWindow {
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           let controller = windowController as? PlayerWindowController,
+           controller.handleSkimShortcut(event) {
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
 enum QueueSortMode: Int, CaseIterable {
     case manual = 0
     case filenameAscending
@@ -68,13 +79,19 @@ struct PlaybackSpeedOption: Equatable {
 class PlayerWindowController: NSWindowController {
 
     private static var nextDebugOrdinal = 1
-    private static let defaultWindowTitle = "dwb - skim"
+    private static let defaultWindowTitle = "dwb skim"
 
     private(set) var player: VLCMediaPlayer!
     private var videoSurface: VideoSurfaceView!
     private var transport: TransportControlsView!
-    private var volumeBar: VolumeBarView!
+    private var skimSettingsStrip: SkimSettingsStripView!
+    private let skimControlsRestoreButton = NSButton()
+    private var skimControlsVisibility = SkimControlsVisibilityState()
     private var queuePage: QueuePageView!
+    private let queueSeparator = NSBox()
+    private let volumeOverlay = VolumeOverlayView(frame: .zero)
+    private let backgroundAudioPlayback = BackgroundAudioPlaybackController()
+    private let videoAudioNormalizer = VideoAudioNormalizer()
     private let centeredTitleLabel = NSTextField(labelWithString: PlayerWindowController.defaultWindowTitle)
     private let debugOrdinal: Int
 
@@ -158,12 +175,6 @@ class PlayerWindowController: NSWindowController {
     /// nil when no assertion is held. Non-nil only while a non-image item is actively playing.
     private var playbackActivity: NSObjectProtocol?
 
-    // MARK: - Seek accumulation
-
-    /// Accumulated seek target for rapid arrow-key holds.
-    private var seekTargetMs: Int? = nil
-    private var seekTargetResetTimer: Timer? = nil
-
     // MARK: - Scale
 
     private(set) var scaleMode: ScaleMode = .fit
@@ -185,6 +196,11 @@ class PlayerWindowController: NSWindowController {
     /// Master list of URLs for this window's playback set.
     /// Established by open/drop; never reordered.
     private(set) var playbackSet: [URL] = []
+
+    /// Stable identity and filesystem identity metadata aligned one-to-one
+    /// with `playbackSet`. Renaming mutates URL metadata only.
+    private var queueItemIDs: [String] = []
+    private var queueFileIdentities: [String?] = []
 
     /// Navigation order: indices into `playbackSet`.
     /// Natural order: [0, 1, 2, …, n-1].
@@ -229,14 +245,13 @@ class PlayerWindowController: NSWindowController {
         return BookmarkStore.shared.isBookmarked(url: url)
     }
 
-    // MARK: - Queue order / Repeat
+    // MARK: - Queue order
 
     private var configuredQueueOrderMode: QueueOrderMode = SettingsWindowController.currentQueueOrderMode()
     private var configuredLoopQueueEnabled: Bool = SettingsWindowController.isLoopQueueEnabled()
     private var queuePlaybackOrdinal = 0
     private var lastPlayedOrdinalByID: [String: Int] = [:]
     var isShuffleOn: Bool { configuredQueueOrderMode == .shuffle }
-    private(set) var isRepeatOne = false
     var isEndlessShuffleOn: Bool { configuredQueueOrderMode == .shuffle && configuredLoopQueueEnabled }
 
     // MARK: - Auto-advance
@@ -254,7 +269,15 @@ class PlayerWindowController: NSWindowController {
         let sourceSessionID: Int
     }
 
+    private struct ScheduledPlaybackActionContext {
+        let name: String
+        var deadlineUptime: TimeInterval
+        var remainingSeconds: TimeInterval
+        let action: () -> Void
+    }
+
     private var scheduledPlaybackAction: DispatchWorkItem? = nil
+    private var scheduledPlaybackActionContext: ScheduledPlaybackActionContext? = nil
     private var activeCompletionSequence: CompletionSequence? = nil
     private var playbackCompletionSequence = 0
     private var currentPlaybackSessionID = 0
@@ -350,6 +373,7 @@ class PlayerWindowController: NSWindowController {
     private var playbackStartHandshakeSequence = 0
     private var replacementStartWorkItem: DispatchWorkItem? = nil
     private var replacementStartSequence = 0
+    private var isPlayerSessionPaused = false
 
     // MARK: - Queue page (full in-window panel)
 
@@ -404,32 +428,57 @@ class PlayerWindowController: NSWindowController {
     private var gifCurrentFrameIndex = 0
     private var gifCurrentFrameStartedMT: TimeInterval = 0
     private var gifCurrentFrameRemainingDelay: TimeInterval = 0
+    private var gifLoopTracker = GIFLoopCompletionTracker(targetLoops: SettingsWindowController.currentGIFLoopCount())
 
     // MARK: - Layout constants
 
-    private let transportHeight: CGFloat = 48
+    private let transportHeight: CGFloat = 68
+    private let skimSettingsStripHeight: CGFloat = 54
 
     // M3: cached hot-settings flags — refreshed in notification handlers when settings change.
     private var autoHideTransportEnabled: Bool = UserDefaults.standard.bool(forKey: SettingsWindowController.autoHideKey)
     private var autoHideTitlebarEnabled: Bool = UserDefaults.standard.bool(forKey: SettingsWindowController.autoHideTitlebarKey)
     private var completeVideoWindowModeEnabled: Bool = UserDefaults.standard.bool(forKey: SettingsWindowController.completeVideoWindowModeKey)
-    private var configuredSkipDurationMs: Int = SettingsWindowController.currentSkipDurationSeconds() * 1_000
-    private var configuredSkipDurationSeconds: Int { configuredSkipDurationMs / 1_000 }
-    private var configuredImageDurationSeconds: Int = SettingsWindowController.currentImageDurationSeconds()
+    private var configuredImageDurationSeconds: Double = SettingsWindowController.currentImageDurationSeconds()
     private var configuredGIFLoopCount: Int = SettingsWindowController.currentGIFLoopCount()
+    private var configuredVideoAudioNormalizationEnabled = SettingsWindowController.isVideoAudioNormalizationEnabled()
     private var configuredShowTitleOverlay: Bool = SettingsWindowController.isShowTitleOverlayEnabled()
-    private var configuredVideoPageDButtonEnabled: Bool = SettingsWindowController.isVideoPageDButtonEnabled()
     private var gifDurationFallbackLoggedPaths: Set<String> = []
     // P10: skim preview settings (clip duration / start position / skip intro).
     private var configuredClipDurationSeconds: Int = SettingsWindowController.currentClipDurationSeconds()
+    private var configuredSkimEnabled: Bool = SettingsWindowController.isSkimEnabled()
     private var configuredPreviewDurationMode: SkimPreviewDurationMode = SettingsWindowController.currentSkimPreviewDurationMode()
     private var configuredRandomPreviewDurationRange: ClosedRange<Int> = SettingsWindowController.currentRandomPreviewDurationRange()
     private var configuredSkipIntroSeconds: Int = SettingsWindowController.currentSkipIntroSeconds()
     private var configuredStartPositionMode: SkimPreviewStartMode = SettingsWindowController.currentSkimPreviewStartMode()
-    /// Session ID (see `currentPlaybackSessionID`) the skim preview plan was last applied for,
-    /// so `.playing` callbacks apply the plan exactly once per playback session.
-    private var skimPreviewPlanAppliedSessionID: Int = -1
-    private var skimPreviewAutoAdvanceWorkItem: DispatchWorkItem?
+    private struct SkimPreviewPlanContext {
+        let sessionID: Int
+        let playbackURL: URL
+        var queueItemID: String
+        let startMode: SkimPreviewStartMode
+        let skipIntroSeconds: TimeInterval
+        let plannedDurationSeconds: TimeInterval?
+        let startRandomValue: Double
+        var didLogPlanResolution = false
+    }
+
+    private var skimPreviewSessionScheduler = SkimPreviewSessionScheduler()
+    private var skimPlaybackStartIntent = SkimPlaybackStartIntentCoordinator()
+    /// Window-owned authority for which media assignment the current player carries. Identity is
+    /// minted here at assignment time, never recovered from a `player.media` wrapper lookup.
+    private var skimMediaAssignments = SkimMediaAssignmentRegistry()
+    private var skimPreviewPlanContext: SkimPreviewPlanContext?
+    private var skimPreviewReadinessFallbackWorkItem: DispatchWorkItem?
+    private var skimPreviewDeadlineWorkItem: DispatchWorkItem?
+    private let skimPreviewReadinessFallbackDelay: TimeInterval = 0.75
+    private let skimPreviewMetadataRetryWindow: TimeInterval = 2.0
+    private let skimStartIntentRetryWindow: TimeInterval = 3.0
+    private var skimPreviewStaleSignature: String?
+    private var skimPreviewStaleRepeatCount = 0
+    private var isPreviewWindowClosing = false
+    private(set) var activePreviewRange: ActivePreviewRange?
+    private var activePreviewConfiguredDuration: TimeInterval?
+    var isSkimEnabled: Bool { configuredSkimEnabled }
 
     // MARK: - Per-window audio state
 
@@ -462,14 +511,14 @@ class PlayerWindowController: NSWindowController {
     // MARK: - Window construction
 
     private func buildWindow() {
-        let contentRect = NSRect(x: 0, y: 0, width: 960, height: 540)
+        let contentRect = NSRect(x: 0, y: 0, width: 1080, height: 620)
         let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
-        let win = NSWindow(contentRect: contentRect,
-                           styleMask: style,
-                           backing: .buffered,
-                           defer: false)
+        let win = SkimPlayerWindow(contentRect: contentRect,
+                                   styleMask: style,
+                                   backing: .buffered,
+                                   defer: false)
         win.title = Self.defaultWindowTitle
-        win.minSize = NSSize(width: 480, height: 180 + transportHeight)
+        win.minSize = NSSize(width: 980, height: 240 + transportHeight + skimSettingsStripHeight)
         win.center()
         win.isReleasedWhenClosed = false
         win.isRestorable = false   // restorable state not implemented; suppresses className=(null) warning
@@ -489,17 +538,32 @@ class PlayerWindowController: NSWindowController {
         transport = TransportControlsView(frame: .zero)
         cv.addSubview(transport)
 
-        volumeBar = VolumeBarView(frame: .zero)
-        volumeBar.onVolumeChanged = { [weak self] vol in
-            self?.setVolumeFromBar(vol)
-        }
-        cv.addSubview(volumeBar)
+        skimSettingsStrip = SkimSettingsStripView()
+        skimSettingsStrip.onCollapse = { [weak self] in self?.setSkimControlsVisible(false) }
+        cv.addSubview(skimSettingsStrip)
+
+        skimControlsRestoreButton.isBordered = false
+        skimControlsRestoreButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Show Skim controls")
+        skimControlsRestoreButton.contentTintColor = .secondaryLabelColor
+        skimControlsRestoreButton.target = self
+        skimControlsRestoreButton.action = #selector(restoreSkimControls(_:))
+        skimControlsRestoreButton.toolTip = "Show Skim controls"
+        skimControlsRestoreButton.setAccessibilityLabel("Show Skim controls")
+        skimControlsRestoreButton.wantsLayer = true
+        skimControlsRestoreButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        skimControlsRestoreButton.layer?.cornerRadius = 8
+        cv.addSubview(skimControlsRestoreButton)
 
         queuePage = QueuePageView(frame: .zero)
         queuePage.delegate = self
         queuePage.isHidden = true
-        queuePage.isCustomPrefixRenameEnabled = SettingsWindowController.isCustomPrefixQueuePageEnabled()
         cv.addSubview(queuePage)
+
+        queueSeparator.boxType = .separator
+        queueSeparator.isHidden = true
+        cv.addSubview(queueSeparator)
+
+        cv.addSubview(volumeOverlay)
 
         // Video title overlay — topmost subview so it appears above the transport HUD.
         videoTitleOverlay.isEditable      = false
@@ -570,6 +634,8 @@ class PlayerWindowController: NSWindowController {
         player = VLCMediaPlayer()
         player.delegate = self
         player.drawable = videoSurface
+        applyVideoAudioNormalization(reason: "initial-player")
+        backgroundAudioPlayback.applySettings()
         applyWindowAudioState(reason: "initial-player", force: true)
         applyPlaybackSpeed(reason: "initial-player")
         transport.controller = self
@@ -594,12 +660,6 @@ class PlayerWindowController: NSWindowController {
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(bottomRailButtonVisibilityDidChange),
-            name: .bottomRailButtonVisibilityChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(autoHideTitlebarSettingDidChange),
             name: .autoHideTitlebarChanged,
             object: nil
@@ -610,41 +670,16 @@ class PlayerWindowController: NSWindowController {
             name: .completeVideoWindowModeChanged,
             object: nil
         )
-        // M3: refresh cached skip duration when the setting changes.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(skipDurationSettingDidChange),
-            name: .skipDurationChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(imageDurationSettingDidChange),
-            name: .imageDurationChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(gifLoopCountSettingDidChange),
-            name: .gifLoopCountChanged,
+            selector: #selector(playbackSettingsDidChange),
+            name: .playbackSettingsChanged,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(titleOverlaySettingDidChange),
             name: .titleOverlaySettingChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(customPrefixRenameSettingDidChange),
-            name: .customPrefixRenameChanged,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(videoPageCustomPrefixButtonSettingDidChange),
-            name: .videoPageCustomPrefixButtonSettingChanged,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -678,6 +713,12 @@ class PlayerWindowController: NSWindowController {
             name: .queueBehaviorSettingsChanged,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(skimPlusSettingsDidChange),
+            name: .skimPlusSettingsChanged,
+            object: nil
+        )
     }
 
     @objc private func bookmarkDidChange() {
@@ -693,6 +734,32 @@ class PlayerWindowController: NSWindowController {
             current = item.superview
         }
         return false
+    }
+
+    func handleSkimShortcut(_ event: NSEvent) -> Bool {
+        guard !event.isARepeat, !isTextEntryFocused else { return false }
+        let forbidden = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard forbidden.isEmpty,
+              let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        switch key {
+        case "k": performReviewKeepCurrentItem(); return true
+        case "d": performReviewDeletePrefixCurrentItem(); return true
+        case "r": showRenameSheet(); return true
+        case "z": performReviewUndo(); return true
+        case "[": playPrevious(); return true
+        case "]": playNext(); return true
+        case "q": toggleQueuePage(); return true
+        case " ": togglePlayPause(); return true
+        case "m": toggleMuteFromTransport(); return true
+        case "f": window?.toggleFullScreen(nil); return true
+        default: return false
+        }
+    }
+
+    func toggleSkimEnabled(source: String) {
+        let enabled = SkimToggleTransition.toggled(SkimSettingsStore.shared.snapshot().skimEnabled)
+        DebugConsoleController.log("settings", "skimToggle: enabled=\(enabled) source=\(source)")
+        SkimSettingsStore.shared.setSkimEnabled(enabled)
     }
 
     @objc private func autoHideSettingDidChange() {
@@ -722,22 +789,16 @@ class PlayerWindowController: NSWindowController {
         transport.update()
     }
 
-    @objc private func bottomRailButtonVisibilityDidChange() {
-        // BottomRailView already observes the same notification and re-applies
-        // visibility + invalidates its display cache; we also pump
-        // transport.update() so layout reflects the new button set immediately.
-        transport.update()
-    }
-
-    @objc private func skipDurationSettingDidChange() {
-        configuredSkipDurationMs = SettingsWindowController.currentSkipDurationSeconds() * 1_000  // M3
-    }
-
-    @objc private func imageDurationSettingDidChange() {
+    @objc private func playbackSettingsDidChange() {
         configuredImageDurationSeconds = SettingsWindowController.currentImageDurationSeconds()
+        configuredGIFLoopCount = SettingsWindowController.currentGIFLoopCount()
+        configuredVideoAudioNormalizationEnabled = SettingsWindowController.isVideoAudioNormalizationEnabled()
         refreshConfiguredImageDurations()
         applyCurrentImageDurationSettings()
+        applyVideoAudioNormalization(reason: "playback-settings")
         if isQueuePageOpen { refreshQueuePage() }
+        DebugConsoleController.log("settings",
+                                   "playback: imageDuration=\(configuredImageDurationSeconds)s gifLoops=\(configuredGIFLoopCount) normalizeVideoAudio=\(configuredVideoAudioNormalizationEnabled)")
     }
 
     /// P10: clip duration / start position / skip intro changed. Applies to the
@@ -745,13 +806,19 @@ class PlayerWindowController: NSWindowController {
     /// active item's start offset/auto-advance mid-playback would require
     /// re-seeking a possibly user-adjusted position and is out of scope.
     @objc private func skimPreviewSettingsDidChange() {
+        let wasEnabled = configuredSkimEnabled
+        configuredSkimEnabled = SettingsWindowController.isSkimEnabled()
         configuredClipDurationSeconds = SettingsWindowController.currentClipDurationSeconds()
         configuredPreviewDurationMode = SettingsWindowController.currentSkimPreviewDurationMode()
         configuredRandomPreviewDurationRange = SettingsWindowController.currentRandomPreviewDurationRange()
         configuredSkipIntroSeconds = SettingsWindowController.currentSkipIntroSeconds()
         configuredStartPositionMode = SettingsWindowController.currentSkimPreviewStartMode()
+        if wasEnabled, !configuredSkimEnabled {
+            cancelSkimPreviewSession(reason: "skim-disabled")
+        }
+        transport.update()
         DebugConsoleController.log("settings",
-                                   "skimPreview: durationMode=\(configuredPreviewDurationMode) clipDuration=\(configuredClipDurationSeconds)s randomRange=\(configuredRandomPreviewDurationRange.lowerBound)-\(configuredRandomPreviewDurationRange.upperBound)s startMode=\(configuredStartPositionMode) skipIntro=\(configuredSkipIntroSeconds)s")
+                                   "skimPreview: enabled=\(configuredSkimEnabled) durationMode=\(configuredPreviewDurationMode) clipDuration=\(configuredClipDurationSeconds)s randomRange=\(configuredRandomPreviewDurationRange.lowerBound)-\(configuredRandomPreviewDurationRange.upperBound)s startMode=\(configuredStartPositionMode) skipIntro=\(configuredSkipIntroSeconds)s")
     }
 
     @objc private func queueBehaviorSettingsDidChange() {
@@ -766,16 +833,16 @@ class PlayerWindowController: NSWindowController {
         } else {
             refreshQueueDisplays()
         }
+        transport.update()
         DebugConsoleController.log("settings",
                                    "queueBehavior: mode=\(configuredQueueOrderMode.rawValue) loop=\(configuredLoopQueueEnabled)")
     }
 
-    @objc private func gifLoopCountSettingDidChange() {
-        configuredGIFLoopCount = SettingsWindowController.currentGIFLoopCount()
-        refreshConfiguredImageDurations()
-        applyCurrentImageDurationSettings()
-        if isQueuePageOpen { refreshQueuePage() }
-        DebugConsoleController.log("settings", "gifLoopCount=\(configuredGIFLoopCount)")
+    @objc private func skimPlusSettingsDidChange() {
+        backgroundAudioPlayback.applySettings()
+        if isPlayerSessionPaused { backgroundAudioPlayback.pause() }
+        applyWindowAudioState(reason: "skim-plus-settings", force: true)
+        transport.update()
     }
 
     // M4: fires when this window's occlusion state changes. When the window becomes
@@ -855,15 +922,6 @@ class PlayerWindowController: NSWindowController {
         DebugConsoleController.log("settings", "titleOverlay=\(configuredShowTitleOverlay)")
     }
 
-    @objc private func customPrefixRenameSettingDidChange() {
-        queuePage.isCustomPrefixRenameEnabled = SettingsWindowController.isCustomPrefixQueuePageEnabled()
-    }
-
-    @objc private func videoPageCustomPrefixButtonSettingDidChange() {
-        configuredVideoPageDButtonEnabled = SettingsWindowController.isCustomPrefixVideoPageEnabled()
-        DebugConsoleController.log("settings", "customPrefixVideoPage=\(configuredVideoPageDButtonEnabled)")
-    }
-
     @objc private func customPrefixValueDidChange() {
         if isQueuePageOpen { refreshQueuePage() }
     }
@@ -885,8 +943,8 @@ class PlayerWindowController: NSWindowController {
                                                      displayString: MediaFileSupport.formatPlaybackDuration(fallback))
         }
 
-        return MediaFileSupport.DurationMetadata(seconds: Double(configuredImageDurationSeconds),
-                                                 displayString: MediaFileSupport.formatShortDuration(configuredImageDurationSeconds))
+        return MediaFileSupport.DurationMetadata(seconds: configuredImageDurationSeconds,
+                                                 displayString: MediaFileSupport.formatPlaybackDuration(configuredImageDurationSeconds))
     }
 
     private func refreshConfiguredImageDurations() {
@@ -901,6 +959,11 @@ class PlayerWindowController: NSWindowController {
         let metadata = configuredImageDurationMetadata(for: currentURL)
         currentImagePlaybackDurationSeconds = metadata.seconds ?? 0
         transport.imageModeDuration = currentImagePlaybackDurationSeconds
+        if currentItemIsGIF {
+            if gifLoopTracker.updateTargetLoops(configuredGIFLoopCount) {
+                completeCurrentGIFPlayback()
+            }
+        }
         needsTransportUpdate = true
     }
 
@@ -964,11 +1027,14 @@ class PlayerWindowController: NSWindowController {
         if mode == .fullscreen {
             // Stable fullscreen: full-bleed video with cinematic overlay controls.
             queuePage.isHidden = true
+            queueSeparator.isHidden = true
+            skimSettingsStrip.isHidden = true
+            skimControlsRestoreButton.isHidden = true
 
             videoSurface.frame = b
             videoSurface.layer?.frame = b
 
-            transport.frame = b
+            transport.frame = NSRect(x: 0, y: 0, width: b.width, height: transportHeight)
             if styleChanged {
                 transport.layer?.cornerRadius  = 0
                 transport.layer?.masksToBounds = false
@@ -979,8 +1045,13 @@ class PlayerWindowController: NSWindowController {
             // Windowed baseline — covers both .windowed and .exitingFullscreenSettling.
             // Geometry is derived ONLY from current contentView bounds; no cached
             // fullscreen frames, no screen bounds, no prior transport frames.
+            skimSettingsStrip.isHidden = !skimControlsVisibility.isVisible
+            skimSettingsStrip.frame = NSRect(x: 0, y: max(0, b.height - skimSettingsStripHeight), width: b.width, height: skimSettingsStripHeight)
+            skimControlsRestoreButton.isHidden = skimControlsVisibility.isVisible
+            skimControlsRestoreButton.frame = NSRect(x: max(8, (b.width - 30) / 2), y: max(0, b.height - 24), width: 30, height: 20)
+            let contentHeight = max(0, b.height - (skimControlsVisibility.isVisible ? skimSettingsStripHeight : 0))
             let queueW: CGFloat = isQueuePageOpen
-                ? max(260, b.width * 0.45)
+                ? min(360, max(280, b.width * 0.31))
                 : 0
             let videoW = max(0, b.width - queueW)
 
@@ -989,9 +1060,9 @@ class PlayerWindowController: NSWindowController {
             // AppKit's view-backed layer placement during live resize/fullscreen
             // transitions. The view's own frame is the source of truth; AppKit keeps
             // the backing layer in sync automatically.  (Apr 21 carry-forward fix.)
-            videoSurface.frame = NSRect(x: 0, y: 0, width: videoW, height: b.height)
+            videoSurface.frame = NSRect(x: 0, y: 0, width: videoW, height: contentHeight)
 
-            transport.frame = NSRect(x: 0, y: 0, width: videoW, height: b.height)
+            transport.frame = NSRect(x: 0, y: 0, width: videoW, height: transportHeight)
             if styleChanged {
                 transport.layer?.cornerRadius  = 0
                 transport.layer?.masksToBounds = false
@@ -1000,30 +1071,34 @@ class PlayerWindowController: NSWindowController {
 
             if isQueuePageOpen {
                 queuePage.isHidden = false
-                queuePage.frame = NSRect(x: videoW, y: 0, width: queueW, height: b.height)
+                queueSeparator.isHidden = false
+                queueSeparator.frame = NSRect(x: videoW, y: 0, width: 1, height: contentHeight)
+                queuePage.frame = NSRect(x: videoW + 1, y: 0, width: max(0, queueW - 1), height: contentHeight)
             } else {
                 queuePage.isHidden = true
+                queueSeparator.isHidden = true
             }
         }
 
-        // Volume bar: right side, vertically centred in the video area.
-        let barW: CGFloat = 52
-        let barH: CGFloat = 186
-        let barX = transport.frame.maxX - barW - 12
-        let videoAreaBottom: CGFloat = 0
-        let videoAreaH = b.height
-        let barY = (videoAreaH - barH) / 2
-        volumeBar.frame = NSRect(x: barX,
-                                 y: max(videoAreaBottom, barY),
-                                 width: barW,
-                                 height: barH)
-
         // Image display view always matches videoSurface — covers both fullscreen and windowed.
         imageDisplayView?.frame = videoSurface.frame
+        let meterWidth: CGFloat = 180
+        volumeOverlay.frame = NSRect(x: videoSurface.frame.minX + max(12, (videoSurface.frame.width - meterWidth) / 2),
+                                     y: videoSurface.frame.minY + transportHeight + 14,
+                                     width: meterWidth,
+                                     height: 44)
 
         applyScaleMode()
         positionVideoTitleOverlay()
     }
+
+    private func setSkimControlsVisible(_ visible: Bool) {
+        guard skimControlsVisibility.isVisible != visible else { return }
+        if visible { skimControlsVisibility.restore() } else { skimControlsVisibility.hide() }
+        layoutPlayerViews()
+    }
+
+    @objc private func restoreSkimControls(_ sender: NSButton) { setSkimControlsVisible(true) }
 
     // MARK: - Video title overlay
 
@@ -1113,8 +1188,11 @@ class PlayerWindowController: NSWindowController {
     /// Replace this window's playback set and immediately play the first item.
     private func openAndPlay(set: [URL]) {
         guard !set.isEmpty else { return }
+        cancelSkimPreviewSession(reason: "open-replace-request")
         DebugConsoleController.log("queue", "openReplace: count=\(set.count)")
         playbackSet     = set
+        queueItemIDs = set.map { _ in UUID().uuidString }
+        queueFileIdentities = set.map(SkimFileIdentityResolver.identity)
         lastPlayedOrdinalByID.removeAll()
         queuePlaybackOrdinal = 0
         displayOrder    = Array(0..<set.count)
@@ -1131,9 +1209,12 @@ class PlayerWindowController: NSWindowController {
     /// without replacing the queue. The first inserted item becomes active immediately.
     private func appendToQueue(files: [URL]) {
         guard !files.isEmpty else { return }
+        cancelSkimPreviewSession(reason: "queue-top-insert-request")
         let wasEmpty = playbackSet.isEmpty || displayOrder.isEmpty || currentDisplayIndex < 0
         let start = playbackSet.count
         playbackSet.append(contentsOf: files)
+        queueItemIDs.append(contentsOf: files.map { _ in UUID().uuidString })
+        queueFileIdentities.append(contentsOf: files.map(SkimFileIdentityResolver.identity))
         pruneQueuePlaybackHistoryToCurrentSet()
 
         let newIndices = Array(start..<playbackSet.count)
@@ -1190,21 +1271,23 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func queueOrderPlannerItems() -> [QueueOrderPlannerItem] {
-        playbackSet.map {
-            let id = $0.standardizedFileURL.path
+        playbackSet.indices.map { index in
+            let url = playbackSet[index]
+            let id = queueItemIDs[index]
             return QueueOrderPlannerItem(id: id,
-                                         displayName: $0.lastPathComponent,
+                                         displayName: url.lastPathComponent,
                                          lastPlayedOrdinal: lastPlayedOrdinalByID[id])
         }
     }
 
-    private func noteQueueItemPlaybackStarted(_ url: URL) {
+    private func noteQueueItemPlaybackStarted(at index: Int) {
+        guard queueItemIDs.indices.contains(index) else { return }
         queuePlaybackOrdinal &+= 1
-        lastPlayedOrdinalByID[url.standardizedFileURL.path] = queuePlaybackOrdinal
+        lastPlayedOrdinalByID[queueItemIDs[index]] = queuePlaybackOrdinal
     }
 
     private func pruneQueuePlaybackHistoryToCurrentSet() {
-        let validIDs = Set(playbackSet.map { $0.standardizedFileURL.path })
+        let validIDs = Set(queueItemIDs)
         lastPlayedOrdinalByID = lastPlayedOrdinalByID.filter { validIDs.contains($0.key) }
         if lastPlayedOrdinalByID.isEmpty { queuePlaybackOrdinal = 0 }
     }
@@ -1220,8 +1303,8 @@ class PlayerWindowController: NSWindowController {
             applyQueueSortIfNeeded(reason: reason, refreshUI: refreshUI)
             return
         }
-        let currentID = currentSetIndex >= 0 && currentSetIndex < playbackSet.count
-            ? playbackSet[currentSetIndex].standardizedFileURL.path
+        let currentID = currentSetIndex >= 0 && currentSetIndex < queueItemIDs.count
+            ? queueItemIDs[currentSetIndex]
             : nil
         displayOrder = QueueOrderPlanner.cycleOrder(mode: configuredQueueOrderMode,
                                                     items: queueOrderPlannerItems(),
@@ -1240,6 +1323,7 @@ class PlayerWindowController: NSWindowController {
 
     func playPrevious() {
         guard currentDisplayIndex > 0 else { return }
+        cancelSkimPreviewSession(reason: "manual-previous")
         currentDisplayIndex -= 1
         DebugConsoleController.log("playback", "previous: displayIdx=\(currentDisplayIndex) source=prevButton")
         playCurrentItem(startReason: "manual-previous")
@@ -1258,70 +1342,12 @@ class PlayerWindowController: NSWindowController {
         refreshQueueDisplays()
     }
 
-    // MARK: - Shuffle
-
-    func toggleShuffle() {
-        // Rail button cycles: Sequential/Weighted → Shuffle → Shuffle+Loop → Sequential.
-        if configuredQueueOrderMode != .shuffle {
-            configuredQueueOrderMode = .shuffle
-            configuredLoopQueueEnabled = false
-            queueSortMode = .manual
-            SettingsWindowController.setQueueOrderMode(.shuffle)
-            SettingsWindowController.setLoopQueueEnabled(false)
-            rebuildQueueOrderCycleKeepingCurrent(reason: "toggle-shuffle")
-        } else if !configuredLoopQueueEnabled {
-            configuredLoopQueueEnabled = true
-            if isRepeatOne { isRepeatOne = false }
-            SettingsWindowController.setLoopQueueEnabled(true)
-            rebuildQueueOrderCycleKeepingCurrent(reason: "toggle-shuffle-loop")
-        } else {
-            configuredQueueOrderMode = .sequential
-            configuredLoopQueueEnabled = false
-            SettingsWindowController.setQueueOrderMode(.sequential)
-            SettingsWindowController.setLoopQueueEnabled(false)
-            restoreNaturalOrder()
-        }
-        DebugConsoleController.log("playback", "shuffle: mode=\(configuredQueueOrderMode.rawValue) loop=\(configuredLoopQueueEnabled)")
-        refreshQueueDisplays()
-        logPlaybackQueueSnapshot("toggleShuffle")
-    }
-
     /// Restore natural (non-shuffled) order, keeping the current item at its natural index.
     private func restoreNaturalOrder() {
         let curPBIdx = currentSetIndex
         displayOrder = Array(0..<playbackSet.count)
         currentDisplayIndex = curPBIdx >= 0 ? curPBIdx : 0
         applyQueueSortIfNeeded(reason: "restore-natural-order", refreshUI: false)
-    }
-
-    func toggleEndlessShuffle() {
-        configuredLoopQueueEnabled.toggle()
-        if configuredLoopQueueEnabled {
-            if isRepeatOne { isRepeatOne = false }
-            if configuredQueueOrderMode != .shuffle { configuredQueueOrderMode = .shuffle }
-            queueSortMode = .manual
-            SettingsWindowController.setQueueOrderMode(.shuffle)
-            SettingsWindowController.setLoopQueueEnabled(true)
-            rebuildQueueOrderCycleKeepingCurrent(reason: "toggle-endless-shuffle")
-        } else {
-            SettingsWindowController.setLoopQueueEnabled(false)
-        }
-        DebugConsoleController.log("playback", "endlessShuffle: on=\(configuredLoopQueueEnabled)")
-        refreshQueueDisplays()
-        logPlaybackQueueSnapshot("toggleEndlessShuffle")
-    }
-
-    // MARK: - Repeat
-
-    func toggleRepeat() {
-        isRepeatOne.toggle()
-        if isRepeatOne {
-            configuredLoopQueueEnabled = false
-            SettingsWindowController.setLoopQueueEnabled(false)
-        }
-        DebugConsoleController.log("playback", "repeat: on=\(isRepeatOne)")
-        transport.update()
-        logPlaybackQueueSnapshot("toggleRepeat")
     }
 
     private var canAdvanceAfterCompletion: Bool {
@@ -1340,6 +1366,8 @@ class PlayerWindowController: NSWindowController {
             return false
         }
 
+        cancelSkimPreviewSession(reason: reason)
+
         if currentDisplayIndex < displayOrder.count - 1 {
             currentDisplayIndex += 1
         } else if configuredLoopQueueEnabled {
@@ -1357,8 +1385,8 @@ class PlayerWindowController: NSWindowController {
 
     private func beginNextQueueOrderCycle() {
         let priorSetIndex = currentSetIndex
-        let priorID = priorSetIndex >= 0 && priorSetIndex < playbackSet.count
-            ? playbackSet[priorSetIndex].standardizedFileURL.path
+        let priorID = priorSetIndex >= 0 && priorSetIndex < queueItemIDs.count
+            ? queueItemIDs[priorSetIndex]
             : nil
         if configuredQueueOrderMode == .sequential {
             currentDisplayIndex = 0
@@ -1566,7 +1594,8 @@ class PlayerWindowController: NSWindowController {
         let urls = displayOrder.map { playbackSet[$0] }
         var qItems: [QueuePageView.Item] = []
 
-        for url in urls {
+        for (displayIndex, url) in urls.enumerated() {
+            let setIndex = displayOrder[displayIndex]
             let size = MediaFileSupport.fileSizeString(for: url)
             let dur: String
             if MediaFileSupport.isImage(url) {
@@ -1594,6 +1623,7 @@ class PlayerWindowController: NSWindowController {
                 dur = placeholder
             }
             qItems.append(QueuePageView.Item(
+                id: queueItemIDs[setIndex],
                 url: url,
                 displayName: url.lastPathComponent,
                 duration: dur,
@@ -1606,7 +1636,8 @@ class PlayerWindowController: NSWindowController {
         queuePage.update(items: qItems,
                          currentIndex: currentDisplayIndex,
                          sortMode: queueSortMode,
-                         totalDurationText: queueTotalDurationText(for: urls))
+                         totalDurationText: queueTotalDurationText(for: urls),
+                         originalRootURL: sourceFolderURLs.first)
     }
 
     // MARK: - Reveal in Finder
@@ -1696,6 +1727,8 @@ class PlayerWindowController: NSWindowController {
         // callback fires on main queue, the queue is already empty, so even if
         // isUserStop were missed, advanceToNextItem would correctly find nothing.
         playbackSet.removeAll()
+        queueItemIDs.removeAll()
+        queueFileIdentities.removeAll()
         displayOrder.removeAll()
         lastPlayedOrdinalByID.removeAll()
         queuePlaybackOrdinal = 0
@@ -1727,7 +1760,9 @@ class PlayerWindowController: NSWindowController {
 
         displayOrder.remove(at: displayIndex)
         playbackSet.remove(at: removedSetIndex)
-        lastPlayedOrdinalByID.removeValue(forKey: removedURL.standardizedFileURL.path)
+        let removedItemID = queueItemIDs.remove(at: removedSetIndex)
+        queueFileIdentities.remove(at: removedSetIndex)
+        lastPlayedOrdinalByID.removeValue(forKey: removedItemID)
         durationCache.removeValue(forKey: removedURL)
         durationSecondsCache.removeValue(forKey: removedURL)
         displayOrder = displayOrder.map { $0 > removedSetIndex ? $0 - 1 : $0 }
@@ -1747,6 +1782,7 @@ class PlayerWindowController: NSWindowController {
         }
 
         if removingCurrent {
+            cancelSkimPreviewSession(reason: "queue-delete-current")
             currentDisplayIndex = min(displayIndex, displayOrder.count - 1)
             if configuredQueueOrderMode != .sequential {
                 rebuildQueueOrderCycleKeepingCurrent(reason: "queue-delete-current", refreshUI: false)
@@ -1815,26 +1851,11 @@ class PlayerWindowController: NSWindowController {
         }
 
         DebugConsoleController.log("rename", "success: \(url.lastPathComponent) → \(validatedName)")
-        // Update master list and caches
-        playbackSet[playbackSetIndex] = newURL
-        let oldQueueID = url.standardizedFileURL.path
-        let newQueueID = newURL.standardizedFileURL.path
-        if let ordinal = lastPlayedOrdinalByID.removeValue(forKey: oldQueueID) {
-            lastPlayedOrdinalByID[newQueueID] = ordinal
-        }
-        durationCache.removeValue(forKey: url)   // clear old key; new one fetched on demand
-        durationSecondsCache.removeValue(forKey: url)
-
-        if playbackSetIndex == currentSetIndex {
-            currentMediaURL = newURL
-            updateWindowTitle(newURL.lastPathComponent)
-        }
-
-        if configuredQueueOrderMode == .sequential {
-            applyQueueSortIfNeeded(reason: "rename")
-        } else {
-            rebuildQueueOrderCycleKeepingCurrent(reason: "rename")
-        }
+        _ = applyQueueURLReplacement(at: playbackSetIndex,
+                                     from: url,
+                                     to: newURL,
+                                     migrateReviewIntent: false)
+        refreshQueueDisplays()
         // Note: VLC continues playing from the already-open file descriptor;
         // the new path takes effect the next time playCurrentItem() is called.
     }
@@ -2120,11 +2141,10 @@ class PlayerWindowController: NSWindowController {
                 self.queueEndedNaturally = false
                 self.currentDisplayIndex = 0
                 DebugConsoleController.log("playback", "queue-restart: source=play-button items=\(self.displayOrder.count)")
-                NSLog("[dwb-playback] queueRestart: source=play-button displayIdx=0/%d shuffle=%d endless=%d repeat=%d",
+                NSLog("[dwb-playback] queueRestart: source=play-button displayIdx=0/%d queueMode=%@ loop=%d",
                       self.displayOrder.count,
-                      self.isShuffleOn      ? 1 : 0,
-                      self.isEndlessShuffleOn ? 1 : 0,
-                      self.isRepeatOne      ? 1 : 0)
+                      self.configuredQueueOrderMode.rawValue,
+                      self.configuredLoopQueueEnabled ? 1 : 0)
                 self.playCurrentItem(startReason: "queue-restart",
                                      expectPlaybackHandshake: true,
                                      preserveCompletionSequence: false,
@@ -2133,26 +2153,91 @@ class PlayerWindowController: NSWindowController {
                 return
             }
 
-            if self.currentItemIsImage {
-                self.toggleImageSlideshowPause()
-                finish()
-                return
-            }
-            guard self.player.media != nil else { finish(); return }
-            if self.player.isPlaying {
-                DebugConsoleController.log("playback", "pause: source=button")
-                self.player.pause()
+            guard self.currentItemIsImage || self.player.media != nil else { finish(); return }
+            if self.isPlayerSessionPaused {
+                self.resumePlayerSession(source: "button")
             } else {
-                DebugConsoleController.log("playback", "play: source=button")
-                self.player.play()
+                self.pausePlayerSession(source: "button")
             }
             finish()
         }
     }
 
-    private func toggleImageSlideshowPause() {
+    private func pausePlayerSession(source: String) {
+        guard !isPlayerSessionPaused else { return }
+        isPlayerSessionPaused = true
         let now = CACurrentMediaTime()
-        if imageSlideshowPaused {
+        backgroundAudioPlayback.pause()
+        suspendScheduledPlaybackAction(now: now)
+        if let context = skimPreviewPlanContext {
+            let update = skimPreviewSessionScheduler.pause(
+                sessionID: context.sessionID,
+                queueItemID: context.queueItemID,
+                now: now
+            )
+            skimPreviewDeadlineWorkItem?.cancel()
+            skimPreviewDeadlineWorkItem = nil
+            _ = skimPlaybackStartIntent.pause(playbackSessionID: context.sessionID,
+                                              queueItemID: context.queueItemID,
+                                              now: now)
+            let remaining = skimPreviewSessionScheduler.state?.suspendedRemainingSeconds
+            DebugConsoleController.log(
+                "preview",
+                "pause: window=\(debugIdentity) session=\(context.sessionID) remaining=\(previewDurationText(remaining)) update=\(String(describing: update))"
+            )
+        }
+        if currentItemIsImage {
+            setImageSlideshowPaused(true, now: now)
+        } else {
+            cancelPlaybackStartHandshake(reason: "session-pause")
+            if player.isPlaying { player.pause() }
+        }
+        releasePlaybackSleepAssertion()
+        needsTransportUpdate = true
+        DebugConsoleController.log("playback", "sessionPaused: window=\(debugIdentity) session=\(currentPlaybackSessionID) source=\(source)")
+    }
+
+    private func resumePlayerSession(source: String) {
+        guard isPlayerSessionPaused else { return }
+        let now = CACurrentMediaTime()
+        isPlayerSessionPaused = false
+        backgroundAudioPlayback.resume()
+        if let context = skimPreviewPlanContext {
+            _ = skimPlaybackStartIntent.resume(playbackSessionID: context.sessionID,
+                                               queueItemID: context.queueItemID,
+                                               now: now)
+            let update = skimPreviewSessionScheduler.resume(
+                sessionID: context.sessionID,
+                queueItemID: context.queueItemID,
+                now: now
+            )
+            if case .resumed(let deadline) = update {
+                scheduleSkimPreviewDeadline(sessionID: context.sessionID,
+                                            deadlineUptime: deadline)
+            }
+            DebugConsoleController.log(
+                "preview",
+                "resume: window=\(debugIdentity) session=\(context.sessionID) remaining=\(previewDurationText(skimPreviewSessionScheduler.state?.effectiveDurationSeconds)) update=\(String(describing: update))"
+            )
+        }
+        resumeScheduledPlaybackAction()
+        if currentItemIsImage {
+            setImageSlideshowPaused(false, now: now)
+        } else if let currentURL = currentMediaURL,
+                  player.media?.url?.standardizedFileURL.path == currentURL.standardizedFileURL.path {
+            armPlaybackStartHandshake(reason: "session-resume",
+                                      expectedURL: currentURL,
+                                      expectedSessionID: currentPlaybackSessionID,
+                                      transitionStrategy: .reuseCurrentPlayer)
+            player.play()
+        }
+        needsTransportUpdate = true
+        DebugConsoleController.log("playback", "sessionResumed: window=\(debugIdentity) session=\(currentPlaybackSessionID) source=\(source)")
+    }
+
+    private func setImageSlideshowPaused(_ paused: Bool, now: TimeInterval = CACurrentMediaTime()) {
+        guard imageSlideshowPaused != paused else { return }
+        if !paused {
             imageSlideshowPaused = false
             imageSlideshowStartMT = now
             resumeGIFAnimationIfNeeded()
@@ -2219,12 +2304,41 @@ class PlayerWindowController: NSWindowController {
               let animation = currentGIFAnimation,
               !animation.frames.isEmpty else { return }
 
-        gifCurrentFrameIndex = (gifCurrentFrameIndex + 1) % animation.frames.count
+        let previousIndex = gifCurrentFrameIndex
+        let nextIndex = (gifCurrentFrameIndex + 1) % animation.frames.count
+        if gifLoopTracker.recordFrameTransition(from: previousIndex,
+                                                to: nextIndex,
+                                                frameCount: animation.frames.count) {
+            completeCurrentGIFPlayback()
+            return
+        }
+        gifCurrentFrameIndex = nextIndex
         let frame = animation.frames[gifCurrentFrameIndex]
         imageDisplayView?.image = NSImage(cgImage: frame,
                                           size: NSSize(width: frame.width, height: frame.height))
         let nextDelay = animation.frameDurations[gifCurrentFrameIndex]
         scheduleNextGIFFrame(after: nextDelay)
+    }
+
+    private func completeCurrentGIFPlayback() {
+        guard currentItemIsGIF, imageSlideshowStartMT > 0 else { return }
+        gifFrameTimer?.invalidate()
+        gifFrameTimer = nil
+        imageSlideshowStartMT = 0
+        let action = completionActionForCurrentState()
+        if action == .stopLastItem {
+            queueEndedNaturally = true
+            imageSlideshowPaused = true
+            imageSlideshowPauseAccumulated = currentImagePlaybackDurationSeconds
+            transport.imageModeIsPlaying = false
+        } else {
+            scheduleCompletionSequence(action: action,
+                                       source: "gif-loop-count",
+                                       sourceURL: currentMediaURL,
+                                       eofDecision: "gif-loops-complete")
+        }
+        DebugConsoleController.log("gif",
+                                   "loopsComplete: completed=\(gifLoopTracker.completedLoops) target=\(gifLoopTracker.targetLoops) action=\(action.rawValue)")
     }
 
     private func pauseGIFAnimationIfNeeded() {
@@ -2268,6 +2382,10 @@ class PlayerWindowController: NSWindowController {
         let target = targetPosition ?? -1
         NSLog("[dwb-playback] notifyUserSeek: source=%@ current=%.3f target=%.3f — lastKnownPosition reset, seek guard active",
               source, player?.position ?? 0, target)
+        if let context = skimPreviewPlanContext {
+            _ = skimPlaybackStartIntent.noteUserSeek(playbackSessionID: context.sessionID,
+                                                     queueItemID: context.queueItemID)
+        }
     }
 
     func clampedUserSeekPosition(_ rawPosition: Float, source: String) -> Float {
@@ -2279,105 +2397,6 @@ class PlayerWindowController: NSWindowController {
                   source, bounded, clamped, maxUserSeekPosition)
         }
         return clamped
-    }
-
-    func skipBackward10() {
-        skipByConfiguredDuration(isForward: false)
-    }
-
-    func skipForward10() {
-        skipByConfiguredDuration(isForward: true)
-    }
-
-    private func skipByConfiguredDuration(isForward: Bool) {
-        guard let media = player.media else { return }
-        let durationMs = max(Int(media.length.intValue), lastKnownDurationMs)
-        guard durationMs > 0 else { return }
-
-        let baseMs = currentSeekBaseTimeMs(durationMs: durationMs)
-        let stepMs = configuredSkipDurationMs
-        let source = isForward ? "skipForward" : "skipBackward"
-
-        let targetMs: Int
-        let rule: String
-        if isForward {
-            let remainingMs = max(0, durationMs - baseMs)
-            if remainingMs > stepMs {
-                targetMs = min(durationMs, baseMs + stepMs)
-                rule = "exact-forward"
-            } else {
-                targetMs = safePreEOFTargetTimeMs(durationMs: durationMs, baseMs: baseMs)
-                rule = targetMs > baseMs ? "clamp-safe-pre-eof" : "already-near-eof"
-            }
-        } else {
-            targetMs = max(0, baseMs - stepMs)
-            rule = "exact-backward"
-        }
-
-        seekPlayer(toTimeMs: targetMs,
-                   durationMs: durationMs,
-                   baseTimeMs: baseMs,
-                   source: source,
-                   requestedSkipMs: stepMs,
-                   rule: rule)
-        resetSeekTargetAfterDelay()
-    }
-
-    private func currentSeekBaseTimeMs(durationMs: Int) -> Int {
-        if let pending = seekTargetMs {
-            return max(0, min(durationMs, pending))
-        }
-
-        let timeMs = Int(player.time.intValue)
-        if timeMs > 0 {
-            return max(0, min(durationMs, timeMs))
-        }
-
-        let position = player.position
-        if position.isFinite, position > 0 {
-            let estimatedMs = Int((Double(position) * Double(durationMs)).rounded())
-            return max(0, min(durationMs, estimatedMs))
-        }
-
-        return 0
-    }
-
-    private func safePreEOFTargetTimeMs(durationMs: Int, baseMs: Int) -> Int {
-        let safePositionMs = Int((Double(durationMs) * Double(maxUserSeekPosition)).rounded(.down))
-        return max(baseMs, min(durationMs, safePositionMs))
-    }
-
-    private func seekPlayer(toTimeMs targetMs: Int,
-                            durationMs: Int,
-                            baseTimeMs: Int,
-                            source: String,
-                            requestedSkipMs: Int,
-                            rule: String) {
-        let safeTargetMs = max(0, min(durationMs, targetMs))
-        let targetPosition = durationMs > 0
-            ? max(0, min(1, Float(safeTargetMs) / Float(durationMs)))
-            : 0
-        let targetTime = VLCTime(int: Int32(min(safeTargetMs, Int(Int32.max))))
-        seekTargetMs = safeTargetMs
-        NSLog("[dwb-playback] %@: base=%dms target=%dms pos=%.3f dur=%dms step=%dms rule=%@",
-              source,
-              baseTimeMs,
-              safeTargetMs,
-              targetPosition,
-              durationMs,
-              requestedSkipMs,
-              rule)
-        notifyUserSeek(targetPosition: targetPosition, source: source)
-        player.time = targetTime
-        transport.notifySeek(to: targetPosition)
-    }
-
-    private func resetSeekTargetAfterDelay() {
-        seekTargetResetTimer?.invalidate()
-        seekTargetResetTimer = Timer.scheduledTimer(withTimeInterval: 0.5,
-                                                    repeats: false) { [weak self] _ in
-            self?.seekTargetMs = nil
-        }
     }
 
     private func clearPlaybackCompletionEvidence() {
@@ -2410,6 +2429,7 @@ class PlayerWindowController: NSWindowController {
 
     private func resetPlaybackCompletionSignals(reason: String,
                                                preserveCompletionSequence: Bool = false) {
+        cancelSkimPreviewSession(reason: reason)
         cancelScheduledPlaybackAction(reason: reason)
         clearPlaybackCompletionEvidence()
         clearStoppedSuppression()
@@ -2472,8 +2492,6 @@ class PlayerWindowController: NSWindowController {
         queuedPlaybackCommands.removeAll()
         isUserStop = true
         queueEndedNaturally = false
-        seekTargetMs = nil
-        seekTargetResetTimer?.invalidate()
         NSLog("[dwb-playback] stopPlayback: reason=%@ userStop=1 cancelPendingAutoplay=1", reason)
         if currentItemIsImage {
             clearImageSlideshowState()
@@ -2509,11 +2527,10 @@ class PlayerWindowController: NSWindowController {
 
         let url = playbackSet[idx]
         let hadExistingMedia = player.media != nil
-        seekTargetMs = nil
-        seekTargetResetTimer?.invalidate()
         currentPlaybackSessionID += 1
         queueEndedNaturally = false
-        cancelSkimPreviewAutoAdvance(reason: "playCurrentItem-\(startReason)")
+        activePreviewRange = nil
+        activePreviewConfiguredDuration = nil
         resetPlaybackCompletionSignals(reason: "playCurrentItem-\(startReason)",
                                        preserveCompletionSequence: preserveCompletionSequence)
 
@@ -2529,22 +2546,22 @@ class PlayerWindowController: NSWindowController {
               transitionStrategy.rawValue)
 
         currentMediaURL = url
-        noteQueueItemPlaybackStarted(url)
+        noteQueueItemPlaybackStarted(at: idx)
 
         if MediaFileSupport.isImage(url) {
             // Image path — synchronous setup, no VLC involvement.
             let imageMetadata = configuredImageDurationMetadata(for: url)
-            // P10: still images have no intrinsic duration, so mediaDurationSeconds
-            // is always nil here — the plan never seeks or picks a random start for
-            // images, it only optionally supplies an auto-advance clip duration.
-            let previewPlan = SkimPreviewPlaybackPlan.plan(mode: configuredStartPositionMode,
-                                                           durationMode: configuredPreviewDurationMode,
-                                                           skipIntroSeconds: Double(configuredSkipIntroSeconds),
-                                                           fixedClipDurationSeconds: Double(configuredClipDurationSeconds),
-                                                           randomMinimumSeconds: Double(configuredRandomPreviewDurationRange.lowerBound),
-                                                           randomMaximumSeconds: Double(configuredRandomPreviewDurationRange.upperBound),
-                                                           mediaDurationSeconds: nil)
-            let playbackDuration = previewPlan.effectiveClipDurationSeconds ?? (imageMetadata.seconds ?? 0)
+            let mediaKind = MediaFileSupport.mediaKind(for: url) ?? .image
+            let playbackLimit = MediaPlaybackPolicy.limit(for: mediaKind,
+                                                          videoPreviewSeconds: nil,
+                                                          imageDurationSeconds: configuredImageDurationSeconds,
+                                                          gifLoopCount: configuredGIFLoopCount)
+            let playbackDuration: TimeInterval
+            switch playbackLimit {
+            case .imageSeconds(let seconds): playbackDuration = seconds
+            case .gifLoops: playbackDuration = imageMetadata.seconds ?? configuredImageDurationSeconds
+            case .videoPreview: playbackDuration = configuredImageDurationSeconds
+            }
             let kind = MediaFileSupport.isGIF(url) ? "gif" : "image"
             DebugConsoleController.log("media",
                                        "\(kind)Start: \(url.lastPathComponent) dur=\(imageMetadata.displayString) reason=\(startReason)")
@@ -2571,6 +2588,12 @@ class PlayerWindowController: NSWindowController {
         // Video path — clear any active image state then use VLC.
         DebugConsoleController.log("media", "videoStart: window=\(debugIdentity) file=\(url.lastPathComponent) session=\(currentPlaybackSessionID) reason=\(startReason) audio=\(audioStateDescription)")
         clearImageSlideshowState()
+        videoAudioNormalizer.prepareForNewVideo(on: player)
+        if SkimAssignmentBehavior.nextAssignment(isSkimEnabled: configuredSkimEnabled) == .skimPreview {
+            beginSkimPreviewSession(url: url,
+                                    sessionID: currentPlaybackSessionID,
+                                    reason: startReason)
+        }
 
         let cachedDuration = durationCache[url]
         currentDurationIsProvisional = MediaFileSupport.needsStableDuration(url) &&
@@ -2623,8 +2646,9 @@ class PlayerWindowController: NSWindowController {
         currentItemIsGIF = MediaFileSupport.isGIF(url)
         imageSlideshowStartMT = CACurrentMediaTime()
         imageSlideshowPauseAccumulated = 0
-        imageSlideshowPaused = false
+        imageSlideshowPaused = isPlayerSessionPaused
         currentImagePlaybackDurationSeconds = playbackDuration
+        gifLoopTracker = GIFLoopCompletionTracker(targetLoops: configuredGIFLoopCount)
 
         if currentItemIsGIF {
             startAnimatedGIFPlayback(url: url)
@@ -2652,7 +2676,7 @@ class PlayerWindowController: NSWindowController {
         transport.isImageMode = true
         transport.imageModeElapsed = 0
         transport.imageModeDuration = playbackDuration
-        transport.imageModeIsPlaying = true
+        transport.imageModeIsPlaying = !imageSlideshowPaused
         transport.invalidateCachedDisplayState()
         needsTransportUpdate = true
         transport.update()
@@ -2663,6 +2687,10 @@ class PlayerWindowController: NSWindowController {
               currentItemIsGIF ? 1 : 0)
         DebugConsoleController.log("image",
                                    "start: \(url.lastPathComponent) dur=\(MediaFileSupport.formatPlaybackDuration(playbackDuration)) gif=\(currentItemIsGIF)")
+        if imageSlideshowPaused {
+            imageSlideshowStartMT = 0
+            pauseGIFAnimationIfNeeded()
+        }
     }
 
     private func clearImageSlideshowState() {
@@ -2673,6 +2701,7 @@ class PlayerWindowController: NSWindowController {
         gifCurrentFrameIndex = 0
         gifCurrentFrameStartedMT = 0
         gifCurrentFrameRemainingDelay = 0
+        gifLoopTracker = GIFLoopCompletionTracker(targetLoops: configuredGIFLoopCount)
         currentItemIsImage = false
         currentItemIsGIF = false
         imageSlideshowStartMT = 0
@@ -2689,10 +2718,11 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func cancelScheduledPlaybackAction(reason: String) {
-        guard scheduledPlaybackAction != nil else { return }
+        guard scheduledPlaybackAction != nil || scheduledPlaybackActionContext != nil else { return }
         NSLog("[dwb-playback] autoplayCancel: reason=%@", reason)
         scheduledPlaybackAction?.cancel()
         scheduledPlaybackAction = nil
+        scheduledPlaybackActionContext = nil
     }
 
     private func schedulePlaybackAction(named name: String,
@@ -2700,61 +2730,557 @@ class PlayerWindowController: NSWindowController {
                                         action: @escaping () -> Void) {
         cancelScheduledPlaybackAction(reason: "reschedule-\(name)")
         NSLog("[dwb-playback] autoplaySchedule: action=%@ delay=%.2fs", name, delay)
+        let safeDelay = max(0, delay)
+        scheduledPlaybackActionContext = ScheduledPlaybackActionContext(
+            name: name,
+            deadlineUptime: CACurrentMediaTime() + safeDelay,
+            remainingSeconds: safeDelay,
+            action: action
+        )
+        armScheduledPlaybackAction(after: safeDelay)
+    }
+
+    private func armScheduledPlaybackAction(after delay: TimeInterval) {
+        guard var context = scheduledPlaybackActionContext else { return }
+        context.remainingSeconds = max(0, delay)
+        context.deadlineUptime = CACurrentMediaTime() + context.remainingSeconds
+        scheduledPlaybackActionContext = context
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.scheduledPlaybackAction = nil
-            NSLog("[dwb-playback] autoplayExecute: action=%@", name)
-            action()
+            guard !self.isPlayerSessionPaused,
+                  let context = self.scheduledPlaybackActionContext else { return }
+            self.scheduledPlaybackActionContext = nil
+            NSLog("[dwb-playback] autoplayExecute: action=%@", context.name)
+            context.action()
         }
         scheduledPlaybackAction = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay), execute: workItem)
+    }
+
+    private func suspendScheduledPlaybackAction(now: TimeInterval) {
+        guard var context = scheduledPlaybackActionContext else { return }
+        context.remainingSeconds = max(0, context.deadlineUptime - now)
+        scheduledPlaybackAction?.cancel()
+        scheduledPlaybackAction = nil
+        scheduledPlaybackActionContext = context
+    }
+
+    private func resumeScheduledPlaybackAction() {
+        guard scheduledPlaybackAction == nil,
+              let context = scheduledPlaybackActionContext else { return }
+        let remaining = max(0, context.remainingSeconds)
+        armScheduledPlaybackAction(after: remaining)
     }
 
     // MARK: - Skim preview plan (P10)
 
-    private func cancelSkimPreviewAutoAdvance(reason: String) {
-        guard skimPreviewAutoAdvanceWorkItem != nil else { return }
-        NSLog("[dwb-playback] skimPreviewAutoAdvanceCancel: reason=%@", reason)
-        skimPreviewAutoAdvanceWorkItem?.cancel()
-        skimPreviewAutoAdvanceWorkItem = nil
+    private func beginSkimPreviewSession(url: URL, sessionID: Int, reason: String) {
+        guard configuredSkimEnabled else { return }
+        flushSkimPreviewStaleRepeats()
+        let plannedDuration = SkimPreviewPlaybackPlan.resolvedClipDurationSeconds(
+            mode: configuredPreviewDurationMode,
+            fixedDurationSeconds: Double(configuredClipDurationSeconds),
+            randomMinimumSeconds: Double(configuredRandomPreviewDurationRange.lowerBound),
+            randomMaximumSeconds: Double(configuredRandomPreviewDurationRange.upperBound)
+        )
+        let now = CACurrentMediaTime()
+        let queueItemID = url.standardizedFileURL.path
+        let startRandomValue = Double.random(in: 0..<1)
+        skimPreviewPlanContext = SkimPreviewPlanContext(
+            sessionID: sessionID,
+            playbackURL: url,
+            queueItemID: queueItemID,
+            startMode: configuredStartPositionMode,
+            skipIntroSeconds: Double(configuredSkipIntroSeconds),
+            plannedDurationSeconds: plannedDuration,
+            startRandomValue: startRandomValue
+        )
+        skimPlaybackStartIntent.begin(
+            windowID: debugIdentity,
+            queueItemID: queueItemID,
+            playbackSessionID: sessionID,
+            startMode: configuredStartPositionMode,
+            skipIntroSeconds: Double(configuredSkipIntroSeconds),
+            previewDurationSeconds: plannedDuration,
+            startRandomValue: startRandomValue,
+            createdUptime: now,
+            retryWindow: skimStartIntentRetryWindow
+        )
+        skimPreviewSessionScheduler.begin(
+            sessionID: sessionID,
+            queueItemID: queueItemID,
+            plannedDurationSeconds: plannedDuration,
+            createdUptime: now,
+            metadataRetryWindow: skimPreviewMetadataRetryWindow
+        )
+        if isPlayerSessionPaused {
+            _ = skimPlaybackStartIntent.pause(playbackSessionID: sessionID,
+                                              queueItemID: queueItemID,
+                                              now: now)
+            _ = skimPreviewSessionScheduler.pause(sessionID: sessionID,
+                                                  queueItemID: queueItemID,
+                                                  now: now)
+        }
+        DebugConsoleController.log(
+            "preview",
+            "sessionCreated: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(plannedDuration)) reason=\(reason)"
+        )
+
+        if plannedDuration == nil {
+            if var context = skimPreviewPlanContext {
+                context.didLogPlanResolution = true
+                skimPreviewPlanContext = context
+            }
+            DebugConsoleController.log(
+                "preview",
+                "planResolved: window=\(debugIdentity) session=\(sessionID) duration=full-file readiness=created"
+            )
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.applySkimPreviewReadiness(sessionID: sessionID,
+                                            playbackURL: url,
+                                            source: .fallback)
+        }
+        skimPreviewReadinessFallbackWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + skimPreviewReadinessFallbackDelay,
+                                      execute: workItem)
     }
 
-    /// Applies the skim preview plan (start offset seek + auto-advance schedule) to the
-    /// currently-playing video, exactly once per playback session (`sessionID`). Called from
-    /// the VLC `.playing` state callback, since that is the first point playback position and
-    /// media length are reliably usable. If media duration is still unknown at that point, the
-    /// plan degrades to full-file/no-seek behavior per `SkimPreviewPlaybackPlan`.
-    private func applySkimPreviewPlanForVideo(sessionID: Int, mediaURL: URL?) {
-        guard skimPreviewPlanAppliedSessionID != sessionID else { return }
-        skimPreviewPlanAppliedSessionID = sessionID
-        guard let mediaURL = mediaURL, currentMediaURL?.path == mediaURL.path, let media = player.media else { return }
+    private func cancelSkimPreviewSession(reason: String) {
+        flushSkimPreviewStaleRepeats()
+        skimPreviewReadinessFallbackWorkItem?.cancel()
+        skimPreviewReadinessFallbackWorkItem = nil
+        skimPreviewDeadlineWorkItem?.cancel()
+        skimPreviewDeadlineWorkItem = nil
+        let priorState = skimPreviewSessionScheduler.state
+        _ = skimPlaybackStartIntent.cancel(reason: reason)
+        if skimPreviewSessionScheduler.cancel(reason: reason), let priorState {
+            DebugConsoleController.log(
+                "preview",
+                "sessionCancelled: window=\(debugIdentity) session=\(priorState.sessionID) duration=\(previewDurationText(priorState.plannedDurationSeconds)) reason=\(reason)"
+            )
+        }
+        activePreviewRange = nil
+        activePreviewConfiguredDuration = nil
+        skimPreviewPlanContext = nil
+    }
 
-        let durationMs = max(Int(media.length.intValue), lastKnownDurationMs)
-        let mediaDurationSeconds: Double? = durationMs > 0 ? Double(durationMs) / 1000.0 : nil
-        let plan = SkimPreviewPlaybackPlan.plan(mode: configuredStartPositionMode,
-                                                durationMode: configuredPreviewDurationMode,
-                                                skipIntroSeconds: Double(configuredSkipIntroSeconds),
-                                                fixedClipDurationSeconds: Double(configuredClipDurationSeconds),
-                                                randomMinimumSeconds: Double(configuredRandomPreviewDurationRange.lowerBound),
-                                                randomMaximumSeconds: Double(configuredRandomPreviewDurationRange.upperBound),
-                                                mediaDurationSeconds: mediaDurationSeconds)
+    private func applySkimPreviewReadiness(sessionID: Int,
+                                           playbackURL: URL,
+                                           source requestedSource: SkimPreviewReadinessSource) {
+        guard !isPreviewWindowClosing,
+              configuredSkimEnabled,
+              sessionID == currentPlaybackSessionID,
+              var context = skimPreviewPlanContext,
+              context.sessionID == sessionID,
+              context.playbackURL.standardizedFileURL.path == playbackURL.standardizedFileURL.path,
+              let currentURL = currentMediaURL,
+              MediaFileSupport.mediaKind(for: currentURL) == .video,
+              !currentItemIsImage else {
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "readiness-\(requestedSource.rawValue)-context-mismatch")
+            return
+        }
 
-        if plan.startOffsetSeconds > 0 {
-            let targetMs = Int((plan.startOffsetSeconds * 1000).rounded())
+        let queueItemID = currentURL.standardizedFileURL.path
+        guard context.queueItemID == queueItemID,
+              let schedulingState = skimPreviewSessionScheduler.state,
+              schedulingState.queueItemID == queueItemID else {
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "readiness-\(requestedSource.rawValue)-queue-item-mismatch")
+            return
+        }
+        switch schedulingState.status {
+        case .ineligible, .awaitingReadiness, .scheduled, .suspended:
+            break
+        case .fired, .cancelled:
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "readiness-\(requestedSource.rawValue)-terminal-session")
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        let metadata = currentSkimPreviewMetadata(context: context)
+        let mediaDurationSeconds = metadata.durationSeconds
+        let plan = SkimPreviewPlaybackPlan.plan(
+            mode: context.startMode,
+            skipIntroSeconds: context.skipIntroSeconds,
+            clipDurationSeconds: context.plannedDurationSeconds,
+            mediaDurationSeconds: mediaDurationSeconds,
+            randomValue: context.startRandomValue
+        )
+        activePreviewConfiguredDuration = plan.effectiveClipDurationSeconds
+        _ = skimPlaybackStartIntent.updateMetadata(
+            playbackSessionID: sessionID,
+            queueItemID: queueItemID,
+            durationSeconds: mediaDurationSeconds,
+            readiness: metadata.readiness
+        )
+        if let mediaDurationSeconds {
+            activePreviewRange = PreviewRangePlanner.range(
+                startSeconds: plan.startOffsetSeconds,
+                previewDurationSeconds: plan.effectiveClipDurationSeconds,
+                totalDurationSeconds: mediaDurationSeconds
+            )
+            transport.update()
+        }
+
+        let source = requestedSource
+        let effectiveDuration = activePreviewRange?.durationSeconds ?? plan.effectiveClipDurationSeconds
+        let update = skimPreviewSessionScheduler.registerReadiness(
+            sessionID: sessionID,
+            queueItemID: queueItemID,
+            source: source,
+            now: now,
+            effectiveDurationSeconds: effectiveDuration
+        )
+        applySkimPreviewDeadlineUpdate(update,
+                                       sessionID: sessionID,
+                                       source: source,
+                                       reason: mediaDurationSeconds == nil ? "metadata-unavailable" : "metadata-ready")
+
+        if requestedSource != .fallback {
+            skimPreviewReadinessFallbackWorkItem?.cancel()
+            skimPreviewReadinessFallbackWorkItem = nil
+        }
+
+        if !context.didLogPlanResolution {
+            context.didLogPlanResolution = true
+            skimPreviewPlanContext = context
+            DebugConsoleController.log(
+                "preview",
+                "planResolved: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(effectiveDuration)) start=\(String(format: "%.2f", plan.startOffsetSeconds))s metadata=\(mediaDurationSeconds == nil ? "unavailable" : "ready") readiness=\(source.rawValue)"
+            )
+        }
+
+        applySkimPreviewSeekIfReady(context: context,
+                                    plan: plan,
+                                    mediaDurationSeconds: mediaDurationSeconds,
+                                    now: now,
+                                    source: source)
+    }
+
+    private func currentSkimPreviewMetadata(context: SkimPreviewPlanContext) -> (durationSeconds: TimeInterval?, readiness: SkimStartMetadataReadiness) {
+        var candidates: [TimeInterval] = []
+        if player.media?.url?.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path {
+            let mediaLength = Double(player.media?.length.intValue ?? 0) / 1000
+            if mediaLength.isFinite, mediaLength > 0 {
+                return (mediaLength, .final)
+            }
+        }
+        let watchdogDuration = Double(lastKnownDurationMs) / 1000
+        if watchdogDuration.isFinite, watchdogDuration > 0 { candidates.append(watchdogDuration) }
+        if let cached = durationSecondsCache[context.playbackURL], cached.isFinite, cached > 0 {
+            candidates.append(cached)
+        }
+        if let currentURL = currentMediaURL,
+           let cached = durationSecondsCache[currentURL], cached.isFinite, cached > 0 {
+            candidates.append(cached)
+        }
+        guard let duration = candidates.max() else { return (nil, .unavailable) }
+        return (duration, .provisional)
+    }
+
+    private func currentSkimPreviewMediaDurationSeconds(context: SkimPreviewPlanContext) -> TimeInterval? {
+        currentSkimPreviewMetadata(context: context).durationSeconds
+    }
+
+    /// Wrapper object identifier, for logs only. VLCKit allocates a replacement `VLCMedia` for an
+    /// unchanged assignment when it handles `MediaPlayerMediaChanged`, so this value legitimately
+    /// changes mid-assignment and must never gate acceptance.
+    private func skimMediaWrapperDiagnostic(_ media: VLCMedia?) -> String {
+        guard let media else { return "—" }
+        return String(UInt(bitPattern: ObjectIdentifier(media).hashValue), radix: 16)
+    }
+
+    private func applySkimPreviewSeekIfReady(context: SkimPreviewPlanContext,
+                                             plan: SkimPreviewPlaybackPlan,
+                                             mediaDurationSeconds: TimeInterval?,
+                                             now: TimeInterval,
+                                             source: SkimPreviewReadinessSource) {
+        let sessionID = context.sessionID
+        let queueItemID = context.queueItemID
+        // Ownership comes from the window's own assignment record. `player.media` is still checked
+        // for the intended URL — that reads through to the libvlc descriptor and so survives
+        // VLCKit's wrapper replacement — but its object identity is never consulted.
+        guard mediaDurationSeconds != nil,
+              let assignment = skimMediaAssignments.current,
+              player.media?.url?.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path else { return }
+        let observedOffset = max(0, Double(player.time.intValue) / 1000)
+        let action = skimPlaybackStartIntent.evaluate(
+            playbackSessionID: sessionID,
+            queueItemID: queueItemID,
+            assignment: assignment,
+            observedOffsetSeconds: observedOffset,
+            isSeekable: player.isSeekable,
+            isPaused: isPlayerSessionPaused,
+            now: now
+        )
+        switch action {
+        case .requestSeek(let offset, let attempt, let reason):
+            let targetMs = Int((offset * 1000).rounded())
             player.time = VLCTime(int: Int32(min(targetMs, Int(Int32.max))))
-            NSLog("[dwb-playback] skimPreviewSeek: session=%d offset=%.2fs media=%@",
-                  sessionID, plan.startOffsetSeconds, mediaURL.lastPathComponent)
+            DebugConsoleController.log(
+                "preview",
+                "seekRequested: window=\(debugIdentity) session=\(sessionID) assignment=\(assignment) item=\(context.playbackURL.lastPathComponent) mode=\(context.startMode.rawValue) skip=\(String(format: "%.2f", context.skipIntroSeconds))s preview=\(previewDurationText(context.plannedDurationSeconds)) desired=\(String(format: "%.2f", offset))s metadata=\(skimPlaybackStartIntent.state?.metadataReadiness.rawValue ?? "unavailable") attempt=\(attempt) observed=\(String(format: "%.2f", observedOffset))s wrapper=\(skimMediaWrapperDiagnostic(player.media)) reason=\(reason) readiness=\(source.rawValue)"
+            )
+        case .confirmed(let observed):
+            DebugConsoleController.log(
+                "preview",
+                "seekConfirmed: window=\(debugIdentity) session=\(sessionID) assignment=\(assignment) desired=\(String(format: "%.2f", plan.startOffsetSeconds))s observed=\(String(format: "%.2f", observed))s attempts=\(skimPlaybackStartIntent.state?.seekAttemptCount ?? 0)"
+            )
+        case .exhausted:
+            DebugConsoleController.log(
+                level: .error,
+                category: "preview",
+                message: "seekRetryExhausted: window=\(debugIdentity) session=\(sessionID) assignment=\(assignment) desired=\(String(format: "%.2f", plan.startOffsetSeconds))s observed=\(String(format: "%.2f", observedOffset))s"
+            )
+        case .stale(let reason):
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "seek-\(reason)")
+        case .none:
+            break
+        }
+    }
+
+    private func applySkimPreviewDeadlineUpdate(_ update: SkimPreviewDeadlineUpdate,
+                                                sessionID: Int,
+                                                source: SkimPreviewReadinessSource,
+                                                reason: String) {
+        switch update {
+        case .scheduled(let deadline):
+            scheduleSkimPreviewDeadline(sessionID: sessionID, deadlineUptime: deadline)
+            DebugConsoleController.log(
+                "preview",
+                "deadlineScheduled: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(skimPreviewSessionScheduler.state?.effectiveDurationSeconds)) readiness=\(source.rawValue) reason=\(reason)"
+            )
+        case .confirmed(let deadline):
+            DebugConsoleController.log(
+                "preview",
+                "deadlineConfirmed: window=\(debugIdentity) session=\(sessionID) deadline=\(String(format: "%.3f", deadline)) readiness=\(source.rawValue) reason=\(reason)"
+            )
+        case .replaced(let previous, let deadline):
+            scheduleSkimPreviewDeadline(sessionID: sessionID, deadlineUptime: deadline)
+            DebugConsoleController.log(
+                "preview",
+                "deadlineReplaced: window=\(debugIdentity) session=\(sessionID) previous=\(String(format: "%.3f", previous)) deadline=\(String(format: "%.3f", deadline)) readiness=\(source.rawValue) reason=\(reason)"
+            )
+        case .suspended(let remaining):
+            skimPreviewDeadlineWorkItem?.cancel()
+            skimPreviewDeadlineWorkItem = nil
+            DebugConsoleController.log(
+                "preview",
+                "deadlineSuspended: window=\(debugIdentity) session=\(sessionID) remaining=\(String(format: "%.2f", remaining))s readiness=\(source.rawValue) reason=\(reason)"
+            )
+        case .ignored:
+            break
+        }
+    }
+
+    private func scheduleSkimPreviewDeadline(sessionID: Int, deadlineUptime: TimeInterval) {
+        skimPreviewDeadlineWorkItem?.cancel()
+        let scheduledAssignment = skimMediaAssignments.current
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.fireSkimPreviewDeadline(sessionID: sessionID,
+                                          expectedDeadlineUptime: deadlineUptime,
+                                          scheduledAssignment: scheduledAssignment)
+        }
+        skimPreviewDeadlineWorkItem = workItem
+        let delay = max(0, deadlineUptime - CACurrentMediaTime())
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func fireSkimPreviewDeadline(sessionID: Int,
+                                         expectedDeadlineUptime: TimeInterval,
+                                         scheduledAssignment: SkimMediaAssignmentToken?) {
+        let deadlineGuard = SkimDeadlineGuard(
+            isSkimEnabled: configuredSkimEnabled,
+            scheduledAssignment: scheduledAssignment,
+            currentAssignment: skimMediaAssignments.current
+        )
+        guard !isPreviewWindowClosing,
+              deadlineGuard.mayAdvance,
+              !isPlayerSessionPaused,
+              window != nil,
+              sessionID == currentPlaybackSessionID,
+              let context = skimPreviewPlanContext,
+              context.sessionID == sessionID,
+              let currentURL = currentMediaURL,
+              !currentItemIsImage,
+              MediaFileSupport.mediaKind(for: currentURL) == .video,
+              player.media?.url?.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path else {
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-context-mismatch")
+            return
         }
 
-        guard let clipDuration = plan.effectiveClipDurationSeconds, plan.shouldAutoAdvance, clipDuration > 0 else { return }
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self, self.skimPreviewPlanAppliedSessionID == sessionID else { return }
-            self.skimPreviewAutoAdvanceWorkItem = nil
-            NSLog("[dwb-playback] skimPreviewAutoAdvance: session=%d clipDuration=%.2fs", sessionID, clipDuration)
-            _ = self.advanceToNextItem(reason: "skim-preview-auto-advance")
+        let queueItemID = currentURL.standardizedFileURL.path
+        switch skimPreviewSessionScheduler.claimDeadline(
+            sessionID: sessionID,
+            queueItemID: queueItemID,
+            expectedDeadlineUptime: expectedDeadlineUptime,
+            now: CACurrentMediaTime()
+        ) {
+        case .fired:
+            skimPreviewDeadlineWorkItem = nil
+            skimPreviewReadinessFallbackWorkItem?.cancel()
+            skimPreviewReadinessFallbackWorkItem = nil
+            DebugConsoleController.log(
+                "preview",
+                "deadlineFired: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(skimPreviewSessionScheduler.state?.effectiveDurationSeconds)) reason=skim-preview-auto-advance"
+            )
+            let advanced = advanceToNextItem(reason: "skim-preview-auto-advance")
+            if !advanced {
+                _ = skimPreviewSessionScheduler.allowNaturalEndAfterUnadvancableDeadline(
+                    sessionID: sessionID,
+                    queueItemID: queueItemID
+                )
+            }
+        case .rejected(let reason):
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "deadline-\(reason)")
         }
-        skimPreviewAutoAdvanceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + clipDuration, execute: workItem)
+    }
+
+    private func retrySkimPreviewMetadataIfNeeded() {
+        guard configuredSkimEnabled,
+              !isPlayerSessionPaused,
+              let context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              let intent = skimPlaybackStartIntent.state,
+              intent.playbackSessionID == context.sessionID,
+              !intent.seekWasConfirmed,
+              intent.status != .userOverridden,
+              intent.status != .exhausted else { return }
+        let now = CACurrentMediaTime()
+        if currentSkimPreviewMediaDurationSeconds(context: context) != nil {
+            applySkimPreviewReadiness(sessionID: context.sessionID,
+                                      playbackURL: context.playbackURL,
+                                      source: .metadata)
+        } else if now > intent.retryDeadlineUptime {
+            let fallbackPlan = SkimPreviewPlaybackPlan.plan(
+                mode: context.startMode,
+                skipIntroSeconds: context.skipIntroSeconds,
+                clipDurationSeconds: context.plannedDurationSeconds,
+                mediaDurationSeconds: nil,
+                randomValue: context.startRandomValue
+            )
+            applySkimPreviewSeekIfReady(context: context,
+                                        plan: fallbackPlan,
+                                        mediaDurationSeconds: nil,
+                                        now: now,
+                                        source: .fallback)
+        }
+    }
+
+    private func claimSkimPreviewNaturalEnd(source: String) -> Bool {
+        guard let context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              let currentURL = currentMediaURL else { return true }
+        let claim = skimPreviewSessionScheduler.claimNaturalEnd(
+            sessionID: context.sessionID,
+            queueItemID: currentURL.standardizedFileURL.path
+        )
+        switch claim {
+        case .won:
+            skimPreviewReadinessFallbackWorkItem?.cancel()
+            skimPreviewReadinessFallbackWorkItem = nil
+            skimPreviewDeadlineWorkItem?.cancel()
+            skimPreviewDeadlineWorkItem = nil
+            DebugConsoleController.log(
+                "preview",
+                "naturalEndWon: window=\(debugIdentity) session=\(context.sessionID) duration=\(previewDurationText(context.plannedDurationSeconds)) reason=\(source)"
+            )
+            return true
+        case .confirmed, .notEligible:
+            return true
+        case .rejected(let reason):
+            logSkimPreviewStaleCallback(sessionID: context.sessionID,
+                                        reason: "natural-end-\(reason)")
+            return false
+        }
+    }
+
+    private func updateSkimPreviewQueueItemIdentity(from oldURL: URL, to newURL: URL) {
+        guard var context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              context.queueItemID == oldURL.standardizedFileURL.path else { return }
+        let newID = newURL.standardizedFileURL.path
+        guard skimPreviewSessionScheduler.updateQueueItemID(sessionID: context.sessionID,
+                                                            from: context.queueItemID,
+                                                            to: newID) else { return }
+        _ = skimPlaybackStartIntent.updateQueueItemID(playbackSessionID: context.sessionID,
+                                                      from: context.queueItemID,
+                                                      to: newID)
+        context.queueItemID = newID
+        skimPreviewPlanContext = context
+    }
+
+    /// Logs one stale rejection. The 0.25 s transport timer re-observes readiness continuously, so
+    /// an unchanged rejection is counted rather than reprinted: the first occurrence explains the
+    /// mismatch and the tail is summarised when the reason changes or the session ends.
+    private func logSkimPreviewStaleCallback(sessionID: Int, reason: String) {
+        let signature = "\(sessionID)|\(reason)"
+        if skimPreviewStaleSignature == signature {
+            skimPreviewStaleRepeatCount += 1
+            return
+        }
+        flushSkimPreviewStaleRepeats()
+        skimPreviewStaleSignature = signature
+        skimPreviewStaleRepeatCount = 0
+        DebugConsoleController.log(
+            "preview",
+            "staleCallbackRejected: window=\(debugIdentity) session=\(sessionID) assignment=\(skimMediaAssignments.current.map(String.init(describing:)) ?? "none") bound=\(skimPlaybackStartIntent.state?.assignment.map(String.init(describing:)) ?? "none") reason=\(reason)"
+        )
+    }
+
+    private func flushSkimPreviewStaleRepeats() {
+        guard let signature = skimPreviewStaleSignature, skimPreviewStaleRepeatCount > 0 else {
+            skimPreviewStaleSignature = nil
+            skimPreviewStaleRepeatCount = 0
+            return
+        }
+        DebugConsoleController.log(
+            "preview",
+            "staleCallbackRejectedRepeated: window=\(debugIdentity) signature=\(signature) suppressed=\(skimPreviewStaleRepeatCount)"
+        )
+        skimPreviewStaleSignature = nil
+        skimPreviewStaleRepeatCount = 0
+    }
+
+    private func previewDurationText(_ duration: TimeInterval?) -> String {
+        guard let duration else { return "full-file" }
+        return String(format: "%.2fs", duration)
+    }
+
+    func relocatePreviewRange(toNormalizedPosition normalizedPosition: Float) {
+        guard !currentItemIsImage,
+              let currentRange = activePreviewRange,
+              let relocated = PreviewRangePlanner.relocated(
+                normalizedStart: Double(normalizedPosition),
+                preservingDurationSeconds: activePreviewConfiguredDuration,
+                totalDurationSeconds: currentRange.totalDurationSeconds
+              ) else { return }
+
+        activePreviewRange = relocated
+        let targetPosition = Float(relocated.normalizedStart)
+        notifyUserSeek(targetPosition: targetPosition, source: "preview-range-relocate")
+        player.position = targetPosition
+        transport.notifySeek(to: targetPosition)
+        transport.update()
+        if activePreviewConfiguredDuration != nil {
+            let update = skimPreviewSessionScheduler.replaceDeadlineForRelocation(
+                sessionID: currentPlaybackSessionID,
+                queueItemID: currentMediaURL?.standardizedFileURL.path ?? "",
+                now: CACurrentMediaTime(),
+                durationSeconds: relocated.durationSeconds
+            )
+            applySkimPreviewDeadlineUpdate(update,
+                                           sessionID: currentPlaybackSessionID,
+                                           source: .relocation,
+                                           reason: "preview-range-relocate")
+        }
+        if !isPlayerSessionPaused, !player.isPlaying { player.play() }
     }
 
     private func cancelReplacementStart(reason: String, suppressLog: Bool = false) {
@@ -2824,6 +3350,8 @@ class PlayerWindowController: NSWindowController {
             self.applyScaleMode()
             let media = VLCMedia(url: url)
             self.player.media = media
+            self.bindSkimStartIntent(to: media, url: url, sessionID: sessionID)
+            self.videoAudioNormalizer.prepareForNewVideo(on: self.player)
             self.applyPlaybackSpeed(reason: "reuse-player-media-replacement")
             // P50: Do NOT use force:true here. The reuse path (same player, new media) does not
             // reset audio volume — VLC config retains the last applied value from player init or
@@ -2837,7 +3365,9 @@ class PlayerWindowController: NSWindowController {
                   url.lastPathComponent,
                   startReason,
                   appliedAudio.volume)
-            if expectPlaybackHandshake {
+            if self.isPlayerSessionPaused {
+                self.cancelPlaybackStartHandshake(reason: "playCurrentItem-\(startReason)-session-paused")
+            } else if expectPlaybackHandshake {
                 self.armPlaybackStartHandshake(reason: startReason,
                                                expectedURL: url,
                                                expectedSessionID: sessionID,
@@ -2849,7 +3379,7 @@ class PlayerWindowController: NSWindowController {
                   startReason,
                   self.player.state.rawValue,
                   self.player.media?.url?.lastPathComponent ?? "—")
-            self.player.play()
+            if !self.isPlayerSessionPaused { self.player.play() }
             NSLog("[dwb-playback] playCurrentItem: after player.play() reason=%@ state=%d isPlaying=%d media=%@",
                   startReason,
                   self.player.state.rawValue,
@@ -2923,6 +3453,10 @@ class PlayerWindowController: NSWindowController {
     private func verifyPlaybackStartHandshake(id: Int) {
         guard var handshake = playbackStartHandshake, handshake.id == id else { return }
         playbackStartHandshakeWorkItem = nil
+        guard !isPlayerSessionPaused else {
+            cancelPlaybackStartHandshake(reason: "session-paused", suppressLog: true)
+            return
+        }
 
         let currentMediaURL = player.media?.url
         let mediaAssigned = currentMediaURL?.path == handshake.expectedURL.path
@@ -3071,7 +3605,12 @@ class PlayerWindowController: NSWindowController {
                                                targetURL: handshake.expectedURL,
                                                stopOldPlayer: true)
 
-        rebuiltPlayer.media = VLCMedia(url: handshake.expectedURL)
+        let rebuiltMedia = VLCMedia(url: handshake.expectedURL)
+        rebuiltPlayer.media = rebuiltMedia
+        bindSkimStartIntent(to: rebuiltMedia,
+                            url: handshake.expectedURL,
+                            sessionID: handshake.expectedSessionID)
+        videoAudioNormalizer.prepareForNewVideo(on: rebuiltPlayer)
         NSLog("[dwb-playback] handshakeRecovery: id=%d assignedMedia=%@ session=%d volume=%d",
               handshake.id,
               handshake.expectedURL.lastPathComponent,
@@ -3079,7 +3618,7 @@ class PlayerWindowController: NSWindowController {
               rebuiltPlayer.audio?.volume ?? windowVolume)
         applyWindowAudioState(reason: "handshake-recovery-media-assigned", force: true)
         applyPlaybackSpeed(reason: "handshake-recovery-media-assigned")
-        rebuiltPlayer.play()
+        if !isPlayerSessionPaused { rebuiltPlayer.play() }
         transport.invalidateCachedDisplayState()  // fresh player installed — force full refresh
         transport.update()
     }
@@ -3092,13 +3631,18 @@ class PlayerWindowController: NSWindowController {
         let freshPlayer = installFreshPlayer(reason: startReason,
                                              targetURL: url,
                                              stopOldPlayer: true)
-        freshPlayer.media = VLCMedia(url: url)
+        let freshMedia = VLCMedia(url: url)
+        freshPlayer.media = freshMedia
+        bindSkimStartIntent(to: freshMedia, url: url, sessionID: sessionID)
+        videoAudioNormalizer.prepareForNewVideo(on: freshPlayer)
         applyWindowAudioState(reason: "fresh-player-media-assigned", force: true)
         applyPlaybackSpeed(reason: "fresh-player-media-assigned")
         NSLog("[dwb-playback] autoplayTransition: target=%@ assignedMedia=1 reason=%@",
               url.lastPathComponent,
               startReason)
-        if expectPlaybackHandshake {
+        if isPlayerSessionPaused {
+            cancelPlaybackStartHandshake(reason: "playCurrentItem-\(startReason)-session-paused")
+        } else if expectPlaybackHandshake {
             armPlaybackStartHandshake(reason: startReason,
                                       expectedURL: url,
                                       expectedSessionID: sessionID,
@@ -3106,10 +3650,49 @@ class PlayerWindowController: NSWindowController {
         } else {
             cancelPlaybackStartHandshake(reason: "playCurrentItem-\(startReason)-no-handshake")
         }
-        NSLog("[dwb-playback] autoplayTransition: target=%@ playCall=1 reason=%@",
+        NSLog("[dwb-playback] autoplayTransition: target=%@ playCall=%d reason=%@",
               url.lastPathComponent,
+              isPlayerSessionPaused ? 0 : 1,
               startReason)
-        freshPlayer.play()
+        if !isPlayerSessionPaused { freshPlayer.play() }
+    }
+
+    /// Binds the current session's start intent to the assignment just written to `player.media`.
+    /// The token is minted here, immediately after the assignment, so readiness never has to
+    /// rediscover ownership from a wrapper VLCKit is free to replace.
+    private func bindSkimStartIntent(to media: VLCMedia,
+                                     url: URL,
+                                     sessionID: Int) {
+        let queueItemID = url.standardizedFileURL.path
+        let assignment = skimMediaAssignments.assign()
+        let wrapper = skimMediaWrapperDiagnostic(media)
+        guard configuredSkimEnabled else {
+            DebugConsoleController.log(
+                "preview",
+                "mediaBound: window=\(debugIdentity) session=\(sessionID) item=\(url.lastPathComponent) assignment=\(assignment) wrapper=\(wrapper) skim=off"
+            )
+            return
+        }
+        guard skimPlaybackStartIntent.bindAssignment(playbackSessionID: sessionID,
+                                                     queueItemID: queueItemID,
+                                                     assignment: assignment,
+                                                     wrapperDiagnostic: wrapper) else {
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "media-bind-session-or-item-mismatch")
+            return
+        }
+        if let duration = durationSecondsCache[url], duration.isFinite, duration > 0 {
+            _ = skimPlaybackStartIntent.updateMetadata(
+                playbackSessionID: sessionID,
+                queueItemID: queueItemID,
+                durationSeconds: duration,
+                readiness: .provisional
+            )
+        }
+        DebugConsoleController.log(
+            "preview",
+            "mediaBound: window=\(debugIdentity) session=\(sessionID) item=\(url.lastPathComponent) assignment=\(assignment) wrapper=\(wrapper) paused=\(isPlayerSessionPaused)"
+        )
     }
 
     @discardableResult
@@ -3135,16 +3718,21 @@ class PlayerWindowController: NSWindowController {
         freshPlayer.delegate = self
         freshPlayer.drawable = videoSurface
         player = freshPlayer
+        // Retires every assignment made to the replaced player, so its in-flight readiness and
+        // seek callbacks can no longer act on the new one.
+        let installedGeneration = skimMediaAssignments.installPlayer()
         transport.controller = self
         transport.player = freshPlayer
+        applyVideoAudioNormalization(reason: "fresh-player-install")
         let appliedAudio = applyWindowAudioState(reason: "fresh-player-install", force: true)
         lastAppliedScaleState = nil   // H4: new player — force VLC scale/crop re-assert.
         applyScaleMode()
-        NSLog("[dwb-playback] autoplayTransition: reason=%@ target=%@ newPlayerCreate=1 delegate=1 drawable=1 transport=1 volume=%d scale=%@",
+        NSLog("[dwb-playback] autoplayTransition: reason=%@ target=%@ newPlayerCreate=1 delegate=1 drawable=1 transport=1 volume=%d scale=%@ playerGeneration=%d",
               reason,
               targetURL.lastPathComponent,
               appliedAudio.volume,
-              scaleModeLogName())
+              scaleModeLogName(),
+              installedGeneration)
         return freshPlayer
     }
 
@@ -3170,7 +3758,6 @@ class PlayerWindowController: NSWindowController {
 
     private func completionActionForCurrentState() -> PlaybackCompletionAction {
         PlaybackCompletionPolicy(
-            isRepeatOne: isRepeatOne,
             currentDisplayIndex: currentDisplayIndex,
             displayOrderCount: displayOrder.count,
             isLoopQueueEnabled: configuredLoopQueueEnabled,
@@ -3210,6 +3797,11 @@ class PlayerWindowController: NSWindowController {
                                             source: String,
                                             sourceURL: URL?,
                                             eofDecision: String) {
+        guard !isPlayerSessionPaused else {
+            DebugConsoleController.log("playback", "terminalRejected: window=\(debugIdentity) session=\(currentPlaybackSessionID) owner=\(source) reason=session-paused")
+            return
+        }
+        guard claimSkimPreviewNaturalEnd(source: source) else { return }
         guard activeCompletionSequence == nil else { return }
 
         playbackCompletionSequence += 1
@@ -3229,14 +3821,6 @@ class PlayerWindowController: NSWindowController {
               eofDecision)
 
         switch action {
-        case .repeatCurrent:
-            schedulePlaybackAction(named: "completion-\(action.rawValue)-seq\(sequence.id)",
-                                   after: delayedPlaybackActionInterval) { [weak self] in
-                self?.playCurrentItem(startReason: "autoplay-repeat",
-                                      expectPlaybackHandshake: true,
-                                      preserveCompletionSequence: true,
-                                      transitionStrategy: .reuseCurrentPlayer)
-            }
         case .playNext, .loopQueueNext:
             let nextReason: String
             switch action {
@@ -3267,6 +3851,7 @@ class PlayerWindowController: NSWindowController {
     private func evaluateCompletionWatchdog(source: String,
                                             capturedMediaURL: URL? = nil,
                                             capturedStoppedPosition: Float? = nil) {
+        guard !isPlayerSessionPaused else { return }
         let nowMT = CACurrentMediaTime()   // M1: single monotonic sample per invocation
         let currentState = player.state
         let recentSeekAge: TimeInterval    = lastUserSeekMT  > 0 ? nowMT - lastUserSeekMT  : -1
@@ -3384,6 +3969,27 @@ class PlayerWindowController: NSWindowController {
 
     // MARK: - Volume
 
+    private func applyVideoAudioNormalization(reason: String) {
+        guard player != nil else { return }
+        let installed = videoAudioNormalizer.setEnabled(configuredVideoAudioNormalizationEnabled,
+                                                        on: player)
+        if configuredVideoAudioNormalizationEnabled && !installed {
+            DebugConsoleController.log(level: .error,
+                                       category: "audio",
+                                       message: "video normalization unavailable: window=\(debugIdentity) reason=\(reason)")
+        } else {
+            DebugConsoleController.log("audio",
+                                       "videoNormalization: window=\(debugIdentity) enabled=\(configuredVideoAudioNormalizationEnabled) reason=\(reason)")
+        }
+    }
+
+    private func showVideoVolumeOverlay() {
+        let videoOutputIsSuppressed = lastAppliedAudioState?.muted ?? windowMuted
+        let presentation = VideoVolumeMeterPresentation(volume: Int(windowVolume),
+                                                        muted: windowMuted || videoOutputIsSuppressed)
+        volumeOverlay.show(presentation)
+    }
+
     private static func defaultPersistedVolume() -> Int32 {
         let key = SettingsWindowController.persistedVolumeKey
         guard UserDefaults.standard.object(forKey: key) != nil else { return 100 }
@@ -3404,8 +4010,12 @@ class PlayerWindowController: NSWindowController {
         if clampedVolume != windowVolume {
             windowVolume = clampedVolume
         }
-        let appliedVolume: Int32 = windowMuted ? 0 : clampedVolume
-        let nextState = (volume: appliedVolume, muted: windowMuted)
+        let mixMode = BackgroundAudioSettingsStore.shared.snapshot().mixMode
+        let appliedVolume = VideoAudioPolicy.effectiveVolume(storedVolume: clampedVolume,
+                                                              muted: windowMuted,
+                                                              mixMode: mixMode,
+                                                              backgroundAudioIsActive: backgroundAudioPlayback.isActive)
+        let nextState = (volume: appliedVolume, muted: appliedVolume == 0)
         let changed = lastAppliedAudioState?.volume != nextState.volume || lastAppliedAudioState?.muted != nextState.muted
         if force || changed {
             // P50: audio.volume= calls config_PutInt (VLCKit global rwlock write) when the audio
@@ -3417,7 +4027,7 @@ class PlayerWindowController: NSWindowController {
             // Only log when something actually changed or a caller forced the apply.
             // Unconditional logging here contributed to the per-window-start log
             // storms that saturated the debug console during multi-window playback.
-            DebugConsoleController.log("audio", "apply: window=\(debugIdentity) reason=\(reason) storedVolume=\(windowVolume) appliedVolume=\(appliedVolume) muted=\(windowMuted) forced=\(force ? 1 : 0)")
+            DebugConsoleController.log("audio", "apply: window=\(debugIdentity) reason=\(reason) storedVolume=\(windowVolume) appliedVolume=\(appliedVolume) userMuted=\(windowMuted) mix=\(mixMode.rawValue) forced=\(force ? 1 : 0)")
         } else {
             // P50: Skipping redundant VLCKit config write — state unchanged, no global lock acquired.
             DebugConsoleController.log("audio", "applySkip: window=\(debugIdentity) reason=\(reason) storedVolume=\(windowVolume) appliedVolume=\(appliedVolume) noChange=1 configWriteAvoided=1")
@@ -3434,23 +4044,7 @@ class PlayerWindowController: NSWindowController {
         DebugConsoleController.log("audio", "volumeChange: window=\(debugIdentity) old=\(oldVol) new=\(newVol) wasMuted=\(wasMuted) muted=\(windowMuted)")
         applyWindowAudioState(reason: "volume-adjust")
         persistVolume(newVol)
-        volumeBar.show(volume: newVol)
-    }
-
-    func setVolumeFromBar(_ vol: Int32) {
-        let oldVol = windowVolume
-        let wasMuted = windowMuted
-        let newVol = Int32(max(0, min(150, Int(vol))))
-        windowVolume = newVol
-        windowMuted = newVol == 0
-        DebugConsoleController.log("audio", "volumeSet: window=\(debugIdentity) old=\(oldVol) new=\(newVol) wasMuted=\(wasMuted) muted=\(windowMuted)")
-        applyWindowAudioState(reason: "volume-bar")
-        persistVolume(newVol)
-        volumeBar.show(volume: newVol)
-    }
-
-    func showVolumeBar(volume: Int32) {
-        volumeBar.show(volume: volume)
+        showVideoVolumeOverlay()
     }
 
     func toggleMuteFromTransport() {
@@ -3463,8 +4057,8 @@ class PlayerWindowController: NSWindowController {
             windowMuted = true
         }
         DebugConsoleController.log("audio", "muteToggle: window=\(debugIdentity) oldMuted=\(wasMuted) newMuted=\(windowMuted) storedVolume=\(windowVolume)")
-        let applied = applyWindowAudioState(reason: "mute-toggle")
-        volumeBar.show(volume: applied.volume)
+        _ = applyWindowAudioState(reason: "mute-toggle")
+        showVideoVolumeOverlay()
     }
 
     func volumeUp()   { adjustVolume(by: 10)  }
@@ -3543,7 +4137,13 @@ class PlayerWindowController: NSWindowController {
                 self.transport.imageModeIsPlaying = !self.imageSlideshowPaused
                 self.needsTransportUpdate = true
 
-                if !self.imageSlideshowPaused && !self.isUserStop && self.imageSlideshowStartMT > 0 && elapsed >= dur {
+                let shouldUseElapsedCompletion = !self.currentItemIsGIF || self.currentGIFAnimation == nil
+                if shouldUseElapsedCompletion &&
+                    !self.imageSlideshowPaused &&
+                    !self.isUserStop &&
+                    self.imageSlideshowStartMT > 0 &&
+                    dur > 0 &&
+                    elapsed >= dur {
                     self.imageSlideshowStartMT = 0  // prevent re-triggering
                     let action = self.completionActionForCurrentState()
                     if action == .stopLastItem {
@@ -3569,6 +4169,7 @@ class PlayerWindowController: NSWindowController {
             if self.player?.isPlaying == true {
                 self.updatePlaybackProgressSnapshot()
             }
+            self.retrySkimPreviewMetadataIfNeeded()
             self.evaluateCompletionWatchdog(source: "watchdog")
             // M6 + M4: cosmetic transport refresh, gated for efficiency.
             // Skipped when the window is not effectively visible (minimized or occluded)
@@ -3751,12 +4352,28 @@ class PlayerWindowController: NSWindowController {
 
     // MARK: - Window close
 
+    func performReviewKeepCurrentItem() {
+        guard currentDisplayIndex >= 0 else { return }
+        queuePage(queuePage, didRequestReviewKeepAt: currentDisplayIndex)
+    }
+
+    func performReviewDeletePrefixCurrentItem() {
+        guard currentDisplayIndex >= 0 else { return }
+        queuePage(queuePage, didRequestReviewDeleteAt: currentDisplayIndex)
+    }
+
+    func performReviewUndo() {
+        queuePageDidRequestReviewUndo(queuePage)
+    }
+
     override func close() {
         cancelPendingFolderScan()
+        isPreviewWindowClosing = true
         resetPlaybackCompletionSignals(reason: "window-close")
+        backgroundAudioPlayback.stop()
         if currentItemIsImage {
             clearImageSlideshowState()
-        } else if player.isPlaying {
+        } else if player.media != nil {
             isUserStop = true
             player.stop()
         }
@@ -3770,15 +4387,16 @@ extension PlayerWindowController: NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         cancelPendingFolderScan()
+        isPreviewWindowClosing = true
         resetPlaybackCompletionSignals(reason: "window-will-close")
         releasePlaybackSleepAssertion()
         stopUpdateTimer()
         hideHUDTimer?.invalidate()
         titlebarHideTimer?.invalidate()
-        seekTargetResetTimer?.invalidate()
+        backgroundAudioPlayback.stop()
         removeMouseTracking()
         NotificationCenter.default.removeObserver(self)
-        if player.isPlaying {
+        if player.media != nil {
             isUserStop = true
             player.stop()
         }
@@ -3989,16 +4607,15 @@ extension PlayerWindowController: NSWindowDelegate {
     private func logPlaybackQueueSnapshot(_ event: String) {
         let order = displayOrder.map(String.init).joined(separator: ",")
         let currentURL = currentMediaURL?.lastPathComponent ?? "—"
-        NSLog("[dwb-playback] %@: displayIdx=%d/%d currentSetIdx=%d queueCount=%d displayOrder=[%@] shuffle=%d endless=%d repeat=%d current=%@",
+        NSLog("[dwb-playback] %@: displayIdx=%d/%d currentSetIdx=%d queueCount=%d displayOrder=[%@] queueMode=%@ loop=%d current=%@",
               event,
               currentDisplayIndex,
               displayOrder.count,
               currentSetIndex,
               playbackSet.count,
               order,
-              isShuffleOn ? 1 : 0,
-              isEndlessShuffleOn ? 1 : 0,
-              isRepeatOne ? 1 : 0,
+              configuredQueueOrderMode.rawValue,
+              configuredLoopQueueEnabled ? 1 : 0,
               currentURL)
     }
 }
@@ -4006,6 +4623,27 @@ extension PlayerWindowController: NSWindowDelegate {
 // MARK: - VLCMediaPlayerDelegate
 
 extension PlayerWindowController: VLCMediaPlayerDelegate {
+
+    func mediaPlayerLoudnessChanged(_ aNotification: Notification) {
+        guard let sourcePlayer = aNotification.object as? VLCMediaPlayer,
+              sourcePlayer === player,
+              configuredVideoAudioNormalizationEnabled,
+              let mediaURL = sourcePlayer.media?.url,
+              let mediaKind = MediaFileSupport.mediaKind(for: mediaURL),
+              VideoAudioNormalizationPolicy.applies(to: mediaKind),
+              let loudness = sourcePlayer.momentaryLoudness?.loudnessValue,
+              loudness.isFinite else { return }
+
+        DispatchQueue.main.async { [weak self, weak sourcePlayer] in
+            guard let self,
+                  let sourcePlayer,
+                  sourcePlayer === self.player,
+                  sourcePlayer.media?.url?.path == mediaURL.path,
+                  self.currentMediaURL?.path == mediaURL.path else { return }
+            self.videoAudioNormalizer.ingest(momentaryLoudnessLUFS: loudness,
+                                             from: sourcePlayer)
+        }
+    }
 
     func mediaPlayerStateChanged(_ aNotification: Notification) {
         guard let player = aNotification.object as? VLCMediaPlayer else { return }
@@ -4050,10 +4688,19 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
             #endif
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
+                if self.isPlayerSessionPaused {
+                    if self.player.isPlaying { self.player.pause() }
+                    DebugConsoleController.log("playback", "playingRejected: window=\(self.debugIdentity) session=\(self.currentPlaybackSessionID) reason=session-paused")
+                    return
+                }
                 self.updatePlaybackProgressSnapshot(position: capturedPosition)
                 if !self.currentItemIsImage {
                     self.acquirePlaybackSleepAssertion(reason: "Video playback")
-                    self.applySkimPreviewPlanForVideo(sessionID: self.currentPlaybackSessionID, mediaURL: capturedMediaURL)
+                    if let capturedMediaURL {
+                        self.applySkimPreviewReadiness(sessionID: self.currentPlaybackSessionID,
+                                                       playbackURL: capturedMediaURL,
+                                                       source: .playing)
+                    }
                 }
                 guard let handshake = self.playbackStartHandshake else {
                     self.clearCompletionSequence(reason: "state-playing", suppressLog: true)
@@ -4081,9 +4728,6 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
                 guard let self = self else { return }
                 self.updatePlaybackProgressSnapshot(position: capturedPosition)
                 self.releasePlaybackSleepAssertion()
-                self.evaluateCompletionWatchdog(source: "paused",
-                                                capturedMediaURL: capturedMediaURL,
-                                                capturedStoppedPosition: capturedPosition)
             }
 
         case .ended:
@@ -4110,12 +4754,11 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
                       capturedURLName,
                       currentURLName,
                       posAtEnded)
-                NSLog("[dwb-playback] .ended: naturalEOFDetected=1 posAtEnded=%.3f displayIdx=%d/%d repeat=%d shuffle=%d endless=%d hasNext=%d media=%@ session=%d",
+                NSLog("[dwb-playback] .ended: naturalEOFDetected=1 posAtEnded=%.3f displayIdx=%d/%d queueMode=%@ loop=%d hasNext=%d media=%@ session=%d",
                       posAtEnded,
                       self.currentDisplayIndex, self.displayOrder.count,
-                      self.isRepeatOne ? 1 : 0,
-                      self.isShuffleOn ? 1 : 0,
-                      self.isEndlessShuffleOn ? 1 : 0,
+                      self.configuredQueueOrderMode.rawValue,
+                      self.configuredLoopQueueEnabled ? 1 : 0,
                       self.hasNext ? 1 : 0,
                       capturedMediaName,
                       self.currentPlaybackSessionID)
@@ -4142,7 +4785,7 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
                 self.lastStoppedMediaURL = capturedMediaURL ?? self.currentMediaURL
 
                 #if DEBUG
-                NSLog("[dwb-playback] .stopped: userStop=%d suppress=%d naturalEOF=%d lastPos=%.3f capPos=%.3f posAtEnded=%.3f timeMs=%d durationMs=%d recentSeek=%d(%.2fs) suppressAge=%.2fs suppressFresh=%d displayIdx=%d/%d shuffle=%d endless=%d repeat=%d hasNext=%d media=%@ session=%d completionSeq=%d",
+                NSLog("[dwb-playback] .stopped: userStop=%d suppress=%d naturalEOF=%d lastPos=%.3f capPos=%.3f posAtEnded=%.3f timeMs=%d durationMs=%d recentSeek=%d(%.2fs) suppressAge=%.2fs suppressFresh=%d displayIdx=%d/%d queueMode=%@ loop=%d hasNext=%d media=%@ session=%d completionSeq=%d",
                       self.isUserStop          ? 1 : 0,
                       self.suppressNextStopped ? 1 : 0,
                       self.naturalEOFDetected  ? 1 : 0,
@@ -4156,9 +4799,8 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
                       max(0.0, suppressAge),
                       suppressFresh ? 1 : 0,
                       self.currentDisplayIndex, self.displayOrder.count,
-                      self.isShuffleOn ? 1 : 0,
-                      self.isEndlessShuffleOn ? 1 : 0,
-                      self.isRepeatOne ? 1 : 0,
+                      self.configuredQueueOrderMode.rawValue,
+                      self.configuredLoopQueueEnabled ? 1 : 0,
                       self.hasNext ? 1 : 0,
                       capturedMediaName,
                       self.currentPlaybackSessionID,
@@ -4176,6 +4818,7 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
 
                 if suppressFresh && self.replacementStartWorkItem != nil {
                     self.clearStoppedSuppression()
+                    self.clearPlaybackCompletionEvidence()
                     NSLog("[dwb-playback] .stopped: reasonCode=replacement-suppressed media=%@",
                           capturedMediaName)
                     return
@@ -4225,6 +4868,7 @@ extension PlayerWindowController: QueuePageViewDelegate {
 
     func queuePage(_ view: QueuePageView, didSelectDisplayIndex index: Int) {
         DebugConsoleController.log("queue", "select: displayIdx=\(index) source=queuePage")
+        cancelSkimPreviewSession(reason: "queue-page-select")
         currentDisplayIndex = index
         playCurrentItem(startReason: "queue-page-select")
     }
@@ -4314,26 +4958,39 @@ extension PlayerWindowController: QueuePageViewDelegate {
     /// unchanged) if the original URL is no longer present in the queue.
     @discardableResult
     private func applyReviewURLReplacement(from oldURL: URL, to newURL: URL) -> Bool {
-        guard let updated = SkimQueueURLUpdate.replacingURL(in: playbackSet, matching: oldURL, with: newURL) else {
+        guard let index = playbackSet.firstIndex(where: {
+            $0.standardizedFileURL.path == oldURL.standardizedFileURL.path
+        }) else { return false }
+        return applyQueueURLReplacement(at: index,
+                                        from: oldURL,
+                                        to: newURL,
+                                        migrateReviewIntent: true)
+    }
+
+    @discardableResult
+    private func applyQueueURLReplacement(at index: Int,
+                                          from oldURL: URL,
+                                          to newURL: URL,
+                                          migrateReviewIntent: Bool) -> Bool {
+        guard playbackSet.indices.contains(index),
+              queueItemIDs.indices.contains(index),
+              queueFileIdentities.indices.contains(index),
+              playbackSet[index].standardizedFileURL.path == oldURL.standardizedFileURL.path else {
             return false
         }
-        playbackSet = updated
-        let oldQueueID = oldURL.standardizedFileURL.path
-        let newQueueID = newURL.standardizedFileURL.path
-        if let ordinal = lastPlayedOrdinalByID.removeValue(forKey: oldQueueID) {
-            lastPlayedOrdinalByID[newQueueID] = ordinal
+        playbackSet[index] = newURL
+        queueFileIdentities[index] = SkimFileIdentityResolver.identity(for: newURL)
+            ?? queueFileIdentities[index]
+        if migrateReviewIntent {
+            reviewStateStore.migrateIntent(from: oldURL, to: newURL)
         }
-        reviewStateStore.migrateIntent(from: oldURL, to: newURL)
         durationCache.removeValue(forKey: oldURL)
         durationSecondsCache.removeValue(forKey: oldURL)
-        if oldURL.standardizedFileURL.path == currentMediaURL?.standardizedFileURL.path {
+        if index == currentSetIndex
+            || oldURL.standardizedFileURL.path == currentMediaURL?.standardizedFileURL.path {
             currentMediaURL = newURL
+            updateSkimPreviewQueueItemIdentity(from: oldURL, to: newURL)
             updateWindowTitle(newURL.lastPathComponent)
-        }
-        if configuredQueueOrderMode == .sequential {
-            applyQueueSortIfNeeded(reason: "review-url-replacement")
-        } else {
-            rebuildQueueOrderCycleKeepingCurrent(reason: "review-url-replacement")
         }
         return true
     }
@@ -4562,6 +5219,44 @@ extension PlayerWindowController: QueuePageViewDelegate {
         }
     }
 
+    func queuePage(_ view: QueuePageView, didRequestTrashRows indices: [Int]) {
+        let rows = Array(Set(indices)).sorted(by: >)
+        let targets = rows.compactMap { index -> (Int, URL)? in
+            guard let url = urlForDisplayIndex(index) else { return nil }
+            return (index, url)
+        }
+        guard !targets.isEmpty, let window else { return }
+
+        let alert = NSAlert()
+        alert.messageText = targets.count == 1 ? "Move Selected File to Trash?" : "Move \(targets.count) Selected Files to Trash?"
+        alert.informativeText = "This deletes the selected media from disk. The delete_ action only renames a filename and is not affected."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Move to Trash")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            var removedRows: [Int] = []
+            var failures: [String] = []
+            for (row, url) in targets {
+                do {
+                    var resultingURL: NSURL?
+                    try FileManager.default.trashItem(at: url, resultingItemURL: &resultingURL)
+                    removedRows.append(row)
+                } catch {
+                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
+                }
+            }
+            removedRows.sorted(by: >).forEach { self.removeQueueItem(displayIndex: $0) }
+            guard !failures.isEmpty else { return }
+            let failureAlert = NSAlert()
+            failureAlert.messageText = "Some Files Could Not Be Deleted"
+            failureAlert.informativeText = failures.joined(separator: "\n")
+            failureAlert.alertStyle = .warning
+            failureAlert.addButton(withTitle: "OK")
+            failureAlert.beginSheetModal(for: window)
+        }
+    }
+
     func queuePage(_ view: QueuePageView, didRequestRevealAt index: Int) {
         revealInFinder(displayIndex: index)
     }
@@ -4649,7 +5344,7 @@ extension PlayerWindowController: QueuePageViewDelegate {
                 await MainActor.run {
                     guard let self, self.folderScanGeneration == generation else { return }
                     self.folderScanTask = nil
-                    self.applyFolderRescan(freshURLs: freshURLs, freshPaths: freshPaths)
+                    self.applyFolderRescan(freshURLs: freshURLs)
                 }
             } catch is CancellationError {
                 return
@@ -4671,70 +5366,69 @@ extension PlayerWindowController: QueuePageViewDelegate {
         }
     }
 
-    private func applyFolderRescan(freshURLs: [URL],
-                                   freshPaths: Set<String>) {
-        // Capture the currently playing URL before modifying state.
-        let playingURL: URL? = currentSetIndex >= 0 && currentSetIndex < playbackSet.count
-            ? playbackSet[currentSetIndex]
+    private func applyFolderRescan(freshURLs: [URL]) {
+        let oldItems = playbackSet.indices.map {
+            SkimQueueItemRecord(id: queueItemIDs[$0],
+                                url: playbackSet[$0],
+                                fileIdentity: queueFileIdentities[$0])
+        }
+        let playingItemID = queueItemIDs.indices.contains(currentSetIndex)
+            ? queueItemIDs[currentSetIndex]
             : nil
-        let playingPath = playingURL?.standardizedFileURL.path
+        let snapshot = freshURLs.map {
+            SkimQueueSnapshotItem(url: $0,
+                                  fileIdentity: SkimFileIdentityResolver.identity(for: $0))
+        }
+        let result = QueueRenameReconciler.reconcile(
+            currentItems: oldItems,
+            displayOrder: displayOrder,
+            currentDisplayIndex: currentDisplayIndex,
+            selectedItemIDs: queuePage.selectedItemIDs,
+            snapshot: snapshot,
+            preservingMissingItemID: playingItemID,
+            makeID: { _ in UUID().uuidString }
+        )
 
-        // Walk current display order: keep items still present on disk, plus the currently
-        // playing item even if it has been removed from disk (preserves active playback).
-        var newURLs: [URL] = []
-        var newURLPaths = Set<String>()
-        for pbIdx in displayOrder {
-            guard pbIdx >= 0, pbIdx < playbackSet.count else { continue }
-            let url = playbackSet[pbIdx]
-            let path = url.standardizedFileURL.path
-            if freshPaths.contains(path) || path == playingPath {
-                if newURLPaths.insert(path).inserted {
-                    newURLs.append(url)
-                }
+        let oldByID = Dictionary(uniqueKeysWithValues: oldItems.map { ($0.id, $0) })
+        for item in result.items where result.renamedItemIDs.contains(item.id) {
+            guard let old = oldByID[item.id] else { continue }
+            reviewStateStore.migrateIntent(from: old.url, to: item.url)
+            durationCache.removeValue(forKey: old.url)
+            durationSecondsCache.removeValue(forKey: old.url)
+            if item.id == playingItemID {
+                currentMediaURL = item.url
+                updateSkimPreviewQueueItemIdentity(from: old.url, to: item.url)
+                updateWindowTitle(item.url.lastPathComponent)
             }
         }
 
-        // Append files now present in folder but not already in the new set.
-        for url in freshURLs {
-            let path = url.standardizedFileURL.path
-            if newURLPaths.insert(path).inserted {
-                newURLs.append(url)
-            }
-        }
-
-        // Compute feedback counts before modifying state.
-        let originalPaths = Set(playbackSet.map { $0.standardizedFileURL.path })
-        let addedCount = freshPaths.subtracting(originalPaths).count
-        let removedCount = originalPaths.subtracting(freshPaths).filter { $0 != playingPath }.count
-
-        // Locate new display index for the currently playing item.
-        let newCurrentDisplayIndex: Int
-        if let playingPath = playingPath,
-           let idx = newURLs.firstIndex(where: { $0.standardizedFileURL.path == playingPath }) {
-            newCurrentDisplayIndex = idx
-        } else {
-            newCurrentDisplayIndex = newURLs.isEmpty ? -1 : max(0, min(currentDisplayIndex, newURLs.count - 1))
-        }
-
-        // Prune duration caches for removed entries.
-        let newPathSet = newURLPaths
+        let oldIDs = Set(oldItems.map(\.id))
+        let newIDs = Set(result.items.map(\.id))
+        let addedCount = newIDs.subtracting(oldIDs).count
+        let removedCount = oldIDs.subtracting(newIDs).count
+        let newPathSet = Set(result.items.map { $0.url.standardizedFileURL.path })
         durationCache = durationCache.filter { newPathSet.contains($0.key.standardizedFileURL.path) }
         durationSecondsCache = durationSecondsCache.filter { newPathSet.contains($0.key.standardizedFileURL.path) }
 
-        // Apply new queue state (does not touch playback).
-        playbackSet = newURLs
-        displayOrder = Array(0..<newURLs.count)
-        currentDisplayIndex = newCurrentDisplayIndex
+        playbackSet = result.items.map(\.url)
+        queueItemIDs = result.items.map(\.id)
+        queueFileIdentities = result.items.map(\.fileIdentity)
+        displayOrder = result.displayOrder
+        currentDisplayIndex = result.currentDisplayIndex
         pruneQueuePlaybackHistoryToCurrentSet()
 
-        if configuredQueueOrderMode == .sequential {
-            applyQueueSortIfNeeded(reason: "rescan")
+        if result.membershipChanged {
+            if configuredQueueOrderMode == .sequential {
+                applyQueueSortIfNeeded(reason: "rescan")
+            } else {
+                rebuildQueueOrderCycleKeepingCurrent(reason: "rescan")
+            }
         } else {
-            rebuildQueueOrderCycleKeepingCurrent(reason: "rescan")
+            refreshQueueDisplays()
         }
         if isQueuePageOpen { refreshQueuePage() }
 
-        DebugConsoleController.log("rescan", "rescan: added=\(addedCount) removed=\(removedCount) total=\(newURLs.count)")
+        DebugConsoleController.log("rescan", "rescan: added=\(addedCount) removed=\(removedCount) renamed=\(result.renamedItemIDs.count) total=\(playbackSet.count)")
     }
 
     /// Row drag-and-drop reorder from Queue Page.

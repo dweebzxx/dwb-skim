@@ -22,7 +22,7 @@ struct DebugLogEntry {
 // MARK: - Controller
 
 /// App-wide in-app debug console. Off by default; toggle in Settings > Developer.
-/// Ring buffer of 1000 entries. Supports category, level, and text filtering,
+/// Ring buffer of 5,000 entries. Supports category, level, and text filtering,
 /// plus Pause/Resume for freezing the visible log while the app continues buffering.
 final class DebugConsoleController: NSWindowController {
 
@@ -30,9 +30,7 @@ final class DebugConsoleController: NSWindowController {
 
     // MARK: - Constants
 
-    private static let maxEntries = 1000
-    // Slack so we trim in bulk (O(1) amortized) instead of removing one element per overflow log.
-    private static let maxEntriesSlack = 256
+    private static let maxEntries = 5_000
     // Cap text-view rebuild rate during log storms. With multiple windows generating
     // sustained logs, an unthrottled rebuild blocks the main thread enough to freeze
     // the whole app (debug console included).
@@ -40,7 +38,8 @@ final class DebugConsoleController: NSWindowController {
 
     // MARK: - Buffer state
 
-    private var entries: [DebugLogEntry] = []
+    private var entryBuffer = DebugLogRetentionBuffer<DebugLogEntry>(capacity: maxEntries)
+    private var entries: [DebugLogEntry] { entryBuffer.entries }
     private(set) var isEnabled: Bool = false
     private var isPaused: Bool = false
     private var knownCategories: [String] = []
@@ -109,11 +108,7 @@ final class DebugConsoleController: NSWindowController {
             knownCategories.sort()
             rebuildCategoryPopup()
         }
-        entries.append(entry)
-        // Amortize trim: only shift the array once the slack is exceeded.
-        if entries.count > Self.maxEntries + Self.maxEntriesSlack {
-            entries.removeFirst(entries.count - Self.maxEntries)
-        }
+        entryBuffer.append(entry)
         scheduleRender()
     }
 
@@ -137,10 +132,6 @@ final class DebugConsoleController: NSWindowController {
         }
         pendingRender = false
         lastRenderMT = now
-        // Lazy trim to exact cap before rendering.
-        if entries.count > Self.maxEntries {
-            entries.removeFirst(entries.count - Self.maxEntries)
-        }
         if !isPaused, window?.isVisible == true {
             rebuildTextView()
         }
@@ -251,7 +242,7 @@ final class DebugConsoleController: NSWindowController {
     }
 
     @objc private func clearTapped() {
-        entries.removeAll()
+        entryBuffer.removeAll()
         knownCategories.removeAll()
         filterCategory = nil
         rebuildCategoryPopup()
@@ -272,7 +263,7 @@ final class DebugConsoleController: NSWindowController {
         let safe = timeFormatter.string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: ".", with: "-")
-        panel.nameFieldStringValue = "dwb-skim debug-\(safe).txt"
+        panel.nameFieldStringValue = "dwb skim debug-\(safe).txt"
         panel.begin { [weak self] result in
             guard result == .OK, let url = panel.url, let self = self else { return }
             let text = self.sanitizedText(self.entries.map { self.formatEntry($0) }.joined(separator: "\n"))
@@ -295,7 +286,7 @@ final class DebugConsoleController: NSWindowController {
         let pausedNote = isPaused ? " [PAUSED]" : ""
         let ts = timeFormatter.string(from: Date())
         var lines: [String] = [
-            "dwb - skim Debug Snapshot — \(ts)",
+            "dwb skim Debug Snapshot — \(ts)",
             "Buffer: \(total) entries, \(visible) visible\(pausedNote)",
             ""
         ]
@@ -360,7 +351,7 @@ final class DebugConsoleController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        panel.title = "dwb - skim Debug Console"
+        panel.title = "dwb skim Debug Console"
         panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = false
         panel.level = .normal

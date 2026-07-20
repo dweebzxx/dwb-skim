@@ -13,7 +13,7 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
-	<string>dwb - skim</string>
+	<string>dwb skim</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -40,7 +40,7 @@
 				<string>ogm</string>
 			</array>
 			<key>CFBundleTypeName</key>
-			<string>dwb - skim Video</string>
+			<string>dwb skim Video</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
@@ -76,9 +76,9 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
+	<string>dwb_skim.SkimApplication</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>dwb - skim</string>
+	<string>dwb skim</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>UTImportedTypeDeclarations</key>

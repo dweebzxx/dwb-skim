@@ -28,7 +28,7 @@ final class SkimReviewStatusDescriptorTests: XCTestCase {
         XCTAssertEqual(descriptor.prefixToken, "keep_")
         XCTAssertEqual(descriptor.visibleFilename, "DSCF1234.MP4")
         XCTAssertEqual(descriptor.statusLabel, "keep")
-        assertColor(descriptor.statusColor, matches: SkimColors.darkTeal)
+        assertColor(descriptor.statusColor, matches: SkimColors.periwinkle)
     }
 
     func testDeletePrefixDescriptor() {
@@ -48,7 +48,7 @@ final class SkimReviewStatusDescriptorTests: XCTestCase {
         XCTAssertEqual(descriptor.prefixToken, "rename_")
         XCTAssertEqual(descriptor.visibleFilename, "nature_still_01.jpg")
         XCTAssertEqual(descriptor.statusLabel, "rename")
-        assertColor(descriptor.statusColor, matches: SkimColors.periwinkle)
+        assertColor(descriptor.statusColor, matches: SkimColors.rename)
     }
 
     func testUnmarkedDescriptor() {

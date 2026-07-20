@@ -77,10 +77,6 @@ node_modules/
 /scripts/
 /scripts
 
-# Project-specific Tier 2 assets
-/README-dwb-skim-donor.md
-/DONOR_MANIFEST.md
-
 .env
 .env.*
 !.env.example

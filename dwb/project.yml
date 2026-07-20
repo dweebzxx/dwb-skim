@@ -23,7 +23,7 @@ packages:
 targets:
   dwb-skim:
     type: application
-    productName: "dwb - skim"
+    productName: "dwb skim"
     platform: macOS
     deploymentTarget: "13.0"
     sources:
@@ -39,7 +39,7 @@ targets:
         MARKETING_VERSION: "4.2.2"
         CURRENT_PROJECT_VERSION: "4.2.2"
         PRODUCT_BUNDLE_IDENTIFIER: com.dwb.skim
-        PRODUCT_NAME: "dwb - skim"
+        PRODUCT_NAME: "dwb skim"
         PRODUCT_MODULE_NAME: dwb_skim
         SWIFT_MODULE_NAME: dwb_skim
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: "YES"
@@ -58,16 +58,34 @@ targets:
       - path: dwb-skimTests
       - path: dwb-skim/Player/MediaFileSupportCore.swift
       - path: dwb-skim/Player/PlaybackCompletionPolicy.swift
+      - path: dwb-skim/Player/MediaPlaybackPolicy.swift
+      - path: dwb-skim/Player/VideoAudioNormalizationPolicy.swift
+      - path: dwb-skim/Player/VolumeOverlayPresentation.swift
       - path: dwb-skim/Player/QueueOrderPlanner.swift
+      - path: dwb-skim/Player/QueueRenameReconciler.swift
       - path: dwb-skim/Player/QueueDisplayProjection.swift
       - path: dwb-skim/Player/SkimFileRenamer.swift
       - path: dwb-skim/Player/SkimReviewStatusDescriptor.swift
       - path: dwb-skim/Player/SkimReviewState.swift
       - path: dwb-skim/App/DebugLogSanitizer.swift
+      - path: dwb-skim/App/DebugLogRetentionBuffer.swift
       - path: dwb-skim/App/BookmarkStore.swift
       - path: dwb-skim/App/SettingsDefaultsRegistry.swift
+      - path: dwb-skim/App/SkimSettingsStore.swift
+      - path: dwb-skim/App/BackgroundAudioSettings.swift
+      - path: dwb-skim/App/SettingsPresentation.swift
       - path: dwb-skim/Player/SkimColors.swift
       - path: dwb-skim/Player/SkimPreviewPlaybackPlan.swift
+      - path: dwb-skim/Player/SkimPreviewSessionScheduler.swift
+      - path: dwb-skim/Player/SkimPlaybackStartIntent.swift
+      - path: dwb-skim/Player/SkimMediaAssignment.swift
+      - path: dwb-skim/Player/SkimTogglePolicy.swift
+      - path: dwb-skim/Player/OptionDoubleTapRecognizer.swift
+      - path: dwb-skim/Player/PlayerWindowReactivationPlanner.swift
+      - path: dwb-skim/App/SkimApplicationConfiguration.swift
+      - path: dwb-skim/Player/PreviewRangePlanner.swift
+      - path: dwb-skim/Player/BackgroundAudioPlaybackController.swift
+      - path: dwb-skim/Player/PlaybackBarPresentation.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: "YES"

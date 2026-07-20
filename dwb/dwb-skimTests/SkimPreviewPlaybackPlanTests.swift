@@ -30,6 +30,40 @@ final class SkimPreviewPlaybackPlanTests: XCTestCase {
         XCTAssertEqual(plan.startOffsetSeconds, 10, accuracy: 0.001)
     }
 
+    func testRandomOnlyUsesCompleteValidRange() {
+        let first = SkimPreviewPlaybackPlan.plan(mode: .random,
+                                                 skipIntroSeconds: 0,
+                                                 clipDurationSeconds: 20,
+                                                 mediaDurationSeconds: 100,
+                                                 randomValue: 0)
+        let last = SkimPreviewPlaybackPlan.plan(mode: .random,
+                                                skipIntroSeconds: 0,
+                                                clipDurationSeconds: 20,
+                                                mediaDurationSeconds: 100,
+                                                randomValue: 1)
+        XCTAssertEqual(first.startOffsetSeconds, 0, accuracy: 0.001)
+        XCTAssertEqual(last.startOffsetSeconds, 80, accuracy: 0.001)
+    }
+
+    func testSkipIntroAndRandomNeverReturnsZeroForValidNonzeroRange() {
+        let plan = SkimPreviewPlaybackPlan.plan(mode: .random,
+                                                skipIntroSeconds: 10,
+                                                clipDurationSeconds: 20,
+                                                mediaDurationSeconds: 100,
+                                                randomValue: 0)
+        XCTAssertGreaterThanOrEqual(plan.startOffsetSeconds, 10)
+        XCTAssertNotEqual(plan.startOffsetSeconds, 0)
+    }
+
+    func testCollapsedShortMediaRangeUsesOnlyClampedNonzeroStart() {
+        let plan = SkimPreviewPlaybackPlan.plan(mode: .random,
+                                                skipIntroSeconds: 20,
+                                                clipDurationSeconds: 10,
+                                                mediaDurationSeconds: 5,
+                                                randomValue: 0.5)
+        XCTAssertEqual(plan.startOffsetSeconds, 4.75, accuracy: 0.001)
+    }
+
     func testRandomModeRespectsClipDurationAndMediaDurationUpperBound() {
         let plan = SkimPreviewPlaybackPlan.plan(mode: .random,
                                                  skipIntroSeconds: 0,

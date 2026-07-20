@@ -1,116 +1,38 @@
-import Foundation
 import XCTest
 
 final class PlaybackCompletionPolicyTests: XCTestCase {
-
-    func testRepeatOneReturnsRepeatCurrent() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: true,
-            currentDisplayIndex: 2,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .repeatCurrent)
+    func testMidQueueAdvances() {
+        XCTAssertEqual(policy(index: 1, count: 5, loop: false).action, .playNext)
     }
 
-    func testRepeatOneTakesPriorityOverLoopQueue() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: true,
-            currentDisplayIndex: 4,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: true,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .repeatCurrent)
+    func testLastItemStopsWithoutLoopQueue() {
+        XCTAssertEqual(policy(index: 4, count: 5, loop: false).action, .stopLastItem)
     }
 
-    func testRepeatOneTakesPriorityWhenMidQueue() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: true,
-            currentDisplayIndex: 0,
-            displayOrderCount: 3,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .repeatCurrent)
+    func testSingleItemStopsWithoutLoopQueue() {
+        XCTAssertEqual(policy(index: 0, count: 1, loop: false).action, .stopLastItem)
     }
 
-    func testMidQueueReturnsPlayNext() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 1,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .playNext)
+    func testLastItemLoopsQueue() {
+        XCTAssertEqual(policy(index: 4, count: 5, loop: true).action, .loopQueueNext)
     }
 
-    func testFirstOfTwoItemsReturnsPlayNext() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 0,
-            displayOrderCount: 2,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .playNext)
+    func testLoopQueueDoesNotOverrideMidQueueAdvance() {
+        XCTAssertEqual(policy(index: 2, count: 5, loop: true).action, .playNext)
     }
 
-    func testLastItemNoEndlessReturnsStopLastItem() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 4,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .stopLastItem)
+    func testEmptyQueueNeverLoops() {
+        let result = PlaybackCompletionPolicy(currentDisplayIndex: 0,
+                                              displayOrderCount: 1,
+                                              isLoopQueueEnabled: true,
+                                              queueIsEmpty: true)
+        XCTAssertEqual(result.action, .stopLastItem)
     }
 
-    func testSingleItemQueueNoModifiersReturnsStopLastItem() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 0,
-            displayOrderCount: 1,
-            isLoopQueueEnabled: false,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .stopLastItem)
-    }
-
-    func testLoopQueueWithItemsReturnsLoopQueueNext() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 4,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: true,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .loopQueueNext)
-    }
-
-    func testLoopQueueEmptyQueueReturnsStopLastItem() {
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 0,
-            displayOrderCount: 1,
-            isLoopQueueEnabled: true,
-            queueIsEmpty: true
-        )
-        XCTAssertEqual(policy.action, .stopLastItem)
-    }
-
-    func testLoopQueueMidQueueStillAdvancesNormally() {
-        // loop queue only fires when at the last item; mid-queue uses playNext.
-        let policy = PlaybackCompletionPolicy(
-            isRepeatOne: false,
-            currentDisplayIndex: 2,
-            displayOrderCount: 5,
-            isLoopQueueEnabled: true,
-            queueIsEmpty: false
-        )
-        XCTAssertEqual(policy.action, .playNext)
+    private func policy(index: Int, count: Int, loop: Bool) -> PlaybackCompletionPolicy {
+        PlaybackCompletionPolicy(currentDisplayIndex: index,
+                                 displayOrderCount: count,
+                                 isLoopQueueEnabled: loop,
+                                 queueIsEmpty: false)
     }
 }

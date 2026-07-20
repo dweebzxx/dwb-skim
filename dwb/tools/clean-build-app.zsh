@@ -17,7 +17,7 @@ xcodebuild \
   -derivedDataPath "${derived_data_path}" \
   clean build
 
-app_path="${derived_data_path}/Build/Products/Debug/dwb - skim.app"
+app_path="${derived_data_path}/Build/Products/Debug/dwb skim.app"
 [[ -d "${app_path}" ]] || {
   print -u2 "error: expected app artifact was not produced: ${app_path}"
   exit 1
@@ -26,7 +26,7 @@ app_path="${derived_data_path}/Build/Products/Debug/dwb - skim.app"
 print "Built app: ${app_path}"
 
 dist_dir="${repo_root}/dist"
-dist_app_path="${dist_dir}/dwb - skim.app"
+dist_app_path="${dist_dir}/dwb skim.app"
 
 mkdir -p "${dist_dir}"
 rm -rf "${dist_app_path}"

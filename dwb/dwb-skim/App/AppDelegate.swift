@@ -5,16 +5,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let maxPlayerWindowCount = 5
 
     var windowControllers: [PlayerWindowController] = []
-    private weak var rewindMenuItem: NSMenuItem?
-    private weak var forwardMenuItem: NSMenuItem?
     private var hasReceivedOpenEventDuringLaunch = false
+    private var optionDoubleTapCoordinator: OptionDoubleTapCoordinator?
+    /// Player windows in most-recently-key-first order. Drives Dock reopen when
+    /// no player window is currently key.
+    private var playerActivationOrder: [ObjectIdentifier] = []
+    private var playerActivationObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         SettingsWindowController.registerDefaults()
         _ = DebugConsoleController.shared   // eagerly init so it observes settings from launch
         buildMainMenu()
-        observeSettings()
-        updateSkipMenuItemTitles()
+        installOptionDoubleTapCoordinator()
+        installPlayerActivationTracking()
         openInitialPlayerWindowIfNeeded()
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
@@ -22,6 +26,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        optionDoubleTapCoordinator?.stop()
+        optionDoubleTapCoordinator = nil
+        (NSApp as? SkimApplication)?.optionDoubleTapCoordinator = nil
+        if let playerActivationObserver {
+            NotificationCenter.default.removeObserver(playerActivationObserver)
+            self.playerActivationObserver = nil
+        }
         DebugConsoleController.log("app", "terminating")
     }
 
@@ -49,20 +60,74 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        let visiblePlayerWindows = windowControllers.compactMap { wc -> NSWindow? in
-            guard let window = wc.window, window.isVisible else { return nil }
-            return window
+        pruneClosedPlayerWindowControllers()
+
+        // A player window still "exists" while minimized or ordered out, even
+        // though NSWindow.isVisible reports false for both. Membership here is
+        // having a live window object, so a Dock click on a minimized player
+        // raises it instead of building a duplicate.
+        let controllersByIdentifier = Dictionary(
+            windowControllers.compactMap { wc in wc.window.map { _ in (wc.debugIdentity, wc) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let candidates = windowControllers.compactMap { wc -> PlayerWindowReactivationCandidate? in
+            guard let window = wc.window else { return nil }
+            return PlayerWindowReactivationCandidate(
+                identifier: wc.debugIdentity,
+                isKeyWindow: window.isKeyWindow,
+                isMiniaturized: window.isMiniaturized,
+                isOnScreen: window.isVisible,
+                activationRank: activationRank(of: wc)
+            )
         }
 
-        if visiblePlayerWindows.isEmpty {
+        switch PlayerWindowReactivationPlanner.plan(candidates: candidates) {
+        case .createNewPlayerWindow:
+            DebugConsoleController.log("window", "reopen: noExistingPlayer -> openNewPlayerWindow")
             _ = openNewPlayerWindow()
-        } else {
-            visiblePlayerWindows.forEach { $0.deminiaturize(nil) }
-            visiblePlayerWindows.last?.makeKeyAndOrderFront(nil)
+        case .raiseExisting(let identifier, let needsDeminiaturize, let needsOrderFront):
+            guard let wc = controllersByIdentifier[identifier], let window = wc.window else { break }
+            if needsDeminiaturize { window.deminiaturize(nil) }
+            if needsOrderFront { window.makeKeyAndOrderFront(nil) }
+            noteWindowActivated(wc)
+            DebugConsoleController.log("window", "reopen: raised=\(identifier) deminiaturize=\(needsDeminiaturize) orderFront=\(needsOrderFront)")
         }
 
         sender.activate(ignoringOtherApps: true)
         return false
+    }
+
+    // MARK: - Player activation recency
+
+    private func installPlayerActivationTracking() {
+        guard playerActivationObserver == nil else { return }
+        playerActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let self,
+                  let wc = (note.object as? NSWindow)?.windowController as? PlayerWindowController else { return }
+            self.noteWindowActivated(wc)
+        }
+    }
+
+    private func noteWindowActivated(_ wc: PlayerWindowController) {
+        let id = ObjectIdentifier(wc)
+        playerActivationOrder.removeAll { $0 == id }
+        playerActivationOrder.insert(id, at: 0)
+        pruneActivationOrder()
+    }
+
+    /// 0 == most recently key. Never-activated windows sort after every
+    /// window that has been key at least once.
+    private func activationRank(of wc: PlayerWindowController) -> Int {
+        playerActivationOrder.firstIndex(of: ObjectIdentifier(wc)) ?? playerActivationOrder.count
+    }
+
+    private func pruneActivationOrder() {
+        let live = Set(windowControllers.map(ObjectIdentifier.init))
+        playerActivationOrder.removeAll { !live.contains($0) }
     }
 
     // MARK: - Window management
@@ -137,6 +202,49 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return windowControllers.last { $0.window?.isVisible == true }
     }
 
+    private func installOptionDoubleTapCoordinator() {
+        guard optionDoubleTapCoordinator == nil else { return }
+        let coordinator = OptionDoubleTapCoordinator(
+            targetIsEligible: { [weak self] in
+                self?.optionDoubleTapTarget() != nil
+            },
+            onToggle: { [weak self] in
+                self?.optionDoubleTapTarget()?.toggleSkimEnabled(source: "double-option")
+            }
+        )
+        coordinator.start()
+        optionDoubleTapCoordinator = coordinator
+
+        guard let application = NSApp as? SkimApplication else {
+            // Without the subclass nothing feeds the coordinator, so the
+            // shortcut is silently dead. Make that loud rather than mysterious.
+            DebugConsoleController.log(level: .warning,
+                                       category: "app",
+                                       message: "optionDoubleTap: NSApp is \(type(of: NSApp!)), expected SkimApplication; shortcut disabled")
+            assertionFailure("NSApp must be SkimApplication for Double-tap Option interception")
+            return
+        }
+        application.optionDoubleTapCoordinator = coordinator
+        DebugConsoleController.log("app", "optionDoubleTap: installed on \(SkimApplicationConfiguration.principalClassName)")
+    }
+
+    private func optionDoubleTapTarget() -> PlayerWindowController? {
+        guard let window = NSApp.keyWindow,
+              let controller = window.windowController as? PlayerWindowController,
+              windowControllers.contains(where: { $0 === controller }) else { return nil }
+        let target = OptionDoubleTapTargetDescriptor(
+            identifier: controller.debugIdentity,
+            isPlayerWindow: true,
+            isKeyWindow: window.isKeyWindow,
+            isTextEntryFocused: controller.isTextEntryFocused
+        )
+        guard OptionDoubleTapTargetDescriptor.keyPlayerIdentifier(
+            applicationIsActive: NSApp.isActive,
+            targets: [target]
+        ) == controller.debugIdentity else { return nil }
+        return controller
+    }
+
     private func pruneClosedPlayerWindowControllers() {
         windowControllers.removeAll { $0.window == nil }
     }
@@ -147,7 +255,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                                    message: "windowCapDenied: context=\(context) cap=\(maxPlayerWindowCount) current=\(windowControllers.count)")
         let alert = NSAlert()
         alert.messageText = "Window limit reached"
-        alert.informativeText = "dwb - skim supports up to \(maxPlayerWindowCount) player windows."
+        alert.informativeText = "dwb skim supports up to \(maxPlayerWindowCount) player windows."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         if let sheetWindow = NSApp.keyWindow ?? NSApp.mainWindow {
@@ -308,24 +416,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         frontPlayerWindowController?.volumeDown()
     }
 
-    @objc func rewind10(_ sender: Any) {
-        frontPlayerWindowController?.skipBackward10()
-    }
-
-    @objc func forward10(_ sender: Any) {
-        frontPlayerWindowController?.skipForward10()
-    }
-
-    @objc func toggleShuffle(_ sender: Any) {
-        frontPlayerWindowController?.toggleShuffle()
-    }
-
-    @objc func toggleEndlessShuffle(_ sender: Any) {
-        frontPlayerWindowController?.toggleEndlessShuffle()
-    }
-
-    @objc func toggleRepeatOne(_ sender: Any) {
-        frontPlayerWindowController?.toggleRepeat()
+    @objc func toggleLoopQueue(_ sender: Any) {
+        let current = SkimSettingsStore.shared.snapshot().loopQueueEnabled
+        SkimSettingsStore.shared.setLoopQueueEnabled(!current)
     }
 
     @objc func setPlaybackSpeedFromMenu(_ sender: NSMenuItem) {
@@ -365,15 +458,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return frontPlayerWindowController?.currentMediaURL != nil
         case 13: // Clear Queue
             return frontPlayerWindowController != nil
-        case 20: // Shuffle
-            menuItem.state = frontPlayerWindowController?.isShuffleOn == true ? .on : .off
-            return (frontPlayerWindowController?.playbackSet.count ?? 0) > 1
         case 21: // Loop Queue
-            menuItem.state = frontPlayerWindowController?.isEndlessShuffleOn == true ? .on : .off
+            menuItem.state = SkimSettingsStore.shared.snapshot().loopQueueEnabled ? .on : .off
             return (frontPlayerWindowController?.playbackSet.count ?? 0) > 0
-        case 22: // Repeat One
-            menuItem.state = frontPlayerWindowController?.isRepeatOne == true ? .on : .off
-            return frontPlayerWindowController?.currentMediaURL != nil
         case 30: // Keep Window On Top
             menuItem.state = frontPlayerWindowController?.isKeepAtTop == true ? .on : .off
         case 31: // Auto-hide Titlebar
@@ -394,25 +481,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return usablePlayerWindowController()
     }
 
-    private func observeSettings() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(skipDurationDidChange),
-            name: .skipDurationChanged,
-            object: nil
-        )
-    }
-
-    @objc private func skipDurationDidChange() {
-        updateSkipMenuItemTitles()
-    }
-
-    private func updateSkipMenuItemTitles() {
-        let seconds = SettingsWindowController.currentSkipDurationSeconds()
-        rewindMenuItem?.title = SettingsWindowController.skipActionTitle(isForward: false, seconds: seconds)
-        forwardMenuItem?.title = SettingsWindowController.skipActionTitle(isForward: true, seconds: seconds)
-    }
-
     // MARK: - Main menu (programmatic)
 
     private func buildMainMenu() {
@@ -420,11 +488,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // ── App menu ────────────────────────────────────────────────────────
         let appItem = NSMenuItem()
-        appItem.title = "dwb - skim"
+        appItem.title = "dwb skim"
         mainMenu.addItem(appItem)
-        let appMenu = NSMenu(title: "dwb - skim")
+        let appMenu = NSMenu(title: "dwb skim")
         appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "About dwb - skim",
+        appMenu.addItem(withTitle: "About dwb skim",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
         appMenu.addItem(.separator())
@@ -436,7 +504,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(settingsItem)
 
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit dwb - skim",
+        appMenu.addItem(withTitle: "Quit dwb skim",
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")
 
@@ -514,26 +582,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         playbackMenu.addItem(.separator())
 
-        let rewind10Item = NSMenuItem(title: SettingsWindowController.skipActionTitle(isForward: false,
-                                                                                     seconds: SettingsWindowController.currentSkipDurationSeconds()),
-                                      action: #selector(rewind10(_:)),
-                                      keyEquivalent: String(UnicodeScalar(NSLeftArrowFunctionKey)!))
-        rewind10Item.keyEquivalentModifierMask = .option
-        rewind10Item.target = self
-        playbackMenu.addItem(rewind10Item)
-        self.rewindMenuItem = rewind10Item
-
-        let forward10Item = NSMenuItem(title: SettingsWindowController.skipActionTitle(isForward: true,
-                                                                                       seconds: SettingsWindowController.currentSkipDurationSeconds()),
-                                       action: #selector(forward10(_:)),
-                                       keyEquivalent: String(UnicodeScalar(NSRightArrowFunctionKey)!))
-        forward10Item.keyEquivalentModifierMask = .option
-        forward10Item.target = self
-        playbackMenu.addItem(forward10Item)
-        self.forwardMenuItem = forward10Item
-
-        playbackMenu.addItem(.separator())
-
         let volUpItem = NSMenuItem(title: "Volume Up",
                                    action: #selector(volumeUp(_:)),
                                    keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!))
@@ -550,29 +598,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         playbackMenu.addItem(.separator())
 
-        let shuffleItem = NSMenuItem(title: "Shuffle",
-                                     action: #selector(toggleShuffle(_:)),
-                                     keyEquivalent: "s")
-        shuffleItem.keyEquivalentModifierMask = [.command, .option]
-        shuffleItem.target = self
-        shuffleItem.tag = 20
-        playbackMenu.addItem(shuffleItem)
-
-        let endlessShuffleItem = NSMenuItem(title: "Loop Queue",
-                                            action: #selector(toggleEndlessShuffle(_:)),
-                                            keyEquivalent: "e")
-        endlessShuffleItem.keyEquivalentModifierMask = [.command, .option]
-        endlessShuffleItem.target = self
-        endlessShuffleItem.tag = 21
-        playbackMenu.addItem(endlessShuffleItem)
-
-        let repeatOneItem = NSMenuItem(title: "Repeat One",
-                                       action: #selector(toggleRepeatOne(_:)),
-                                       keyEquivalent: "r")
-        repeatOneItem.keyEquivalentModifierMask = [.command, .option]
-        repeatOneItem.target = self
-        repeatOneItem.tag = 22
-        playbackMenu.addItem(repeatOneItem)
+        let loopQueueItem = NSMenuItem(title: "Loop Queue",
+                                       action: #selector(toggleLoopQueue(_:)),
+                                       keyEquivalent: "")
+        loopQueueItem.target = self
+        loopQueueItem.tag = 21
+        playbackMenu.addItem(loopQueueItem)
 
         playbackMenu.addItem(.separator())
 
@@ -627,6 +658,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         windowMenu.addItem(withTitle: "Zoom",
                            action: #selector(NSWindow.performZoom(_:)),
                            keyEquivalent: "")
+        windowMenu.addItem(withTitle: "Close",
+                           action: #selector(NSWindow.performClose(_:)),
+                           keyEquivalent: "w")
 
         windowMenu.addItem(.separator())
 

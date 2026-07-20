@@ -33,12 +33,12 @@ final class SkimReviewStateTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    func testKeepDisplayShowsKeepPrefixAndDarkTealColor() {
+    func testKeepDisplayShowsKeepPrefixAndPeriwinkleColor() {
         let descriptor = SkimReviewStatusDescriptor.describe(displayName: "DSCF1234.MP4", explicitIntent: .keep)
 
         XCTAssertEqual(descriptor.status, .keep)
         XCTAssertEqual(descriptor.prefixToken, "keep_")
-        assertColor(descriptor.statusColor, matches: SkimColors.darkTeal)
+        assertColor(descriptor.statusColor, matches: SkimColors.periwinkle)
     }
 
     // MARK: - Delete
