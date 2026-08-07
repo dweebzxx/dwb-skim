@@ -131,6 +131,10 @@ class PlayerWindowController: NSWindowController {
     private var updateTimer:   Timer?
     private var hideHUDTimer:  Timer?
     private var trackingArea:  NSTrackingArea?
+    private var playbackChromeRevealTrackingArea: NSTrackingArea?
+    private var skimRestoreHoldTrackingArea: NSTrackingArea?
+    private var pointerIsInPlaybackChromeRevealZone = false
+    private var pointerIsOverSkimRestoreButton = false
 
     // MARK: - Titlebar auto-hide state
 
@@ -470,6 +474,11 @@ class PlayerWindowController: NSWindowController {
     private var skimPreviewPlanContext: SkimPreviewPlanContext?
     private var skimPreviewReadinessFallbackWorkItem: DispatchWorkItem?
     private var skimPreviewDeadlineWorkItem: DispatchWorkItem?
+    /// Which session/queue-item/assignment the pending `skimPreviewDeadlineWorkItem` is bound to.
+    /// Kept separate from the work item so a same-session player rebuild (handshake recovery) can
+    /// rebind the assignment the callback must match without disturbing the armed timer. See
+    /// `SkimPreviewDeadlineBinding` for the full rationale.
+    private var skimPreviewDeadlineBinding = SkimPreviewDeadlineBinding()
     private let skimPreviewReadinessFallbackDelay: TimeInterval = 0.75
     private let skimPreviewMetadataRetryWindow: TimeInterval = 2.0
     private let skimStartIntentRetryWindow: TimeInterval = 3.0
@@ -536,6 +545,13 @@ class PlayerWindowController: NSWindowController {
         imageDisplayView = imgView
 
         transport = TransportControlsView(frame: .zero)
+        transport.chromeVisibilityDidChange = { [weak self] state, animated in
+            self?.applyPlaybackChromeVisibility(state, animated: animated)
+        }
+        transport.chromeVisibilityHoldProvider = { [weak self] in
+            guard let self else { return false }
+            return self.pointerIsInPlaybackChromeRevealZone || self.pointerIsOverSkimRestoreButton
+        }
         cv.addSubview(transport)
 
         skimSettingsStrip = SkimSettingsStripView()
@@ -1030,6 +1046,8 @@ class PlayerWindowController: NSWindowController {
             queueSeparator.isHidden = true
             skimSettingsStrip.isHidden = true
             skimControlsRestoreButton.isHidden = true
+            skimControlsRestoreButton.isEnabled = false
+            skimControlsRestoreButton.setAccessibilityElement(false)
 
             videoSurface.frame = b
             videoSurface.layer?.frame = b
@@ -1047,7 +1065,6 @@ class PlayerWindowController: NSWindowController {
             // fullscreen frames, no screen bounds, no prior transport frames.
             skimSettingsStrip.isHidden = !skimControlsVisibility.isVisible
             skimSettingsStrip.frame = NSRect(x: 0, y: max(0, b.height - skimSettingsStripHeight), width: b.width, height: skimSettingsStripHeight)
-            skimControlsRestoreButton.isHidden = skimControlsVisibility.isVisible
             skimControlsRestoreButton.frame = NSRect(x: max(8, (b.width - 30) / 2), y: max(0, b.height - 24), width: 30, height: 20)
             let contentHeight = max(0, b.height - (skimControlsVisibility.isVisible ? skimSettingsStripHeight : 0))
             let queueW: CGFloat = isQueuePageOpen
@@ -1090,15 +1107,64 @@ class PlayerWindowController: NSWindowController {
 
         applyScaleMode()
         positionVideoTitleOverlay()
+        applyPlaybackChromeVisibility(transport.chromeVisibilityState, animated: false)
+        updatePlaybackChromeTrackingAreas()
     }
 
     private func setSkimControlsVisible(_ visible: Bool) {
         guard skimControlsVisibility.isVisible != visible else { return }
         if visible { skimControlsVisibility.restore() } else { skimControlsVisibility.hide() }
         layoutPlayerViews()
+        transport.noteChromeActivity()
     }
 
     @objc private func restoreSkimControls(_ sender: NSButton) { setSkimControlsVisible(true) }
+
+    private func applyPlaybackChromeVisibility(_ state: PlaybackChromeVisibilityState,
+                                               animated: Bool) {
+        let arrowBelongsInLayout = state.showsSkimRestoreButton(
+            skimControlsExpanded: skimControlsVisibility.isVisible,
+            isFullscreen: layoutMode == .fullscreen
+        )
+        guard arrowBelongsInLayout else {
+            skimControlsRestoreButton.isHidden = true
+            skimControlsRestoreButton.isEnabled = false
+            skimControlsRestoreButton.setAccessibilityElement(false)
+            return
+        }
+
+        switch state.phase {
+        case .visible:
+            skimControlsRestoreButton.isHidden = false
+            skimControlsRestoreButton.isEnabled = true
+            skimControlsRestoreButton.setAccessibilityElement(true)
+            if animated {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.12
+                    self.skimControlsRestoreButton.animator().alphaValue = 1
+                }
+            } else {
+                skimControlsRestoreButton.alphaValue = 1
+            }
+        case .fading:
+            skimControlsRestoreButton.isHidden = false
+            skimControlsRestoreButton.isEnabled = true
+            skimControlsRestoreButton.setAccessibilityElement(true)
+            if animated {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.16
+                    self.skimControlsRestoreButton.animator().alphaValue = 0
+                }
+            } else {
+                skimControlsRestoreButton.alphaValue = 0
+            }
+        case .hidden:
+            skimControlsRestoreButton.alphaValue = 0
+            skimControlsRestoreButton.isHidden = true
+            skimControlsRestoreButton.isEnabled = false
+            skimControlsRestoreButton.setAccessibilityElement(false)
+        }
+    }
 
     // MARK: - Video title overlay
 
@@ -2213,6 +2279,7 @@ class PlayerWindowController: NSWindowController {
             )
             if case .resumed(let deadline) = update {
                 scheduleSkimPreviewDeadline(sessionID: context.sessionID,
+                                            queueItemID: context.queueItemID,
                                             deadlineUptime: deadline)
             }
             DebugConsoleController.log(
@@ -2854,6 +2921,7 @@ class PlayerWindowController: NSWindowController {
         skimPreviewReadinessFallbackWorkItem = nil
         skimPreviewDeadlineWorkItem?.cancel()
         skimPreviewDeadlineWorkItem = nil
+        skimPreviewDeadlineBinding.clear()
         let priorState = skimPreviewSessionScheduler.state
         _ = skimPlaybackStartIntent.cancel(reason: reason)
         if skimPreviewSessionScheduler.cancel(reason: reason), let priorState {
@@ -2938,6 +3006,7 @@ class PlayerWindowController: NSWindowController {
         )
         applySkimPreviewDeadlineUpdate(update,
                                        sessionID: sessionID,
+                                       queueItemID: queueItemID,
                                        source: source,
                                        reason: mediaDurationSeconds == nil ? "metadata-unavailable" : "metadata-ready")
 
@@ -3046,11 +3115,12 @@ class PlayerWindowController: NSWindowController {
 
     private func applySkimPreviewDeadlineUpdate(_ update: SkimPreviewDeadlineUpdate,
                                                 sessionID: Int,
+                                                queueItemID: String,
                                                 source: SkimPreviewReadinessSource,
                                                 reason: String) {
         switch update {
         case .scheduled(let deadline):
-            scheduleSkimPreviewDeadline(sessionID: sessionID, deadlineUptime: deadline)
+            scheduleSkimPreviewDeadline(sessionID: sessionID, queueItemID: queueItemID, deadlineUptime: deadline)
             DebugConsoleController.log(
                 "preview",
                 "deadlineScheduled: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(skimPreviewSessionScheduler.state?.effectiveDurationSeconds)) readiness=\(source.rawValue) reason=\(reason)"
@@ -3061,7 +3131,7 @@ class PlayerWindowController: NSWindowController {
                 "deadlineConfirmed: window=\(debugIdentity) session=\(sessionID) deadline=\(String(format: "%.3f", deadline)) readiness=\(source.rawValue) reason=\(reason)"
             )
         case .replaced(let previous, let deadline):
-            scheduleSkimPreviewDeadline(sessionID: sessionID, deadlineUptime: deadline)
+            scheduleSkimPreviewDeadline(sessionID: sessionID, queueItemID: queueItemID, deadlineUptime: deadline)
             DebugConsoleController.log(
                 "preview",
                 "deadlineReplaced: window=\(debugIdentity) session=\(sessionID) previous=\(String(format: "%.3f", previous)) deadline=\(String(format: "%.3f", deadline)) readiness=\(source.rawValue) reason=\(reason)"
@@ -3078,13 +3148,15 @@ class PlayerWindowController: NSWindowController {
         }
     }
 
-    private func scheduleSkimPreviewDeadline(sessionID: Int, deadlineUptime: TimeInterval) {
+    private func scheduleSkimPreviewDeadline(sessionID: Int, queueItemID: String, deadlineUptime: TimeInterval) {
         skimPreviewDeadlineWorkItem?.cancel()
-        let scheduledAssignment = skimMediaAssignments.current
+        let generation = skimPreviewDeadlineBinding.scheduled(sessionID: sessionID,
+                                                               queueItemID: queueItemID,
+                                                               assignment: skimMediaAssignments.current)
         let workItem = DispatchWorkItem { [weak self] in
             self?.fireSkimPreviewDeadline(sessionID: sessionID,
                                           expectedDeadlineUptime: deadlineUptime,
-                                          scheduledAssignment: scheduledAssignment)
+                                          expectedGeneration: generation)
         }
         skimPreviewDeadlineWorkItem = workItem
         let delay = max(0, deadlineUptime - CACurrentMediaTime())
@@ -3093,28 +3165,67 @@ class PlayerWindowController: NSWindowController {
 
     private func fireSkimPreviewDeadline(sessionID: Int,
                                          expectedDeadlineUptime: TimeInterval,
-                                         scheduledAssignment: SkimMediaAssignmentToken?) {
-        let deadlineGuard = SkimDeadlineGuard(
-            isSkimEnabled: configuredSkimEnabled,
-            scheduledAssignment: scheduledAssignment,
-            currentAssignment: skimMediaAssignments.current
-        )
-        guard !isPreviewWindowClosing,
-              deadlineGuard.mayAdvance,
-              !isPlayerSessionPaused,
-              window != nil,
-              sessionID == currentPlaybackSessionID,
+                                         expectedGeneration: Int) {
+        // A newer deadline schedule/replace/relocate already advanced the binding's generation.
+        // `DispatchWorkItem.cancel()` already prevents this callback from running in the ordinary
+        // case, but the generation check is a cheap, testable second line of defense — and, unlike
+        // the cancel race, distinguishes "superseded, a newer deadline remains live" from every
+        // other rejection reason below.
+        guard skimPreviewDeadlineBinding.isCurrentGeneration(expectedGeneration) else {
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-superseded")
+            return
+        }
+        guard !isPreviewWindowClosing, window != nil else {
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-window-closing")
+            return
+        }
+        guard configuredSkimEnabled else {
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-skim-disabled")
+            return
+        }
+        guard !isPlayerSessionPaused else {
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-session-paused")
+            return
+        }
+        guard sessionID == currentPlaybackSessionID,
               let context = skimPreviewPlanContext,
               context.sessionID == sessionID,
               let currentURL = currentMediaURL,
               !currentItemIsImage,
               MediaFileSupport.mediaKind(for: currentURL) == .video,
               player.media?.url?.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path else {
-            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-context-mismatch")
+            logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-session-replaced")
             return
         }
 
         let queueItemID = currentURL.standardizedFileURL.path
+        let deadlineGuard = SkimDeadlineGuard(
+            isSkimEnabled: configuredSkimEnabled,
+            scheduledAssignment: skimPreviewDeadlineBinding.assignment,
+            currentAssignment: skimMediaAssignments.current
+        )
+        if !deadlineGuard.mayAdvance {
+            // The generation matches and every session/URL identity check above passed, so this is
+            // still logically the live preview — yet the bound assignment does not match the
+            // player's current one. `bindSkimStartIntent` rebinds on every same-session player
+            // rebuild (handshake recovery), so reaching here means that rebind did not happen: an
+            // invariant violation, not a normal stale-callback rejection. Log it distinctly and
+            // self-heal by rebinding now rather than orphaning the deadline for natural-end to
+            // silently absorb far past the configured clip duration.
+            DebugConsoleController.log(
+                level: .error,
+                category: "preview",
+                message: "deadlineInvariantViolation: window=\(debugIdentity) session=\(sessionID) bound=\(skimPreviewDeadlineBinding.assignment.map(String.init(describing:)) ?? "none") current=\(skimMediaAssignments.current.map(String.init(describing:)) ?? "none") reason=assignment-drift-uncorrected"
+            )
+            guard let currentAssignment = skimMediaAssignments.current,
+                  skimPreviewDeadlineBinding.rebind(sessionID: sessionID,
+                                                    queueItemID: queueItemID,
+                                                    assignment: currentAssignment) else {
+                logSkimPreviewStaleCallback(sessionID: sessionID, reason: "deadline-context-mismatch")
+                return
+            }
+        }
+
         switch skimPreviewSessionScheduler.claimDeadline(
             sessionID: sessionID,
             queueItemID: queueItemID,
@@ -3269,14 +3380,16 @@ class PlayerWindowController: NSWindowController {
         transport.notifySeek(to: targetPosition)
         transport.update()
         if activePreviewConfiguredDuration != nil {
+            let queueItemID = currentMediaURL?.standardizedFileURL.path ?? ""
             let update = skimPreviewSessionScheduler.replaceDeadlineForRelocation(
                 sessionID: currentPlaybackSessionID,
-                queueItemID: currentMediaURL?.standardizedFileURL.path ?? "",
+                queueItemID: queueItemID,
                 now: CACurrentMediaTime(),
                 durationSeconds: relocated.durationSeconds
             )
             applySkimPreviewDeadlineUpdate(update,
                                            sessionID: currentPlaybackSessionID,
+                                           queueItemID: queueItemID,
                                            source: .relocation,
                                            reason: "preview-range-relocate")
         }
@@ -3666,6 +3779,17 @@ class PlayerWindowController: NSWindowController {
         let queueItemID = url.standardizedFileURL.path
         let assignment = skimMediaAssignments.assign()
         let wrapper = skimMediaWrapperDiagnostic(media)
+        // A same-session player rebuild (handshake recovery) mints a fresh assignment token for
+        // media that is still the live preview session's own item. If a deadline is already
+        // scheduled or suspended for this exact session/queue-item, rebind it to the new token so
+        // the pending callback keeps validating instead of being orphaned by SkimDeadlineGuard at
+        // fire time. A genuinely different session/queue-item never matches and is left untouched.
+        if skimPreviewDeadlineBinding.rebind(sessionID: sessionID, queueItemID: queueItemID, assignment: assignment) {
+            DebugConsoleController.log(
+                "preview",
+                "deadlineRebound: window=\(debugIdentity) session=\(sessionID) item=\(url.lastPathComponent) assignment=\(assignment) reason=media-reassigned"
+            )
+        }
         guard configuredSkimEnabled else {
             DebugConsoleController.log(
                 "preview",
@@ -4299,6 +4423,7 @@ class PlayerWindowController: NSWindowController {
                                   userInfo: nil)
         cv.addTrackingArea(area)
         trackingArea = area
+        updatePlaybackChromeTrackingAreas()
         // Titlebar zone: separate tracking area so mouse-entered events from the titlebar
         // region (above the content view) restore the titlebar when auto-hide is active.
         if let tbv = titlebarContainerView {
@@ -4320,11 +4445,52 @@ class PlayerWindowController: NSWindowController {
             titlebarContainerView?.removeTrackingArea(tbArea)
             titlebarTriggerTrackingArea = nil
         }
+        if let area = playbackChromeRevealTrackingArea {
+            window?.contentView?.removeTrackingArea(area)
+            playbackChromeRevealTrackingArea = nil
+        }
+        if let area = skimRestoreHoldTrackingArea {
+            window?.contentView?.removeTrackingArea(area)
+            skimRestoreHoldTrackingArea = nil
+        }
+        pointerIsInPlaybackChromeRevealZone = false
+        pointerIsOverSkimRestoreButton = false
+    }
+
+    private func updatePlaybackChromeTrackingAreas() {
+        guard let content = window?.contentView, transport != nil else { return }
+        if let area = playbackChromeRevealTrackingArea { content.removeTrackingArea(area) }
+        if let area = skimRestoreHoldTrackingArea { content.removeTrackingArea(area) }
+
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInKeyWindow]
+        let revealRect = transport.frame.insetBy(dx: 0, dy: -18).intersection(content.bounds)
+        let reveal = NSTrackingArea(rect: revealRect,
+                                    options: options,
+                                    owner: self,
+                                    userInfo: nil)
+        content.addTrackingArea(reveal)
+        playbackChromeRevealTrackingArea = reveal
+
+        let arrowRect = skimControlsRestoreButton.frame.insetBy(dx: -12, dy: -8).intersection(content.bounds)
+        let arrow = NSTrackingArea(rect: arrowRect,
+                                   options: options,
+                                   owner: self,
+                                   userInfo: nil)
+        content.addTrackingArea(arrow)
+        skimRestoreHoldTrackingArea = arrow
     }
 
     override func mouseMoved(with event: NSEvent) {
         if transport.isUsingUnifiedBottomRail {
-            transport.noteChromeActivity()
+            if let content = window?.contentView {
+                let location = content.convert(event.locationInWindow, from: nil)
+                let revealRect = transport.frame.insetBy(dx: 0, dy: -18)
+                let arrowRect = skimControlsRestoreButton.frame.insetBy(dx: -12, dy: -8)
+                if revealRect.contains(location)
+                    || (!skimControlsRestoreButton.isHidden && arrowRect.contains(location)) {
+                    transport.noteChromeActivity()
+                }
+            }
         } else if isFullscreen || autoHideTransportEnabled {
                 showHUD()
                 scheduleHide()
@@ -4342,12 +4508,33 @@ class PlayerWindowController: NSWindowController {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        if event.trackingArea === playbackChromeRevealTrackingArea {
+            pointerIsInPlaybackChromeRevealZone = true
+            transport.noteChromeActivity()
+            return
+        }
+        if event.trackingArea === skimRestoreHoldTrackingArea,
+           !skimControlsRestoreButton.isHidden {
+            pointerIsOverSkimRestoreButton = true
+            transport.noteChromeActivity()
+            return
+        }
         guard autoHideTitlebarEnabled, !isFullscreen, !shouldApplyCompleteVideoWindowMode else { return }
         // Fires when the cursor enters the titlebar view from outside the window
         // (e.g. descending from the menu bar). event.trackingArea identifies the source.
         guard event.trackingArea === titlebarTriggerTrackingArea else { return }
         showTitlebar()
         scheduleTitlebarHide()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if event.trackingArea === playbackChromeRevealTrackingArea {
+            pointerIsInPlaybackChromeRevealZone = false
+            transport.scheduleChromeHideFromHost()
+        } else if event.trackingArea === skimRestoreHoldTrackingArea {
+            pointerIsOverSkimRestoreButton = false
+            transport.scheduleChromeHideFromHost()
+        }
     }
 
     // MARK: - Window close
@@ -4447,9 +4634,6 @@ extension PlayerWindowController: NSWindowDelegate {
         titlebarIsHidden = false
         layoutPlayerViews()
         addMouseTracking()
-        transport.isHidden = false
-        transport.setBackdropActive(true)
-        transport.alphaValue = 1.0
         showHUD()
         scheduleHide()
         window?.makeFirstResponder(videoSurface)
@@ -4482,9 +4666,7 @@ extension PlayerWindowController: NSWindowDelegate {
         // triggered by this styleMask removal is safe and creates no cascade.
         cleanupFullscreenWindowState()
 
-        transport.isHidden = false
-        transport.setBackdropActive(true)
-        transport.alphaValue = 1.0
+        transport.showChromeFromHost(animated: false)
         addMouseTracking()
         if autoHideTransportEnabled { scheduleHide() }
         layoutPlayerViews()

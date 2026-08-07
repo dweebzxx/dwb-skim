@@ -61,4 +61,67 @@ final class SkimTogglePolicyTests: XCTestCase {
         XCTAssertEqual(SkimAssignmentBehavior.nextAssignment(isSkimEnabled: false), .fullPlayback)
         XCTAssertEqual(SkimAssignmentBehavior.nextAssignment(isSkimEnabled: true), .skimPreview)
     }
+
+    // MARK: - SkimPreviewDeadlineBinding (P26)
+
+    func testDeadlineBindingScheduledAdvancesGenerationAndCapturesAssignment() {
+        var binding = SkimPreviewDeadlineBinding()
+        var registry = SkimMediaAssignmentRegistry()
+        _ = registry.installPlayer()
+        let token = registry.assign()
+
+        let generation = binding.scheduled(sessionID: 1, queueItemID: "A", assignment: token)
+        XCTAssertEqual(generation, 1)
+        XCTAssertTrue(binding.isCurrentGeneration(1))
+        XCTAssertEqual(binding.assignment, token)
+
+        let generation2 = binding.scheduled(sessionID: 1, queueItemID: "A", assignment: token)
+        XCTAssertEqual(generation2, 2)
+        XCTAssertFalse(binding.isCurrentGeneration(1))
+        XCTAssertTrue(binding.isCurrentGeneration(2))
+    }
+
+    func testDeadlineBindingRebindUpdatesAssignmentWithoutChangingGeneration() {
+        var binding = SkimPreviewDeadlineBinding()
+        var registry = SkimMediaAssignmentRegistry()
+        _ = registry.installPlayer()
+        let first = registry.assign()
+        let generation = binding.scheduled(sessionID: 7, queueItemID: "A", assignment: first)
+
+        // Same-session player rebuild (handshake recovery): a new token for the same session and
+        // queue item must rebind, not orphan, the already-armed timer's generation.
+        _ = registry.installPlayer()
+        let second = registry.assign()
+        XCTAssertTrue(binding.rebind(sessionID: 7, queueItemID: "A", assignment: second))
+        XCTAssertEqual(binding.assignment, second)
+        XCTAssertTrue(binding.isCurrentGeneration(generation))
+    }
+
+    func testDeadlineBindingRebindIgnoresDifferentSessionOrQueueItem() {
+        var binding = SkimPreviewDeadlineBinding()
+        var registry = SkimMediaAssignmentRegistry()
+        _ = registry.installPlayer()
+        let first = registry.assign()
+        _ = binding.scheduled(sessionID: 7, queueItemID: "A", assignment: first)
+
+        _ = registry.installPlayer()
+        let second = registry.assign()
+        XCTAssertFalse(binding.rebind(sessionID: 8, queueItemID: "A", assignment: second))
+        XCTAssertFalse(binding.rebind(sessionID: 7, queueItemID: "B", assignment: second))
+        XCTAssertEqual(binding.assignment, first)
+    }
+
+    func testDeadlineBindingClearDropsIdentityWithoutRewindingGeneration() {
+        var binding = SkimPreviewDeadlineBinding()
+        var registry = SkimMediaAssignmentRegistry()
+        _ = registry.installPlayer()
+        let token = registry.assign()
+        let generation = binding.scheduled(sessionID: 1, queueItemID: "A", assignment: token)
+
+        binding.clear()
+        XCTAssertNil(binding.assignment)
+        XCTAssertNil(binding.sessionID)
+        XCTAssertFalse(binding.rebind(sessionID: 1, queueItemID: "A", assignment: token))
+        XCTAssertTrue(binding.isCurrentGeneration(generation))
+    }
 }

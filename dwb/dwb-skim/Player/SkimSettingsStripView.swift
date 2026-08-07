@@ -304,7 +304,7 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
     }
 
     @objc private func openSettings(_ sender: NSButton) {
-        SettingsWindowController.shared.openSettings(section: .playback)
+        SettingsWindowController.shared.openSettings()
     }
 
     @objc private func collapseTapped(_ sender: NSButton) { onCollapse?() }

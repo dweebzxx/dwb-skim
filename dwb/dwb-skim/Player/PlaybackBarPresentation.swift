@@ -100,3 +100,48 @@ struct SkimControlsVisibilityState: Equatable {
     mutating func hide() { isVisible = false }
     mutating func restore() { isVisible = true }
 }
+
+enum PlaybackChromePhase: Equatable {
+    case visible
+    case fading
+    case hidden
+}
+
+/// One presentation state synchronizes every transient playback-chrome surface.
+/// The host owns reveal-zone input; views only project this state.
+struct PlaybackChromeVisibilityState: Equatable {
+    private(set) var phase: PlaybackChromePhase = .visible
+    private(set) var autoHideEnabled: Bool
+
+    init(autoHideEnabled: Bool) {
+        self.autoHideEnabled = autoHideEnabled
+    }
+
+    var isInteractive: Bool { phase != .hidden }
+
+    func showsSkimRestoreButton(skimControlsExpanded: Bool, isFullscreen: Bool) -> Bool {
+        !skimControlsExpanded && !isFullscreen && phase != .hidden
+    }
+
+    mutating func setAutoHideEnabled(_ enabled: Bool) {
+        autoHideEnabled = enabled
+        if !enabled { phase = .visible }
+    }
+
+    mutating func reveal() {
+        phase = .visible
+    }
+
+    mutating func requestHide(reduceMotion: Bool) {
+        guard autoHideEnabled else {
+            phase = .visible
+            return
+        }
+        phase = reduceMotion ? .hidden : .fading
+    }
+
+    mutating func completeHide() {
+        guard phase == .fading else { return }
+        phase = .hidden
+    }
+}

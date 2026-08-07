@@ -10,6 +10,12 @@ final class TransportControlsView: NSView {
     private let bottomRail = BottomRailView()
     private var hideWorkItem: DispatchWorkItem?
     private(set) var isFullscreenStyle = false
+    private(set) var chromeVisibilityState = PlaybackChromeVisibilityState(
+        autoHideEnabled: UserDefaults.standard.bool(forKey: SettingsWindowController.autoHideKey)
+    )
+
+    var chromeVisibilityDidChange: ((PlaybackChromeVisibilityState, Bool) -> Void)?
+    var chromeVisibilityHoldProvider: (() -> Bool)?
 
     var isUsingUnifiedBottomRail: Bool { true }
     var isImageMode: Bool = false { didSet { bottomRail.isImageMode = isImageMode } }
@@ -81,8 +87,20 @@ final class TransportControlsView: NSView {
 
     func setBackdropActive(_ active: Bool) { effectView.state = active ? .active : .inactive }
 
+    /// Takes the faded-out overlay out of hit-testing, the key view loop, and the
+    /// accessibility tree. Fading `alphaValue` alone leaves fully invisible
+    /// controls clickable over the video and reachable by VoiceOver and Tab.
+    private func retireChrome() {
+        chromeVisibilityState.completeHide()
+        isHidden = true
+        setBackdropActive(false)
+        chromeVisibilityDidChange?(chromeVisibilityState, false)
+    }
+
     func applyVisibilitySettings() {
-        if UserDefaults.standard.bool(forKey: SettingsWindowController.autoHideKey) {
+        let enabled = UserDefaults.standard.bool(forKey: SettingsWindowController.autoHideKey)
+        chromeVisibilityState.setAutoHideEnabled(enabled)
+        if enabled {
             scheduleChromeHideFromHost()
         } else {
             hideWorkItem?.cancel()
@@ -97,9 +115,12 @@ final class TransportControlsView: NSView {
 
     func showChromeFromHost(animated: Bool) {
         hideWorkItem?.cancel()
+        chromeVisibilityState.reveal()
         isHidden = false
         setBackdropActive(true)
-        if animated, !UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey) {
+        let shouldAnimate = animated && !UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey)
+        chromeVisibilityDidChange?(chromeVisibilityState, shouldAnimate)
+        if shouldAnimate {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.12
                 animator().alphaValue = 1
@@ -116,19 +137,29 @@ final class TransportControlsView: NSView {
         let delay = configured > 0 ? configured : 3
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            if self.chromeVisibilityHoldProvider?() == true {
+                self.scheduleChromeHideFromHost()
+                return
+            }
             if self.isImageMode, !self.imageModeIsPlaying { return }
             if self.player?.isPlaying == false, !self.isImageMode { return }
-            let animated = !UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey)
-            if animated {
+            let reduceMotion = UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey)
+            self.chromeVisibilityState.requestHide(reduceMotion: reduceMotion)
+            self.chromeVisibilityDidChange?(self.chromeVisibilityState, !reduceMotion)
+            if !reduceMotion {
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.16
                     self.animator().alphaValue = 0
                 } completionHandler: {
-                    if self.alphaValue == 0 { self.setBackdropActive(false) }
+                    // A re-show during the fade resets alpha to 1; only retire the
+                    // overlay if it actually finished hiding.
+                    if self.alphaValue == 0, self.chromeVisibilityState.phase == .fading {
+                        self.retireChrome()
+                    }
                 }
             } else {
                 self.alphaValue = 0
-                self.setBackdropActive(false)
+                self.retireChrome()
             }
         }
         hideWorkItem = work

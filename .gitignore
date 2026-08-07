@@ -36,6 +36,7 @@ logs/
 # AI pass reports and build logs (local only)
 /readme-assets-inbox/
 build-report-logs/
+/trash/
 
 # Signing and provisioning material
 *.p12

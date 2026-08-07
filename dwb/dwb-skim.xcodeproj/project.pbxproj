@@ -21,6 +21,7 @@
 		1E8159B96FB6D9D59D58294F /* MediaPlaybackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31DDE953CE0261D85A373B49 /* MediaPlaybackPolicyTests.swift */; };
 		21CC10AFA0F771F41BFED017 /* VolumeOverlayPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C8E013B037FD1201EBB3D /* VolumeOverlayPresentation.swift */; };
 		232B3376CF664986ECF9E8B9 /* PreviewRangePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709703B83DE0D08F958CC3 /* PreviewRangePlannerTests.swift */; };
+		232B39E3310AC9BB3D1F3951 /* SkimPreviewDeadlineReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */; };
 		23662AB690BB68BD00B3221C /* MediaFileSupportCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540B2F6365B7C98CD97AFECA /* MediaFileSupportCoreTests.swift */; };
 		2451F3F5D8F3DFB36167E0EE /* DebugLogRetentionBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DBA1FC499C4787B7989CE37 /* DebugLogRetentionBuffer.swift */; };
 		24F3EB41EF2C34DC4FF963E6 /* SkimPlaybackStartIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEA921BCF9D004ACCB42A2E2 /* SkimPlaybackStartIntentTests.swift */; };
@@ -139,6 +140,7 @@
 		31DDE953CE0261D85A373B49 /* MediaPlaybackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackPolicyTests.swift; sourceTree = "<group>"; };
 		35E9752F6FBE3E11906F0B4B /* OptionDoubleTapRecognizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionDoubleTapRecognizerTests.swift; sourceTree = "<group>"; };
 		36C50B5A63FFDE33BC31DC88 /* SkimReviewStatusDescriptorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimReviewStatusDescriptorTests.swift; sourceTree = "<group>"; };
+		3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewDeadlineReliabilityTests.swift; sourceTree = "<group>"; };
 		4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimColorsTests.swift; sourceTree = "<group>"; };
 		46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogSanitizer.swift; sourceTree = "<group>"; };
 		4F074B70203BCC863BFC592C /* VolumeOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayView.swift; sourceTree = "<group>"; };
@@ -245,6 +247,7 @@
 				C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */,
 				20B24AC3BA6713EFB20E488A /* SkimMediaAssignmentTests.swift */,
 				FEA921BCF9D004ACCB42A2E2 /* SkimPlaybackStartIntentTests.swift */,
+				3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */,
 				5EEAEB798278CD7D12D58AE1 /* SkimPreviewPlaybackPlanTests.swift */,
 				07BD4A74BEBA02541EA69F4B /* SkimPreviewSessionSchedulerTests.swift */,
 				95129DDAA8F38D968939B86C /* SkimReviewStateTests.swift */,
@@ -539,6 +542,7 @@
 				B2A0726D36D9D8D760D92261 /* SkimMediaAssignmentTests.swift in Sources */,
 				E549A6EAB4FBC7EF49E7CED9 /* SkimPlaybackStartIntent.swift in Sources */,
 				24F3EB41EF2C34DC4FF963E6 /* SkimPlaybackStartIntentTests.swift in Sources */,
+				232B39E3310AC9BB3D1F3951 /* SkimPreviewDeadlineReliabilityTests.swift in Sources */,
 				37DB0B9DDB8F963C74BF6B1D /* SkimPreviewPlaybackPlan.swift in Sources */,
 				B7E803AF8E51533F148CFD15 /* SkimPreviewPlaybackPlanTests.swift in Sources */,
 				37E1AA2141250FB2370686C6 /* SkimPreviewSessionScheduler.swift in Sources */,

@@ -36,4 +36,16 @@ final class SkimColorsTests: XCTestCase {
         XCTAssertEqual(c.g, 79.0 / 255.0, accuracy: 0.001)
         XCTAssertEqual(c.b, 88.0 / 255.0, accuracy: 0.001)
     }
+
+    func testDarkThemeSettingsTokensMatchEndorsedSequentialPalette() {
+        let selection = components(SkimColors.darkTeal500)
+        XCTAssertEqual(selection.r, 72.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(selection.g, 143.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(selection.b, 160.0 / 255.0, accuracy: 0.001)
+
+        let accent = components(SkimColors.periwinkle300)
+        XCTAssertEqual(accent.r, 154.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(accent.g, 170.0 / 255.0, accuracy: 0.001)
+        XCTAssertEqual(accent.b, 216.0 / 255.0, accuracy: 0.001)
+    }
 }

@@ -76,6 +76,51 @@ final class PlaybackBarPresentationTests: XCTestCase {
         XCTAssertTrue(visibility.isVisible)
     }
 
+    func testPlaybackChromeVisibleFadingAndHiddenTransitionsAreExplicit() {
+        var state = PlaybackChromeVisibilityState(autoHideEnabled: true)
+        XCTAssertEqual(state.phase, .visible)
+        XCTAssertTrue(state.isInteractive)
+        state.requestHide(reduceMotion: false)
+        XCTAssertEqual(state.phase, .fading)
+        state.completeHide()
+        XCTAssertEqual(state.phase, .hidden)
+        XCTAssertFalse(state.isInteractive)
+        state.reveal()
+        XCTAssertEqual(state.phase, .visible)
+    }
+
+    func testReducedMotionHidesAndRevealsWithoutIntermediateFade() {
+        var state = PlaybackChromeVisibilityState(autoHideEnabled: true)
+        state.requestHide(reduceMotion: true)
+        XCTAssertEqual(state.phase, .hidden)
+        state.reveal()
+        XCTAssertEqual(state.phase, .visible)
+    }
+
+    func testDisablingAutoHideKeepsAllPlaybackChromeVisible() {
+        var state = PlaybackChromeVisibilityState(autoHideEnabled: true)
+        state.requestHide(reduceMotion: true)
+        state.setAutoHideEnabled(false)
+        XCTAssertEqual(state.phase, .visible)
+        state.requestHide(reduceMotion: false)
+        XCTAssertEqual(state.phase, .visible)
+    }
+
+    func testSkimRestoreArrowAndTransportShareTheHiddenState() {
+        var state = PlaybackChromeVisibilityState(autoHideEnabled: true)
+        XCTAssertTrue(state.isInteractive)
+        XCTAssertTrue(state.showsSkimRestoreButton(skimControlsExpanded: false, isFullscreen: false))
+        XCTAssertFalse(state.showsSkimRestoreButton(skimControlsExpanded: true, isFullscreen: false))
+
+        state.requestHide(reduceMotion: true)
+        XCTAssertFalse(state.isInteractive)
+        XCTAssertFalse(state.showsSkimRestoreButton(skimControlsExpanded: false, isFullscreen: false))
+
+        state.reveal()
+        XCTAssertTrue(state.isInteractive)
+        XCTAssertTrue(state.showsSkimRestoreButton(skimControlsExpanded: false, isFullscreen: false))
+    }
+
     private func makeSnapshot(skimEnabled: Bool = true, queue: QueueOrderMode = .sequential,
                               start: String = "beginning", intro: Int = 0) -> SkimSettingsSnapshot {
         SkimSettingsSnapshot(skimEnabled: skimEnabled, imageDurationSeconds: 3, gifLoopCount: 1,
