@@ -80,6 +80,8 @@ targets:
       - path: dwb-skim/Player/SkimPlaybackStartIntent.swift
       - path: dwb-skim/Player/SkimMediaAssignment.swift
       - path: dwb-skim/Player/SkimTogglePolicy.swift
+      - path: dwb-skim/Player/SkimKeyboardShortcut.swift
+      - path: dwb-skim/Player/SkimFolderDropShuffle.swift
       - path: dwb-skim/Player/ProgressiveRandomSkimPlan.swift
       - path: dwb-skim/Player/SkimFailedItemTracker.swift
       - path: dwb-skim/Player/OptionDoubleTapRecognizer.swift

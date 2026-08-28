@@ -141,8 +141,16 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     static func isCompleteVideoWindowModeEnabled() -> Bool { UserDefaults.standard.bool(forKey: completeVideoWindowModeKey) }
     static func isShowTitleOverlayEnabled() -> Bool { UserDefaults.standard.bool(forKey: showTitleOverlayKey) }
     static func isDebugConsoleEnabled() -> Bool { UserDefaults.standard.bool(forKey: debugConsoleKey) }
-    static func customPrefixValue() -> String { UserDefaults.standard.string(forKey: customPrefixValueKey) ?? "" }
-    static func customPrefixSecondaryValue() -> String { UserDefaults.standard.string(forKey: customPrefixSecondaryValueKey) ?? "" }
+    static func customPrefixValue() -> String { normalizedCustomPrefix(UserDefaults.standard.string(forKey: customPrefixValueKey) ?? "") }
+    static func customPrefixSecondaryValue() -> String { normalizedCustomPrefix(UserDefaults.standard.string(forKey: customPrefixSecondaryValueKey) ?? "") }
+
+    /// The authoritative form of a configured custom prefix: leading/trailing
+    /// whitespace removed, and a single trailing `_` guaranteed so a rename
+    /// always produces `prefix_<filename>`. An empty/whitespace-only value
+    /// stays empty (the feature is off for that slot).
+    static func normalizedCustomPrefix(_ raw: String) -> String {
+        SkimFileRenamer.normalizedCustomPrefix(raw)
+    }
     static func acceptsVideoMedia() -> Bool { UserDefaults.standard.bool(forKey: acceptVideoKey) }
     static func acceptsImageMedia() -> Bool { UserDefaults.standard.bool(forKey: acceptImagesKey) }
     static func acceptsGIFMedia() -> Bool { UserDefaults.standard.bool(forKey: acceptGIFKey) }
@@ -575,8 +583,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private func buildQueueFilesPage() -> NSView {
         configureTextField(primaryPrefixField, placeholder: "e.g. select_")
         configureTextField(secondaryPrefixField, placeholder: "e.g. later_")
-        primaryPrefixField.textColor = SkimColors.rename
-        secondaryPrefixField.textColor = SkimColors.rename
+        primaryPrefixField.textColor = PrefixBrandColors.primaryCustomPrefixColor
+        secondaryPrefixField.textColor = PrefixBrandColors.secondaryCustomPrefixColor
         configurePopup(queueOrderPopup, action: #selector(queueOrderChanged(_:)))
         QueueOrderMode.allCases.forEach {
             queueOrderPopup.addItem(withTitle: $0.rawValue.capitalized)
@@ -606,8 +614,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private func buildShortcutsPage() -> NSView {
         let groups: [(String, [(String, String)])] = [
             ("REVIEW ACTIONS", [("keep_", "K"), ("delete_", "D"), ("Rename", "R"), ("Undo", "Z")]),
-            ("QUEUE NAVIGATION", [("Previous item", "["), ("Next item", "]"), ("Toggle queue panel", "Q")]),
-            ("PLAYBACK", [("Play/Pause", "Space"), ("Mute", "M"), ("Fullscreen", "F")]),
+            ("PREFIX RENAME", [("Primary prefix (toggle / replace)", "N"), ("Secondary prefix (toggle / replace)", "M")]),
+            ("QUEUE NAVIGATION", [("Previous item", ","), ("Next item", "."), ("Toggle queue panel", "Q")]),
+            ("PLAYBACK", [("Play/Pause", "Space"), ("Fullscreen", "F"), ("Next Progressive Random Skim segment", "\u{2192}")]),
             ("APP AND WINDOW", [("Open media or folder", "Command-O"), ("Open Settings", "Command-,"), ("Close window", "Command-W")]),
         ]
         return page(sections: groups.map { title, items in

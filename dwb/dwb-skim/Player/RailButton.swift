@@ -9,10 +9,11 @@ enum PlayerBrandColors {
 }
 
 enum PrefixBrandColors {
-    // Configured custom prefixes are rename actions and share the semantic token.
-    static let primaryCustomPrefixColor = SkimColors.rename
+    // The two custom prefixes are visually distinct: primary is periwinkle,
+    // secondary is burnt (dark) orange — matching the keep_/delete_ accents.
+    static let primaryCustomPrefixColor = SkimColors.periwinkle
 
-    static let secondaryCustomPrefixColor = SkimColors.rename
+    static let secondaryCustomPrefixColor = SkimColors.burntOrange
 }
 
 /// Compact keyboard-shortcut tag rendered beside a control (e.g. "Q" next to the

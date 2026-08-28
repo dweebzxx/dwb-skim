@@ -31,6 +31,8 @@
 		28FA88C2BC9A07A31C6E300C /* BackgroundAudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AE484B8F499E8D6856BA77 /* BackgroundAudioPlaybackController.swift */; };
 		29F7E397E278BE4EAA887A05 /* SettingsDefaultsRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */; };
 		2A1D5BE6633AE10708330F44 /* SkimPreviewSessionScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6864433C73852FCC235000 /* SkimPreviewSessionScheduler.swift */; };
+		2E91C9220EF6D5D49E5F0CFC /* SkimKeyboardShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */; };
+		2FEE5DB0A32671476F2A845B /* SkimFolderDropShuffle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */; };
 		3372422D1C1A7F94E499A9B2 /* BackgroundAudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AE484B8F499E8D6856BA77 /* BackgroundAudioPlaybackController.swift */; };
 		3567DADD3CA5B66F978DF391 /* BottomRailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD4C3523623DBF36335633E7 /* BottomRailView.swift */; };
 		36824E021BADFCEED1EA7E48 /* VideoSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1802222C6C301A9EF6D9DB40 /* VideoSurfaceView.swift */; };
@@ -64,6 +66,7 @@
 		82132C00F00A899E61C62075 /* SkimApplicationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E89F788A90ACE033F64D8A7 /* SkimApplicationConfiguration.swift */; };
 		84168455CAA04C17758226FD /* MediaFileSupportCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23A8BC14657F0EBCB218E13 /* MediaFileSupportCore.swift */; };
 		84D49E71C10E27BFE5920198 /* ScaleMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3772071B27CA36C2D6126A /* ScaleMode.swift */; };
+		8518E0A3EEA89043E8677C05 /* SkimKeyboardShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */; };
 		87AA38AB3528759A43528DA0 /* BackgroundAudioSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC350E3A09601C751A84C03A /* BackgroundAudioSettingsTests.swift */; };
 		87AFC967F1F88228A947987A /* QueueRenameReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */; };
 		88B317784FEF7F4839725A5B /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 6CE4B108430F5E22C2E084ED /* VLCKitSPM */; };
@@ -98,6 +101,7 @@
 		C2C16207A70B689922A50FFD /* SkimColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076AF22351917042F110E38D /* SkimColors.swift */; };
 		C2C32F090287693AC9FCBFD1 /* PreviewRangePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7383D85EF7CE413F349C588 /* PreviewRangePlanner.swift */; };
 		C6759293D8AB153350309B22 /* SkimColorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */; };
+		C6CC7E24DDB3F2A66683BBE1 /* SkimKeyboardShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECC62F3B52E265B4821E5BE /* SkimKeyboardShortcutTests.swift */; };
 		C9D6E6E4A33EC089FF62867C /* SettingsDefaultsRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B074674387F7AC2350AFE33 /* SettingsDefaultsRegistry.swift */; };
 		CAA37213738D41723AAE497D /* SkimSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AEB8070B732E45E09322E97 /* SkimSettingsStore.swift */; };
 		D0734A7182945D63DBFA26FD /* OptionDoubleTapRecognizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35E9752F6FBE3E11906F0B4B /* OptionDoubleTapRecognizerTests.swift */; };
@@ -119,6 +123,8 @@
 		F0FF056478282F44E0F27BC6 /* QueueOrderPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */; };
 		F20D646512A8F62C603687FA /* VideoAudioNormalizationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D7669768486BD23FC1494F /* VideoAudioNormalizationPolicy.swift */; };
 		F2FEBEFFDEAA363D23B84922 /* SkimApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AA7AC9730CCA5B2BF2D7C6C /* SkimApplication.swift */; };
+		F663610AB6A6E51672A9FE56 /* SkimFolderDropShuffleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */; };
+		F92EEF49DB96FC355CDC5933 /* SkimFolderDropShuffle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */; };
 		FADDF51E131563ABF49B8F60 /* PlayerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E082862FFA44C3ED91F059 /* PlayerWindowController.swift */; };
 		FE5618E2850E3CD56BE2CB86 /* IdleAutohideController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD6D01E610D3A73E6FA6442 /* IdleAutohideController.swift */; };
 		FFDE92D02538CACA3CCC50B8 /* SkimPlaybackStartIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */; };
@@ -151,6 +157,7 @@
 		4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimColorsTests.swift; sourceTree = "<group>"; };
 		46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogSanitizer.swift; sourceTree = "<group>"; };
 		4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressiveRandomSkimPlan.swift; sourceTree = "<group>"; };
+		4ECC62F3B52E265B4821E5BE /* SkimKeyboardShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimKeyboardShortcutTests.swift; sourceTree = "<group>"; };
 		4F074B70203BCC863BFC592C /* VolumeOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayView.swift; sourceTree = "<group>"; };
 		53B4635EED00A7354F89F960 /* dwb skim.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "dwb skim.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		540B2F6365B7C98CD97AFECA /* MediaFileSupportCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileSupportCoreTests.swift; sourceTree = "<group>"; };
@@ -171,6 +178,7 @@
 		7AC28720F906AE3536C64444 /* dwb-skimTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "dwb-skimTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimMediaAssignment.swift; sourceTree = "<group>"; };
 		87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlanner.swift; sourceTree = "<group>"; };
+		89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFolderDropShuffleTests.swift; sourceTree = "<group>"; };
 		8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueDisplayProjectionTests.swift; sourceTree = "<group>"; };
 		8B23AA3F5F3D052A89AF28BB /* VolumeOverlayPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayPresentationTests.swift; sourceTree = "<group>"; };
 		8D9E1C1CD9E94DE463F71A19 /* PlayerWindowReactivationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlannerTests.swift; sourceTree = "<group>"; };
@@ -194,8 +202,10 @@
 		C23A8BC14657F0EBCB218E13 /* MediaFileSupportCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileSupportCore.swift; sourceTree = "<group>"; };
 		C62D278D7E0188722417DEB0 /* DebugLogRetentionBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogRetentionBufferTests.swift; sourceTree = "<group>"; };
 		C64BA2FF07366335BF0EFE58 /* QueueRenameReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenameReconciler.swift; sourceTree = "<group>"; };
+		C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimKeyboardShortcut.swift; sourceTree = "<group>"; };
 		C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioSettings.swift; sourceTree = "<group>"; };
 		C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFileRenamerTests.swift; sourceTree = "<group>"; };
+		CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFolderDropShuffle.swift; sourceTree = "<group>"; };
 		D2B8D9C9C98ECD95E27080CC /* VideoAudioNormalizationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoAudioNormalizationPolicyTests.swift; sourceTree = "<group>"; };
 		D46AA33BD6A5E1E01A70A4DA /* BookmarkStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStoreTests.swift; sourceTree = "<group>"; };
 		DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewPlaybackPlan.swift; sourceTree = "<group>"; };
@@ -257,6 +267,8 @@
 				4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */,
 				E29F651982B1AE31976B4C31 /* SkimFailedItemTrackerTests.swift */,
 				C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */,
+				89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */,
+				4ECC62F3B52E265B4821E5BE /* SkimKeyboardShortcutTests.swift */,
 				20B24AC3BA6713EFB20E488A /* SkimMediaAssignmentTests.swift */,
 				FEA921BCF9D004ACCB42A2E2 /* SkimPlaybackStartIntentTests.swift */,
 				3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */,
@@ -334,6 +346,8 @@
 				076AF22351917042F110E38D /* SkimColors.swift */,
 				34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */,
 				6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */,
+				CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */,
+				C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */,
 				81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */,
 				DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */,
 				DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */,
@@ -492,6 +506,8 @@
 				97B24372658E9C01C4E81BFD /* SkimColors.swift in Sources */,
 				778FDF113A3FE6ADCC483B4C /* SkimFailedItemTracker.swift in Sources */,
 				EBA7BEC7BF6E796ED4D1BDEF /* SkimFileRenamer.swift in Sources */,
+				2FEE5DB0A32671476F2A845B /* SkimFolderDropShuffle.swift in Sources */,
+				8518E0A3EEA89043E8677C05 /* SkimKeyboardShortcut.swift in Sources */,
 				8EF717CDDCE1FFE4219B72F0 /* SkimMediaAssignment.swift in Sources */,
 				FFDE92D02538CACA3CCC50B8 /* SkimPlaybackStartIntent.swift in Sources */,
 				D9CD5CCAFD3A69BFC5393CB2 /* SkimPreviewPlaybackPlan.swift in Sources */,
@@ -558,6 +574,10 @@
 				0C7BD99FE93A665C02515418 /* SkimFailedItemTrackerTests.swift in Sources */,
 				BA0B9E3E515DF8D9AAF43330 /* SkimFileRenamer.swift in Sources */,
 				177BF523F176F857A6DA6BEE /* SkimFileRenamerTests.swift in Sources */,
+				F92EEF49DB96FC355CDC5933 /* SkimFolderDropShuffle.swift in Sources */,
+				F663610AB6A6E51672A9FE56 /* SkimFolderDropShuffleTests.swift in Sources */,
+				2E91C9220EF6D5D49E5F0CFC /* SkimKeyboardShortcut.swift in Sources */,
+				C6CC7E24DDB3F2A66683BBE1 /* SkimKeyboardShortcutTests.swift in Sources */,
 				5C2D6A9B1BBAF9F73E68D4B5 /* SkimMediaAssignment.swift in Sources */,
 				B2A0726D36D9D8D760D92261 /* SkimMediaAssignmentTests.swift in Sources */,
 				E549A6EAB4FBC7EF49E7CED9 /* SkimPlaybackStartIntent.swift in Sources */,

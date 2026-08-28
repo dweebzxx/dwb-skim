@@ -21,7 +21,7 @@ private enum MediaDropRouting {
     static func performDrop(_ sender: NSDraggingInfo, in window: NSWindow?) -> Bool {
         guard let urls = readDroppedURLs(from: sender),
               let wc = window?.windowController as? PlayerWindowController else { return false }
-        wc.handleDroppedURLs(urls, appendingExplicitFiles: true)
+        wc.handleDroppedURLs(urls, appendingExplicitFiles: true, isDragAndDrop: true)
         return true
     }
 }

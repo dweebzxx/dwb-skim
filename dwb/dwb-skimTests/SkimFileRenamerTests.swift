@@ -324,6 +324,116 @@ final class SkimFileRenamerTests: XCTestCase {
         XCTAssertEqual(item.url.lastPathComponent, "Better Clip Name.mov")
     }
 
+    // MARK: - P36 custom-prefix toggle / replace transitions
+
+    private let p = "select_"
+    private let s = "later_"
+
+    private func toggle(_ filename: String, _ action: CustomPrefixAction) -> String? {
+        SkimFileRenamer.customPrefixToggleTargetFilename(for: filename,
+                                                         primaryPrefix: p,
+                                                         secondaryPrefix: s,
+                                                         action: action)
+    }
+
+    func testNoPrefixToPrimaryAddsPrimary() {
+        XCTAssertEqual(toggle("clip.mov", .primary), "select_clip.mov")
+    }
+
+    func testNoPrefixToSecondaryAddsSecondary() {
+        XCTAssertEqual(toggle("clip.mov", .secondary), "later_clip.mov")
+    }
+
+    func testPrimaryInvokedAgainRemovesPrimary() {
+        XCTAssertEqual(toggle("select_clip.mov", .primary), "clip.mov")
+    }
+
+    func testSecondaryInvokedAgainRemovesSecondary() {
+        XCTAssertEqual(toggle("later_clip.mov", .secondary), "clip.mov")
+    }
+
+    func testPrimaryPresentSecondaryActionReplacesPrimaryWithSecondary() {
+        XCTAssertEqual(toggle("select_clip.mov", .secondary), "later_clip.mov")
+    }
+
+    func testSecondaryPresentPrimaryActionReplacesSecondaryWithPrimary() {
+        XCTAssertEqual(toggle("later_clip.mov", .primary), "select_clip.mov")
+    }
+
+    func testTogglingNeverStacksPrefixes() {
+        // Repeatedly applying primary then secondary never yields "select_later_" or "later_select_".
+        var name = "clip.mov"
+        name = toggle(name, .primary) ?? name       // select_clip.mov
+        name = toggle(name, .secondary) ?? name      // later_clip.mov
+        name = toggle(name, .primary) ?? name        // select_clip.mov
+        XCTAssertEqual(name, "select_clip.mov")
+        XCTAssertFalse(name.contains("select_later_"))
+        XCTAssertFalse(name.contains("later_select_"))
+    }
+
+    func testRemainderAndExtensionPreservedIncludingMultiDotNames() {
+        XCTAssertEqual(toggle("My.Clip.v2.final.mp4", .primary), "select_My.Clip.v2.final.mp4")
+        XCTAssertEqual(toggle("select_My.Clip.v2.final.mp4", .primary), "My.Clip.v2.final.mp4")
+        XCTAssertEqual(toggle("archive.tar.gz", .secondary), "later_archive.tar.gz")
+    }
+
+    func testExtensionlessFilenamePreserved() {
+        XCTAssertEqual(toggle("README", .primary), "select_README")
+        XCTAssertEqual(toggle("select_README", .primary), "README")
+    }
+
+    func testUnrelatedLeadingTextResemblingAPrefixIsNotStripped() {
+        // "selected_" is not the configured "select_" prefix; only exact configured
+        // prefixes are recognized, so primary is simply prepended.
+        XCTAssertEqual(toggle("selection_clip.mov", .primary), "select_selection_clip.mov")
+    }
+
+    func testEmptyRequestedPrefixIsNoOp() {
+        XCTAssertNil(SkimFileRenamer.customPrefixToggleTargetFilename(
+            for: "clip.mov", primaryPrefix: "", secondaryPrefix: s, action: .primary))
+    }
+
+    func testReplaceIsASingleResultingFilename() {
+        // Switching from one prefix to the other is expressed as one target name
+        // (one rename operation for the caller), not two.
+        let result = toggle("select_holiday.mov", .secondary)
+        XCTAssertEqual(result, "later_holiday.mov")
+    }
+
+    func testOverlappingConfiguredPrefixesUseLongestMatch() {
+        // primary "a_" is a leading substring of secondary "a_b_".
+        let out = SkimFileRenamer.customPrefixToggleTargetFilename(
+            for: "a_b_clip.mov", primaryPrefix: "a_", secondaryPrefix: "a_b_", action: .primary)
+        XCTAssertEqual(out, "a_clip.mov") // recognized as secondary present → replace with primary
+    }
+
+    // MARK: - Prefix normalization (trailing underscore)
+
+    func testNormalizedCustomPrefixAppendsTrailingUnderscore() {
+        XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix("select"), "select_")
+    }
+
+    func testNormalizedCustomPrefixKeepsExistingTrailingUnderscore() {
+        XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix("select_"), "select_")
+    }
+
+    func testNormalizedCustomPrefixTrimsWhitespace() {
+        XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix("  later  "), "later_")
+    }
+
+    func testNormalizedCustomPrefixEmptyStaysEmpty() {
+        XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix(""), "")
+        XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix("   "), "")
+    }
+
+    func testNormalizedPrefixThenToggleProducesPrefixUnderscoreFilename() {
+        let primary = SkimFileRenamer.normalizedCustomPrefix("select")
+        XCTAssertEqual(
+            SkimFileRenamer.customPrefixToggleTargetFilename(
+                for: "clip.mov", primaryPrefix: primary, secondaryPrefix: "", action: .primary),
+            "select_clip.mov")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("dwb-skim-renameTests-\(UUID().uuidString)", isDirectory: true)

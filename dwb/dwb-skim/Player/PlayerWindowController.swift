@@ -520,11 +520,23 @@ class PlayerWindowController: NSWindowController {
     /// `advanceToNextProgressiveRandomSkimSegment` (a later segment must exist), so the manual-advance
     /// control never becomes a disguised path to `advanceToNextItem`.
     var canManuallyAdvanceProgressiveRandomSkimSegment: Bool {
+        guard isProgressiveRandomSkimSessionActive,
+              let context = skimPreviewPlanContext else { return false }
+        return context.progressiveRandomSkimSegmentIndex + 1 < context.progressiveRandomSkimSegments.count
+    }
+
+    /// True while a Progressive Random Skim plan is actively controlling the
+    /// current playback session (feature on, a live plan context matching the
+    /// current session, at least one planned segment) — regardless of whether a
+    /// *later* segment still exists. P36 Right Arrow uses this to decide whether
+    /// to swallow the key at the final segment instead of letting it fall
+    /// through to pre-P36 behavior.
+    var isProgressiveRandomSkimSessionActive: Bool {
         guard configuredSkimEnabled, configuredProgressiveRandomSkimEnabled,
               let context = skimPreviewPlanContext,
               context.sessionID == currentPlaybackSessionID,
               !context.progressiveRandomSkimSegments.isEmpty else { return false }
-        return context.progressiveRandomSkimSegmentIndex + 1 < context.progressiveRandomSkimSegments.count
+        return true
     }
 
     /// Part 4: manually advances to the next planned Progressive Random Skim segment immediately,
@@ -816,19 +828,30 @@ class PlayerWindowController: NSWindowController {
         guard !event.isARepeat, !isTextEntryFocused else { return false }
         let forbidden = event.modifierFlags.intersection([.command, .option, .control, .shift])
         guard forbidden.isEmpty,
-              let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
-        switch key {
-        case "k": performReviewKeepCurrentItem(); return true
-        case "d": performReviewDeletePrefixCurrentItem(); return true
-        case "r": showRenameSheet(); return true
-        case "z": performReviewUndo(); return true
-        case "[": playPrevious(); return true
-        case "]": playNext(); return true
-        case "q": toggleQueuePage(); return true
-        case " ": togglePlayPause(); return true
-        case "m": toggleMuteFromTransport(); return true
-        case "f": window?.toggleFullScreen(nil); return true
-        default: return false
+              let key = event.charactersIgnoringModifiers?.lowercased(),
+              let shortcut = SkimKeyboardShortcut(unmodifiedKey: key) else { return false }
+        switch shortcut {
+        case .reviewKeep: performReviewKeepCurrentItem(); return true
+        case .reviewDelete: performReviewDeletePrefixCurrentItem(); return true
+        case .renameSheet: showRenameSheet(); return true
+        case .reviewUndo: performReviewUndo(); return true
+        case .previousVideo: playPrevious(); return true
+        case .nextVideo: playNext(); return true
+        case .primaryPrefixRename: performCustomPrefixRenameCurrentItem(); return true
+        case .secondaryPrefixRename: performSecondaryCustomPrefixRenameCurrentItem(); return true
+        case .toggleQueuePanel: toggleQueuePage(); return true
+        case .togglePlayPause: togglePlayPause(); return true
+        case .toggleFullScreen: window?.toggleFullScreen(nil); return true
+        case .advanceProgressiveRandomSkimSegment:
+            if canManuallyAdvanceProgressiveRandomSkimSegment {
+                manuallyAdvanceProgressiveRandomSkimSegment()
+                return true
+            }
+            // While a Progressive Random Skim session is controlling playback,
+            // Right Arrow is a no-op at the final planned segment rather than
+            // falling through to queue-level Next. Outside such a session, keep
+            // the pre-P36 Right Arrow behavior (unhandled → passes through).
+            return isProgressiveRandomSkimSessionActive
         }
     }
 
@@ -1048,42 +1071,42 @@ class PlayerWindowController: NSWindowController {
     // MARK: - Custom prefix rename (video-page)
 
     func performCustomPrefixRenameCurrentItem(source: String = "videoPage") {
-        guard canRenameCurrentMedia else { return }
-        guard currentSetIndex >= 0, currentSetIndex < playbackSet.count else { return }
-        let prefix = SettingsWindowController.customPrefixValue()
-        guard !prefix.isEmpty else {
-            DebugConsoleController.log("rename", "customPrefix: noop (empty prefix) source=\(source)")
-            return
-        }
-        let url = playbackSet[currentSetIndex]
-        let stem = url.deletingPathExtension().lastPathComponent
-        if stem.hasPrefix(prefix) {
-            DebugConsoleController.log("rename", "customPrefix: noop (already prefixed) file=\(url.lastPathComponent) source=\(source)")
-            return
-        }
-        let ext = url.pathExtension
-        let newName = ext.isEmpty ? "\(prefix)\(stem)" : "\(prefix)\(stem).\(ext)"
-        DebugConsoleController.log("rename", "customPrefix: \(url.lastPathComponent) → \(newName) source=\(source)")
-        renameFile(at: currentSetIndex, to: newName)
+        applyCustomPrefixToggleToCurrentItem(action: .primary, tag: "customPrefix", source: source)
     }
 
     func performSecondaryCustomPrefixRenameCurrentItem(source: String = "videoPage") {
+        applyCustomPrefixToggleToCurrentItem(action: .secondary, tag: "customPrefixSecondary", source: source)
+    }
+
+    /// Shared video-page implementation for the toggle/replace prefix actions.
+    /// Primary and Secondary are mutually exclusive: applying one strips the
+    /// other, and re-applying the active one removes it. The remainder of the
+    /// filename (including the extension) is preserved by
+    /// `SkimFileRenamer.customPrefixToggleTargetFilename`, and `renameFile`
+    /// keeps the existing collision / error handling and queue synchronization.
+    private func applyCustomPrefixToggleToCurrentItem(action: CustomPrefixAction,
+                                                     tag: String,
+                                                     source: String) {
         guard canRenameCurrentMedia else { return }
         guard currentSetIndex >= 0, currentSetIndex < playbackSet.count else { return }
-        let prefix = SettingsWindowController.customPrefixSecondaryValue()
-        guard !prefix.isEmpty else {
-            DebugConsoleController.log("rename", "customPrefixSecondary: noop (empty prefix) source=\(source)")
+        let primary = SettingsWindowController.customPrefixValue()
+        let secondary = SettingsWindowController.customPrefixSecondaryValue()
+        let requested = action == .primary ? primary : secondary
+        guard !requested.isEmpty else {
+            DebugConsoleController.log("rename", "\(tag): noop (empty prefix) source=\(source)")
             return
         }
         let url = playbackSet[currentSetIndex]
-        let stem = url.deletingPathExtension().lastPathComponent
-        if stem.hasPrefix(prefix) {
-            DebugConsoleController.log("rename", "customPrefixSecondary: noop (already prefixed) file=\(url.lastPathComponent) source=\(source)")
+        guard let newName = SkimFileRenamer.customPrefixToggleTargetFilename(
+                for: url.lastPathComponent,
+                primaryPrefix: primary,
+                secondaryPrefix: secondary,
+                action: action),
+              newName != url.lastPathComponent else {
+            DebugConsoleController.log("rename", "\(tag): noop (no filename change) file=\(url.lastPathComponent) source=\(source)")
             return
         }
-        let ext = url.pathExtension
-        let newName = ext.isEmpty ? "\(prefix)\(stem)" : "\(prefix)\(stem).\(ext)"
-        DebugConsoleController.log("rename", "customPrefixSecondary: \(url.lastPathComponent) → \(newName) source=\(source)")
+        DebugConsoleController.log("rename", "\(tag): \(url.lastPathComponent) → \(newName) source=\(source)")
         renameFile(at: currentSetIndex, to: newName)
     }
 
@@ -2174,7 +2197,9 @@ class PlayerWindowController: NSWindowController {
 
     // MARK: - Drop / open URL handling
 
-    func handleDroppedURLs(_ urls: [URL], appendingExplicitFiles: Bool = true) {
+    func handleDroppedURLs(_ urls: [URL],
+                           appendingExplicitFiles: Bool = true,
+                           isDragAndDrop: Bool = false) {
         guard !urls.isEmpty else { return }
 
         var dirs:  [URL] = []
@@ -2193,7 +2218,8 @@ class PlayerWindowController: NSWindowController {
             let result = MediaFileSupport.expandToSupportedMedia(urls, acceptedKinds: acceptedKinds)
             applyExpandedMediaIntake(result: result,
                                      dirs: dirs,
-                                     appendingExplicitFiles: appendingExplicitFiles)
+                                     appendingExplicitFiles: appendingExplicitFiles,
+                                     isDragAndDrop: isDragAndDrop)
             return
         }
 
@@ -2202,7 +2228,9 @@ class PlayerWindowController: NSWindowController {
         if !dirs.isEmpty && files.isEmpty {
             if dirs.count == 1 {
                 let folder = dirs[0]
-                startAsyncSingleFolderIntake(folder: folder, acceptedKinds: acceptedKinds)
+                startAsyncSingleFolderIntake(folder: folder,
+                                             acceptedKinds: acceptedKinds,
+                                             isDragAndDrop: isDragAndDrop)
                 return
             }
         }
@@ -2215,11 +2243,13 @@ class PlayerWindowController: NSWindowController {
         startAsyncExpandedMediaIntake(urls: urls,
                                       dirs: dirs,
                                       appendingExplicitFiles: appendingExplicitFiles,
-                                      acceptedKinds: acceptedKinds)
+                                      acceptedKinds: acceptedKinds,
+                                      isDragAndDrop: isDragAndDrop)
     }
 
     private func startAsyncSingleFolderIntake(folder: URL,
-                                             acceptedKinds: Set<MediaFileSupport.MediaKind>) {
+                                             acceptedKinds: Set<MediaFileSupport.MediaKind>,
+                                             isDragAndDrop: Bool) {
         let generation = beginFolderScanOperation()
         DebugConsoleController.log("queue", "expandAsync: start singleFolder=\(folder.lastPathComponent)")
 
@@ -2234,7 +2264,9 @@ class PlayerWindowController: NSWindowController {
                 await MainActor.run {
                     guard let self, self.folderScanGeneration == generation else { return }
                     self.folderScanTask = nil
-                    self.applySingleFolderIntake(folder: folder, result: result)
+                    self.applySingleFolderIntake(folder: folder,
+                                                 result: result,
+                                                 isDragAndDrop: isDragAndDrop)
                 }
             } catch is CancellationError {
                 return
@@ -2255,7 +2287,8 @@ class PlayerWindowController: NSWindowController {
     private func startAsyncExpandedMediaIntake(urls: [URL],
                                                dirs: [URL],
                                                appendingExplicitFiles: Bool,
-                                               acceptedKinds: Set<MediaFileSupport.MediaKind>) {
+                                               acceptedKinds: Set<MediaFileSupport.MediaKind>,
+                                               isDragAndDrop: Bool) {
         let generation = beginFolderScanOperation()
         DebugConsoleController.log("queue", "expandAsync: start urls=\(urls.count) folders=\(dirs.count)")
 
@@ -2272,7 +2305,8 @@ class PlayerWindowController: NSWindowController {
                     self.folderScanTask = nil
                     self.applyExpandedMediaIntake(result: result,
                                                   dirs: dirs,
-                                                  appendingExplicitFiles: appendingExplicitFiles)
+                                                  appendingExplicitFiles: appendingExplicitFiles,
+                                                  isDragAndDrop: isDragAndDrop)
                 }
             } catch is CancellationError {
                 return
@@ -2291,12 +2325,17 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func applySingleFolderIntake(folder: URL,
-                                         result: MediaFileSupport.ExpansionResult) {
+                                         result: MediaFileSupport.ExpansionResult,
+                                         isDragAndDrop: Bool) {
         guard !result.media.isEmpty else {
             showEmptyIntakeMessage(result: result,
                                    unsupportedMessage: "No supported media files found in \"\(folder.lastPathComponent)\".")
             return
         }
+
+        requestShuffleForFolderDropIfNeeded(isDragAndDrop: isDragAndDrop,
+                                            droppedContainedDirectory: true,
+                                            acceptedMediaCount: result.media.count)
 
         let queueEmpty = playbackSet.isEmpty || displayOrder.isEmpty
         if queueEmpty {
@@ -2310,7 +2349,8 @@ class PlayerWindowController: NSWindowController {
 
     private func applyExpandedMediaIntake(result: MediaFileSupport.ExpansionResult,
                                           dirs: [URL],
-                                          appendingExplicitFiles: Bool) {
+                                          appendingExplicitFiles: Bool,
+                                          isDragAndDrop: Bool) {
         let expanded = result.media
         let emptyFolders = result.emptyFolderNames
 
@@ -2330,6 +2370,10 @@ class PlayerWindowController: NSWindowController {
             return
         }
 
+        requestShuffleForFolderDropIfNeeded(isDragAndDrop: isDragAndDrop,
+                                            droppedContainedDirectory: !dirs.isEmpty,
+                                            acceptedMediaCount: expanded.count)
+
         if !emptyFolders.isEmpty {
             DebugConsoleController.log("queue", "expand: skippedEmptyFolders=\(emptyFolders.count) finalCount=\(expanded.count)")
         } else {
@@ -2347,6 +2391,25 @@ class PlayerWindowController: NSWindowController {
 
     func handleDroppedURL(_ url: URL) {
         handleDroppedURLs([url], appendingExplicitFiles: true)
+    }
+
+    /// P37: a drag-and-drop that contained a folder and produced accepted media
+    /// switches Queue Order to the app's existing Shuffle mode, through the same
+    /// authoritative setter the Queue Order control uses. No randomization or
+    /// second shuffle state is introduced here; `SettingsWindowController`
+    /// persists the change and posts `.queueBehaviorSettingsChanged`, which this
+    /// window (and the Settings control) already observe to resync.
+    private func requestShuffleForFolderDropIfNeeded(isDragAndDrop: Bool,
+                                                     droppedContainedDirectory: Bool,
+                                                     acceptedMediaCount: Int) {
+        guard SkimFolderDropShuffle.shouldRequestShuffle(
+            isDragAndDrop: isDragAndDrop,
+            droppedContainedDirectory: droppedContainedDirectory,
+            acceptedMediaCount: acceptedMediaCount
+        ) else { return }
+        guard SettingsWindowController.currentQueueOrderMode() != .shuffle else { return }
+        DebugConsoleController.log("queue", "folderDrop: auto-selecting Shuffle queue order")
+        SettingsWindowController.setQueueOrderMode(.shuffle)
     }
 
     private func showDropError(_ message: String, title: String) {
@@ -5692,30 +5755,32 @@ extension PlayerWindowController: QueuePageViewDelegate {
 
     /// One-click custom prefix rename. Preflights all targets before renaming any (multi-select safe).
     func queuePage(_ view: QueuePageView, didRequestCustomPrefixRenameAt indices: [Int]) {
-        let prefix = SettingsWindowController.customPrefixValue()
-        guard !prefix.isEmpty else {
+        guard !SettingsWindowController.customPrefixValue().isEmpty else {
             DebugConsoleController.log("rename", "customPrefix: noop (empty prefix) source=queuePage")
             return
         }
-        performQueuePagePrefixRename(indices: indices, prefix: prefix, tag: "customPrefix")
+        performQueuePagePrefixRename(indices: indices, action: .primary, tag: "customPrefix")
     }
 
     func queuePage(_ view: QueuePageView, didRequestSecondaryCustomPrefixRenameAt indices: [Int]) {
-        let prefix = SettingsWindowController.customPrefixSecondaryValue()
-        guard !prefix.isEmpty else {
+        guard !SettingsWindowController.customPrefixSecondaryValue().isEmpty else {
             DebugConsoleController.log("rename", "customPrefixSecondary: noop (empty prefix) source=queuePage")
             return
         }
-        performQueuePagePrefixRename(indices: indices, prefix: prefix, tag: "customPrefixSecondary")
+        performQueuePagePrefixRename(indices: indices, action: .secondary, tag: "customPrefixSecondary")
     }
 
     /// Shared implementation for queue-page prefix rename (primary and secondary).
     ///
-    /// Runs a full preflight via `MediaFileSupport.planPrefixRenames` before any
-    /// filesystem mutation. Single-file renames proceed immediately; multi-file
-    /// renames require explicit confirmation.
-    private func performQueuePagePrefixRename(indices: [Int], prefix: String, tag: String) {
+    /// Runs a full preflight via `MediaFileSupport.planCustomPrefixToggleRenames`
+    /// before any filesystem mutation — the two prefixes toggle/replace each
+    /// other and never stack. Single-file renames proceed immediately;
+    /// multi-file renames require explicit confirmation.
+    private func performQueuePagePrefixRename(indices: [Int], action: CustomPrefixAction, tag: String) {
         guard let win = window else { return }
+        let primaryPrefix = SettingsWindowController.customPrefixValue()
+        let secondaryPrefix = SettingsWindowController.customPrefixSecondaryValue()
+        let prefix = action == .primary ? primaryPrefix : secondaryPrefix
 
         // Resolve display indices to (pbIdx, url) pairs.
         var targets: [(pbIdx: Int, url: URL)] = []
@@ -5728,9 +5793,11 @@ extension PlayerWindowController: QueuePageViewDelegate {
         guard !targets.isEmpty else { return }
 
         // Preflight: plan all renames atomically before mutating any file.
-        let planResult = MediaFileSupport.planPrefixRenames(
+        let planResult = MediaFileSupport.planCustomPrefixToggleRenames(
             urls: targets.map(\.url),
-            prefix: prefix
+            primaryPrefix: primaryPrefix,
+            secondaryPrefix: secondaryPrefix,
+            action: action
         )
 
         switch planResult {

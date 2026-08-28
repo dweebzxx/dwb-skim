@@ -627,7 +627,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         customPrefixButton.image          = nil
         customPrefixButton.font           = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         customPrefixButton.contentTintColor = PrefixBrandColors.primaryCustomPrefixColor
-        customPrefixButton.toolTip          = "Apply primary prefix to selected filename(s) (one-click, no dialog). Shortcut: Q"
+        customPrefixButton.toolTip          = "Toggle the primary prefix on the selected filename(s) (one-click, no dialog; replaces the secondary prefix if present). Shortcut: N"
         customPrefixButton.setAccessibilityLabel("Apply primary custom prefix to selected file")
         customPrefixButton.target           = self
         customPrefixButton.action           = #selector(customPrefixTapped)
@@ -640,7 +640,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         customPrefixSecondaryButton.image          = nil
         customPrefixSecondaryButton.font           = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         customPrefixSecondaryButton.contentTintColor = PrefixBrandColors.secondaryCustomPrefixColor
-        customPrefixSecondaryButton.toolTip          = "Apply secondary prefix to selected filename(s) (one-click, no dialog). Shortcut: Option-Q"
+        customPrefixSecondaryButton.toolTip          = "Toggle the secondary prefix on the selected filename(s) (one-click, no dialog; replaces the primary prefix if present). Shortcut: M"
         customPrefixSecondaryButton.setAccessibilityLabel("Apply secondary custom prefix to selected file")
         customPrefixSecondaryButton.target           = self
         customPrefixSecondaryButton.action           = #selector(customPrefixSecondaryTapped)

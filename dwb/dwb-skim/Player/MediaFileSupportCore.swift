@@ -608,6 +608,60 @@ enum MediaFileSupport {
 
         return .success(planned)
     }
+
+    /// Plans a custom-prefix toggle/replace rename (see
+    /// `SkimFileRenamer.customPrefixToggleTargetFilename`) for the given URLs.
+    ///
+    /// No-ops (targets whose filename would be unchanged) are filtered out
+    /// silently; `.success([])` means every target was already in the requested
+    /// state. Preflight validation and collision handling are identical to
+    /// `planPrefixRenames`.
+    static func planCustomPrefixToggleRenames(
+        urls: [URL],
+        primaryPrefix: String,
+        secondaryPrefix: String,
+        action: CustomPrefixAction,
+        fileExistsAtPath: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> Result<[PlannedPrefixRename], PrefixRenameFailure> {
+        var planned: [PlannedPrefixRename] = []
+        var seenDestinationPaths = Set<String>()
+
+        for url in urls {
+            guard let newName = SkimFileRenamer.customPrefixToggleTargetFilename(
+                    for: url.lastPathComponent,
+                    primaryPrefix: primaryPrefix,
+                    secondaryPrefix: secondaryPrefix,
+                    action: action),
+                  newName != url.lastPathComponent else { continue }
+
+            guard fileExistsAtPath(url.path) else {
+                return .failure(.missingSource(filename: url.lastPathComponent))
+            }
+
+            guard !newName.isEmpty,
+                  newName != ".", newName != "..",
+                  newName.rangeOfCharacter(from: CharacterSet(charactersIn: "/:")) == nil,
+                  newName.utf8.allSatisfy({ $0 != 0 }) else {
+                return .failure(.invalidNewName(original: url.lastPathComponent))
+            }
+
+            let destinationURL = url.deletingLastPathComponent()
+                .appendingPathComponent(newName, isDirectory: false)
+
+            guard !fileExistsAtPath(destinationURL.path) else {
+                return .failure(.destinationCollision(newName: newName))
+            }
+
+            let destKey = destinationURL.standardizedFileURL.path
+            guard seenDestinationPaths.insert(destKey).inserted else {
+                return .failure(.duplicateDestination(newName: newName))
+            }
+
+            planned.append(PlannedPrefixRename(sourceURL: url, destinationURL: destinationURL))
+        }
+
+        return .success(planned)
+    }
 }
 
 extension CGImage {

@@ -35,7 +35,73 @@ enum SkimReviewPrefixKind: String {
     case delete = "delete_"
 }
 
+/// Which of the two mutually-exclusive app-configured custom prefixes a
+/// one-click prefix action targets.
+enum CustomPrefixAction: Equatable {
+    case primary
+    case secondary
+}
+
 enum SkimFileRenamer {
+
+    /// The authoritative form of a configured custom prefix: leading/trailing
+    /// whitespace removed, and a single trailing `_` guaranteed so applying it
+    /// always yields `prefix_<filename>`. An empty/whitespace-only value stays
+    /// empty (that prefix slot is unconfigured).
+    static func normalizedCustomPrefix(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return trimmed.hasSuffix("_") ? trimmed : trimmed + "_"
+    }
+
+    /// Computes the target filename for a custom-prefix toggle/replace action,
+    /// or `nil` when the action is a no-op (or the requested prefix is empty).
+    ///
+    /// The two configured prefixes are mutually exclusive and never stack:
+    ///
+    /// | Recognized state | `.primary` action        | `.secondary` action      |
+    /// | ---------------- | ------------------------ | ------------------------ |
+    /// | neither prefix   | add primary              | add secondary            |
+    /// | primary present  | remove primary           | replace primary → 2ndary |
+    /// | secondary present| replace secondary → 1ary | remove secondary         |
+    ///
+    /// Only the two literal app-configured prefixes are recognized; unrelated
+    /// leading filename text is never stripped. When one configured prefix is
+    /// itself a leading substring of the other, the longer match is treated as
+    /// the prefix that is actually present. The extension is preserved
+    /// automatically because the transform only ever prepends to / strips from
+    /// the front of the complete filename.
+    static func customPrefixToggleTargetFilename(for filename: String,
+                                                primaryPrefix: String,
+                                                secondaryPrefix: String,
+                                                action: CustomPrefixAction) -> String? {
+        let requested = action == .primary ? primaryPrefix : secondaryPrefix
+        let other     = action == .primary ? secondaryPrefix : primaryPrefix
+        guard !requested.isEmpty else { return nil }
+
+        let hasRequested = filename.hasPrefix(requested)
+        let hasOther     = !other.isEmpty && filename.hasPrefix(other)
+
+        enum Present { case none, requested, other }
+        let present: Present
+        if hasRequested && hasOther {
+            present = requested.count >= other.count ? .requested : .other
+        } else if hasRequested {
+            present = .requested
+        } else if hasOther {
+            present = .other
+        } else {
+            present = .none
+        }
+
+        let target: String
+        switch present {
+        case .none:      target = requested + filename
+        case .requested: target = String(filename.dropFirst(requested.count))
+        case .other:     target = requested + String(filename.dropFirst(other.count))
+        }
+        return target == filename ? nil : target
+    }
 
     /// Review filename prefixes recognized and stripped before applying a new
     /// one. `rename_` is the legacy P07 read-only prefix; it is stripped like
