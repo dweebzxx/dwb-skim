@@ -17,7 +17,7 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
     private let gifLoopsStepper = NSStepper()
     private let queueOrder = NSPopUpButton()
     private let loopQueue = NSSwitch()
-    private let settingsButton = NSButton()
+    private let progressiveRandomSkim = NSSwitch()
     private let collapseButton = NSButton()
     private var isSynchronizing = false
 
@@ -103,15 +103,11 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         loopQueue.setAccessibilityLabel("Loop Queue")
         loopQueue.toolTip = "Loop queue"
 
-        settingsButton.isBordered = false
-        settingsButton.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
-        settingsButton.imageScaling = .scaleProportionallyDown
-        settingsButton.contentTintColor = .labelColor
-        settingsButton.target = self
-        settingsButton.action = #selector(openSettings(_:))
-        settingsButton.toolTip = "Open Settings"
-        settingsButton.setAccessibilityLabel("Open Settings")
-        settingsButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        progressiveRandomSkim.controlSize = .small
+        progressiveRandomSkim.target = self
+        progressiveRandomSkim.action = #selector(progressiveRandomSkimChanged(_:))
+        progressiveRandomSkim.setAccessibilityLabel("Progressive Random Skim")
+        progressiveRandomSkim.toolTip = "Progressive random skim"
 
         collapseButton.isBordered = false
         collapseButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Hide Skim controls")
@@ -137,11 +133,15 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
             group("Clip duration", durationValues),
             group("Start position", startPosition),
             group("Skip intro", horizontal(skipIntro, suffixLabel("s"))),
+            divider(),
             group("Image duration", horizontal(imageDuration, imageDurationStepper, suffixLabel("s"))),
             group("GIF loops", horizontal(gifLoops, gifLoopsStepper)),
+            divider(),
             group("Queue order", queueOrder),
             group("Loop queue", loopQueue),
-            group("Settings", horizontal(settingsButton, collapseButton)),
+            group("Progressive skim", progressiveRandomSkim),
+            divider(),
+            group("", collapseButton),
         ]
         let stack = NSStackView(views: groups)
         stack.orientation = .horizontal
@@ -227,6 +227,16 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         return label
     }
 
+    private func divider() -> NSView {
+        let box = NSBox()
+        box.boxType = .separator
+        box.setAccessibilityElement(false)
+        box.translatesAutoresizingMaskIntoConstraints = false
+        box.widthAnchor.constraint(equalToConstant: 1).isActive = true
+        box.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        return box
+    }
+
     @objc private func settingsDidChange() { syncFromStore() }
 
     private func syncFromStore() {
@@ -251,6 +261,7 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         gifLoopsStepper.integerValue = settings.gifLoopCount
         queueOrder.selectItem(withTitle: settings.queueOrderMode.rawValue.capitalized)
         loopQueue.state = settings.loopQueueEnabled ? .on : .off
+        progressiveRandomSkim.state = settings.progressiveRandomSkimEnabled ? .on : .off
     }
 
     private func applySkimEnabled(_ enabled: Bool) {
@@ -303,8 +314,9 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         store.setLoopQueueEnabled(sender.state == .on)
     }
 
-    @objc private func openSettings(_ sender: NSButton) {
-        SettingsWindowController.shared.openSettings()
+    @objc private func progressiveRandomSkimChanged(_ sender: NSSwitch) {
+        guard !isSynchronizing else { return }
+        store.setProgressiveRandomSkimEnabled(sender.state == .on)
     }
 
     @objc private func collapseTapped(_ sender: NSButton) { onCollapse?() }

@@ -13,6 +13,7 @@
 		087A69E02019259A058BBEF2 /* BackgroundAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */; };
 		095B77B552F7163BC638D7E7 /* PreviewRangePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7383D85EF7CE413F349C588 /* PreviewRangePlanner.swift */; };
 		0C3652CB853B4E0780194324 /* PlaybackCompletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */; };
+		0C7BD99FE93A665C02515418 /* SkimFailedItemTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29F651982B1AE31976B4C31 /* SkimFailedItemTrackerTests.swift */; };
 		102FE45531EEE7F71552BFD3 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F155D6A01AEDDE6380DA268 /* SettingsWindowController.swift */; };
 		1401C81E27D5CFF32C67A356 /* VolumeOverlayPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B23AA3F5F3D052A89AF28BB /* VolumeOverlayPresentationTests.swift */; };
 		177BF523F176F857A6DA6BEE /* SkimFileRenamerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */; };
@@ -38,6 +39,7 @@
 		38816AED9DE2C6F47F6A42CC /* SkimReviewState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F2B87C6C1392058CD7A057 /* SkimReviewState.swift */; };
 		3D68515E25C76D8B82EB4E48 /* SkimReviewStatusDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E98352F6CC5288D195C4A3 /* SkimReviewStatusDescriptor.swift */; };
 		3E584AC3BA3F416321686F33 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC5CB4EA165F65C5FB89BC5 /* main.swift */; };
+		3EF39A3AFA303DD62B402384 /* ProgressiveRandomSkimPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */; };
 		3F04678EC74033D976CC46C1 /* MediaFileSupportCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23A8BC14657F0EBCB218E13 /* MediaFileSupportCore.swift */; };
 		3F74F5F9CB9E9CB074329F2D /* QueueRenameReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64BA2FF07366335BF0EFE58 /* QueueRenameReconciler.swift */; };
 		453C86DF131A9825F34A48FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 73876ABD89B97FBB673889C4 /* Assets.xcassets */; };
@@ -52,9 +54,12 @@
 		5C2D6A9B1BBAF9F73E68D4B5 /* SkimMediaAssignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */; };
 		5CD6A705CE16C88B44784599 /* SkimTogglePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4011E508FB28BB2055F4E1 /* SkimTogglePolicy.swift */; };
 		5EF141D51022F24AE6B3A07C /* PlayerWindowReactivationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */; };
+		61F220C200D3AF3B10C8250C /* SkimFailedItemTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */; };
 		61F66F73C3C0F68957E22CAA /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04057AEF7548EB7B17ED885C /* BookmarkStore.swift */; };
 		6D23F6D8E56E9C0E70B27D9A /* QueueDisplayProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A1E285B8F81B7015A4C998 /* QueueDisplayProjection.swift */; };
+		74141BF9D97ABF5A2681AF6C /* ProgressiveRandomSkimPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7BF2658982FCE47559C5EE /* ProgressiveRandomSkimPlanTests.swift */; };
 		7747AACB7D29B1D6688FA814 /* SkimReviewStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95129DDAA8F38D968939B86C /* SkimReviewStateTests.swift */; };
+		778FDF113A3FE6ADCC483B4C /* SkimFailedItemTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */; };
 		7858B3685FC4DED3CEBDBA03 /* BackgroundAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */; };
 		82132C00F00A899E61C62075 /* SkimApplicationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E89F788A90ACE033F64D8A7 /* SkimApplicationConfiguration.swift */; };
 		84168455CAA04C17758226FD /* MediaFileSupportCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23A8BC14657F0EBCB218E13 /* MediaFileSupportCore.swift */; };
@@ -108,6 +113,7 @@
 		DD4E6C091CCE65A6D74D5A7D /* DebugLogSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */; };
 		E0A131F99380499638FD9858 /* PlaybackCompletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */; };
 		E0AABA5BB23A4869D7341287 /* SkimTogglePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D4877827DF1F16C124B7E1 /* SkimTogglePolicyTests.swift */; };
+		E4ACEA7BECA5F841A88C0A42 /* ProgressiveRandomSkimPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */; };
 		E549A6EAB4FBC7EF49E7CED9 /* SkimPlaybackStartIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */; };
 		EBA7BEC7BF6E796ED4D1BDEF /* SkimFileRenamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */; };
 		F0FF056478282F44E0F27BC6 /* QueueOrderPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */; };
@@ -138,11 +144,13 @@
 		2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCompletionPolicy.swift; sourceTree = "<group>"; };
 		30E082862FFA44C3ED91F059 /* PlayerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowController.swift; sourceTree = "<group>"; };
 		31DDE953CE0261D85A373B49 /* MediaPlaybackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackPolicyTests.swift; sourceTree = "<group>"; };
+		34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFailedItemTracker.swift; sourceTree = "<group>"; };
 		35E9752F6FBE3E11906F0B4B /* OptionDoubleTapRecognizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionDoubleTapRecognizerTests.swift; sourceTree = "<group>"; };
 		36C50B5A63FFDE33BC31DC88 /* SkimReviewStatusDescriptorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimReviewStatusDescriptorTests.swift; sourceTree = "<group>"; };
 		3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewDeadlineReliabilityTests.swift; sourceTree = "<group>"; };
 		4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimColorsTests.swift; sourceTree = "<group>"; };
 		46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogSanitizer.swift; sourceTree = "<group>"; };
+		4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressiveRandomSkimPlan.swift; sourceTree = "<group>"; };
 		4F074B70203BCC863BFC592C /* VolumeOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayView.swift; sourceTree = "<group>"; };
 		53B4635EED00A7354F89F960 /* dwb skim.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "dwb skim.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		540B2F6365B7C98CD97AFECA /* MediaFileSupportCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileSupportCoreTests.swift; sourceTree = "<group>"; };
@@ -193,8 +201,10 @@
 		DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewPlaybackPlan.swift; sourceTree = "<group>"; };
 		DE3772071B27CA36C2D6126A /* ScaleMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleMode.swift; sourceTree = "<group>"; };
 		DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPlaybackStartIntent.swift; sourceTree = "<group>"; };
+		E29F651982B1AE31976B4C31 /* SkimFailedItemTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFailedItemTrackerTests.swift; sourceTree = "<group>"; };
 		E2D4877827DF1F16C124B7E1 /* SkimTogglePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimTogglePolicyTests.swift; sourceTree = "<group>"; };
 		E4B9CDB0567B1F1A60CA925B /* DebugConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleController.swift; sourceTree = "<group>"; };
+		EF7BF2658982FCE47559C5EE /* ProgressiveRandomSkimPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressiveRandomSkimPlanTests.swift; sourceTree = "<group>"; };
 		F44C8E013B037FD1201EBB3D /* VolumeOverlayPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayPresentation.swift; sourceTree = "<group>"; };
 		F6DC73947F3725CBC954042F /* MediaPlaybackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackPolicy.swift; sourceTree = "<group>"; };
 		F8EC210A4E8A9C8E1BFA250B /* PlaybackBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackBarPresentationTests.swift; sourceTree = "<group>"; };
@@ -238,12 +248,14 @@
 				029F4A116A92B950D5C87800 /* PlaybackCompletionPolicyTests.swift */,
 				8D9E1C1CD9E94DE463F71A19 /* PlayerWindowReactivationPlannerTests.swift */,
 				95709703B83DE0D08F958CC3 /* PreviewRangePlannerTests.swift */,
+				EF7BF2658982FCE47559C5EE /* ProgressiveRandomSkimPlanTests.swift */,
 				8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */,
 				1F63BA24D5F52BC71E089EC9 /* QueueOrderPlannerTests.swift */,
 				7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */,
 				90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */,
 				9812E37C75E80B7C1CF2EDA1 /* SettingsPresentationTests.swift */,
 				4179E9D4249FA3D9BD34B3CC /* SkimColorsTests.swift */,
+				E29F651982B1AE31976B4C31 /* SkimFailedItemTrackerTests.swift */,
 				C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */,
 				20B24AC3BA6713EFB20E488A /* SkimMediaAssignmentTests.swift */,
 				FEA921BCF9D004ACCB42A2E2 /* SkimPlaybackStartIntentTests.swift */,
@@ -312,6 +324,7 @@
 				30E082862FFA44C3ED91F059 /* PlayerWindowController.swift */,
 				87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */,
 				B7383D85EF7CE413F349C588 /* PreviewRangePlanner.swift */,
+				4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */,
 				B1A1E285B8F81B7015A4C998 /* QueueDisplayProjection.swift */,
 				9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */,
 				54E8682BD05143B3383F3CE6 /* QueuePageView.swift */,
@@ -319,6 +332,7 @@
 				B4AD18EC8A6566CD89B83757 /* RailButton.swift */,
 				DE3772071B27CA36C2D6126A /* ScaleMode.swift */,
 				076AF22351917042F110E38D /* SkimColors.swift */,
+				34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */,
 				6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */,
 				81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */,
 				DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */,
@@ -463,6 +477,7 @@
 				FADDF51E131563ABF49B8F60 /* PlayerWindowController.swift in Sources */,
 				B7C8EF0764296F4925AE7D1F /* PlayerWindowReactivationPlanner.swift in Sources */,
 				C2C32F090287693AC9FCBFD1 /* PreviewRangePlanner.swift in Sources */,
+				3EF39A3AFA303DD62B402384 /* ProgressiveRandomSkimPlan.swift in Sources */,
 				4E35C0EF095C98827A2ADD20 /* QueueDisplayProjection.swift in Sources */,
 				F0FF056478282F44E0F27BC6 /* QueueOrderPlanner.swift in Sources */,
 				D5DD51594A1501D08A605137 /* QueuePageView.swift in Sources */,
@@ -475,6 +490,7 @@
 				F2FEBEFFDEAA363D23B84922 /* SkimApplication.swift in Sources */,
 				82132C00F00A899E61C62075 /* SkimApplicationConfiguration.swift in Sources */,
 				97B24372658E9C01C4E81BFD /* SkimColors.swift in Sources */,
+				778FDF113A3FE6ADCC483B4C /* SkimFailedItemTracker.swift in Sources */,
 				EBA7BEC7BF6E796ED4D1BDEF /* SkimFileRenamer.swift in Sources */,
 				8EF717CDDCE1FFE4219B72F0 /* SkimMediaAssignment.swift in Sources */,
 				FFDE92D02538CACA3CCC50B8 /* SkimPlaybackStartIntent.swift in Sources */,
@@ -523,6 +539,8 @@
 				D1C74381D3C7213FD61C8308 /* PlayerWindowReactivationPlannerTests.swift in Sources */,
 				095B77B552F7163BC638D7E7 /* PreviewRangePlanner.swift in Sources */,
 				232B3376CF664986ECF9E8B9 /* PreviewRangePlannerTests.swift in Sources */,
+				E4ACEA7BECA5F841A88C0A42 /* ProgressiveRandomSkimPlan.swift in Sources */,
+				74141BF9D97ABF5A2681AF6C /* ProgressiveRandomSkimPlanTests.swift in Sources */,
 				6D23F6D8E56E9C0E70B27D9A /* QueueDisplayProjection.swift in Sources */,
 				55936E8077A04BBB11570817 /* QueueDisplayProjectionTests.swift in Sources */,
 				25AF6FF31FFE0AAD4055B0A2 /* QueueOrderPlanner.swift in Sources */,
@@ -536,6 +554,8 @@
 				B288578947A49FC4B2238675 /* SkimApplicationConfiguration.swift in Sources */,
 				C2C16207A70B689922A50FFD /* SkimColors.swift in Sources */,
 				C6759293D8AB153350309B22 /* SkimColorsTests.swift in Sources */,
+				61F220C200D3AF3B10C8250C /* SkimFailedItemTracker.swift in Sources */,
+				0C7BD99FE93A665C02515418 /* SkimFailedItemTrackerTests.swift in Sources */,
 				BA0B9E3E515DF8D9AAF43330 /* SkimFileRenamer.swift in Sources */,
 				177BF523F176F857A6DA6BEE /* SkimFileRenamerTests.swift in Sources */,
 				5C2D6A9B1BBAF9F73E68D4B5 /* SkimMediaAssignment.swift in Sources */,

@@ -16,6 +16,7 @@ final class SettingsDefaultsRegistryTests: XCTestCase {
         XCTAssertEqual(values[keys.gifLoopCount] as? Int, 1)
         XCTAssertEqual(values[keys.videoAudioNormalizationEnabled] as? Bool, false)
         XCTAssertEqual(values[keys.queueOrderMode] as? String, "sequential")
+        XCTAssertEqual(values[keys.progressiveRandomSkimIntensity] as? String, "standard")
         XCTAssertEqual(values[keys.loopQueueEnabled] as? Bool, false)
         XCTAssertEqual(values[keys.backgroundAudioMixMode] as? String, "uploadedOnly")
         XCTAssertEqual(values[keys.backgroundAudioVolume] as? Double, 0.75)
@@ -52,6 +53,14 @@ final class SettingsDefaultsRegistryTests: XCTestCase {
         XCTAssertEqual(SettingsDefaultsRegistry.validatedSkipIntroSeconds(-1), 0)
         XCTAssertEqual(SettingsDefaultsRegistry.validatedStartPositionMode("beginning"), "beginning")
         XCTAssertEqual(SettingsDefaultsRegistry.validatedStartPositionMode("invalid"), "random")
+    }
+
+    func testProgressiveRandomSkimIntensityValidationDefaultsToStandard() {
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("light"), "light")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("standard"), "standard")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("thorough"), "thorough")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("invalid"), "standard")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity(""), "standard")
     }
 
     func testQueueModesRemainSequentialShuffleAndWeighted() {

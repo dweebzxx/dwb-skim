@@ -58,6 +58,39 @@ final class SkimSettingsStoreTests: XCTestCase {
         XCTAssertEqual(previewChanges, 4, "Writing the same value must not create an update loop")
     }
 
+    func testProgressiveRandomSkimIntensityDefaultsToStandardAndPersistsAcrossRelaunch() {
+        let (defaults, store, suite) = makeStore("intensity")
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(store.snapshot().progressiveRandomSkimIntensity, .standard)
+
+        store.setProgressiveRandomSkimIntensity(.thorough)
+        XCTAssertEqual(store.snapshot().progressiveRandomSkimIntensity, .thorough)
+
+        // Simulate relaunch: a fresh store instance backed by the same persisted defaults.
+        let relaunched = SkimSettingsStore(defaults: defaults, notificationCenter: NotificationCenter())
+        XCTAssertEqual(relaunched.snapshot().progressiveRandomSkimIntensity, .thorough)
+    }
+
+    func testProgressiveRandomSkimIntensityChangeNotifiesOncePerChange() {
+        let suite = "com.dwb.skimTests.SkimSettingsStore.intensityNotify"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        SettingsDefaultsRegistry.register(defaults: defaults, reduceMotionDefault: false)
+        let center = NotificationCenter()
+        let store = SkimSettingsStore(defaults: defaults, notificationCenter: center)
+        var previewChanges = 0
+        let token = center.addObserver(forName: .skimPreviewSettingsChanged, object: nil, queue: nil) { _ in
+            previewChanges += 1
+        }
+        defer { center.removeObserver(token) }
+
+        store.setProgressiveRandomSkimIntensity(.light)
+        XCTAssertEqual(previewChanges, 1)
+        store.setProgressiveRandomSkimIntensity(.light)
+        XCTAssertEqual(previewChanges, 1, "Writing the same value must not create an update loop")
+    }
+
     func testRandomBoundsStayOrdered() {
         let (defaults, store, suite) = makeStore("bounds")
         defer { defaults.removePersistentDomain(forName: suite) }

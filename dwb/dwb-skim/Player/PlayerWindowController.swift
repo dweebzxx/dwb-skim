@@ -255,6 +255,11 @@ class PlayerWindowController: NSWindowController {
     private var configuredLoopQueueEnabled: Bool = SettingsWindowController.isLoopQueueEnabled()
     private var queuePlaybackOrdinal = 0
     private var lastPlayedOrdinalByID: [String: Int] = [:]
+
+    /// Session-scoped record of queue items that failed to become playable (P32, Part 3). Reset
+    /// whenever the queue is wholesale replaced or cleared; never written to settings or disk, so a
+    /// mark here can never make a file permanently unplayable. See `SkimFailedItemTracker`.
+    private var skimFailedItemTracker = SkimFailedItemTracker()
     var isShuffleOn: Bool { configuredQueueOrderMode == .shuffle }
     var isEndlessShuffleOn: Bool { configuredQueueOrderMode == .shuffle && configuredLoopQueueEnabled }
 
@@ -455,6 +460,8 @@ class PlayerWindowController: NSWindowController {
     private var configuredRandomPreviewDurationRange: ClosedRange<Int> = SettingsWindowController.currentRandomPreviewDurationRange()
     private var configuredSkipIntroSeconds: Int = SettingsWindowController.currentSkipIntroSeconds()
     private var configuredStartPositionMode: SkimPreviewStartMode = SettingsWindowController.currentSkimPreviewStartMode()
+    private var configuredProgressiveRandomSkimEnabled: Bool = SettingsWindowController.isProgressiveRandomSkimEnabled()
+    private var configuredProgressiveRandomSkimIntensity: ProgressiveRandomSkimIntensity = SettingsWindowController.currentProgressiveRandomSkimIntensity()
     private struct SkimPreviewPlanContext {
         let sessionID: Int
         let playbackURL: URL
@@ -464,6 +471,11 @@ class PlayerWindowController: NSWindowController {
         let plannedDurationSeconds: TimeInterval?
         let startRandomValue: Double
         var didLogPlanResolution = false
+        // Progressive Random Skim (P30): computed once media duration is known; empty when the
+        // video is ineligible (under 30s) or the feature is disabled at session start.
+        var progressiveRandomSkimPlanned = false
+        var progressiveRandomSkimSegments: [ProgressiveRandomSkimSegment] = []
+        var progressiveRandomSkimSegmentIndex = 0
     }
 
     private var skimPreviewSessionScheduler = SkimPreviewSessionScheduler()
@@ -488,6 +500,54 @@ class PlayerWindowController: NSWindowController {
     private(set) var activePreviewRange: ActivePreviewRange?
     private var activePreviewConfiguredDuration: TimeInterval?
     var isSkimEnabled: Bool { configuredSkimEnabled }
+
+    /// Part 4: scrub-bar marker positions for the current Progressive Random Skim plan, in playback
+    /// seconds. Always reads straight from `context.progressiveRandomSkimSegments` — the same array
+    /// `applySkimPreviewReadiness` and `advanceToNextProgressiveRandomSkimSegment` read from to drive
+    /// actual playback — so segment 0's marker can never drift from the mode-derived position segment
+    /// 0 would have used pre-Progressive-Random-Skim. Empty whenever there is no live plan to mark:
+    /// the feature is off, no session is active, or the plan hasn't been computed yet.
+    var progressiveRandomSkimSegmentStartSeconds: [TimeInterval] {
+        guard configuredProgressiveRandomSkimEnabled,
+              let context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              !context.progressiveRandomSkimSegments.isEmpty else { return [] }
+        return context.progressiveRandomSkimSegments.map { $0.startOffsetSeconds }
+    }
+
+    /// Part 4: whether `manuallyAdvanceProgressiveRandomSkimSegment()` would do anything right now —
+    /// mirrors the same eligibility `fireSkimPreviewDeadline`'s `.fired` case checks before calling
+    /// `advanceToNextProgressiveRandomSkimSegment` (a later segment must exist), so the manual-advance
+    /// control never becomes a disguised path to `advanceToNextItem`.
+    var canManuallyAdvanceProgressiveRandomSkimSegment: Bool {
+        guard configuredSkimEnabled, configuredProgressiveRandomSkimEnabled,
+              let context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              !context.progressiveRandomSkimSegments.isEmpty else { return false }
+        return context.progressiveRandomSkimSegmentIndex + 1 < context.progressiveRandomSkimSegments.count
+    }
+
+    /// Part 4: manually advances to the next planned Progressive Random Skim segment immediately,
+    /// instead of waiting for the current segment's deadline to fire. Cancels the pending deadline
+    /// work item first — exactly as the automatic path implicitly does by virtue of that work item
+    /// having already run by the time `fireSkimPreviewDeadline`'s `.fired` case executes — then calls
+    /// the very same `advanceToNextProgressiveRandomSkimSegment` that automatic firing calls. No
+    /// second segment-transition path, no second timer.
+    func manuallyAdvanceProgressiveRandomSkimSegment() {
+        guard canManuallyAdvanceProgressiveRandomSkimSegment,
+              let context = skimPreviewPlanContext,
+              let currentURL = currentMediaURL else { return }
+        skimPreviewDeadlineWorkItem?.cancel()
+        skimPreviewDeadlineWorkItem = nil
+        skimPreviewReadinessFallbackWorkItem?.cancel()
+        skimPreviewReadinessFallbackWorkItem = nil
+        let queueItemID = currentURL.standardizedFileURL.path
+        DebugConsoleController.log(
+            "preview",
+            "progressiveRandomSkimManualAdvanceRequested: window=\(debugIdentity) session=\(context.sessionID) index=\(context.progressiveRandomSkimSegmentIndex)"
+        )
+        advanceToNextProgressiveRandomSkimSegment(sessionID: context.sessionID, queueItemID: queueItemID)
+    }
 
     // MARK: - Per-window audio state
 
@@ -829,6 +889,8 @@ class PlayerWindowController: NSWindowController {
         configuredRandomPreviewDurationRange = SettingsWindowController.currentRandomPreviewDurationRange()
         configuredSkipIntroSeconds = SettingsWindowController.currentSkipIntroSeconds()
         configuredStartPositionMode = SettingsWindowController.currentSkimPreviewStartMode()
+        configuredProgressiveRandomSkimEnabled = SettingsWindowController.isProgressiveRandomSkimEnabled()
+        configuredProgressiveRandomSkimIntensity = SettingsWindowController.currentProgressiveRandomSkimIntensity()
         if wasEnabled, !configuredSkimEnabled {
             cancelSkimPreviewSession(reason: "skim-disabled")
         }
@@ -1261,6 +1323,7 @@ class PlayerWindowController: NSWindowController {
         queueFileIdentities = set.map(SkimFileIdentityResolver.identity)
         lastPlayedOrdinalByID.removeAll()
         queuePlaybackOrdinal = 0
+        skimFailedItemTracker.reset()
         displayOrder    = Array(0..<set.count)
         currentDisplayIndex = 0
         if configuredQueueOrderMode == .sequential {
@@ -1391,6 +1454,7 @@ class PlayerWindowController: NSWindowController {
         guard currentDisplayIndex > 0 else { return }
         cancelSkimPreviewSession(reason: "manual-previous")
         currentDisplayIndex -= 1
+        clearFailedStatusForCurrentItem()
         DebugConsoleController.log("playback", "previous: displayIdx=\(currentDisplayIndex) source=prevButton")
         playCurrentItem(startReason: "manual-previous")
     }
@@ -1398,6 +1462,18 @@ class PlayerWindowController: NSWindowController {
     func playNext() {
         DebugConsoleController.log("playback", "next: source=nextButton")
         advanceToNextItem(reason: "manual-next")
+        clearFailedStatusForCurrentItem()
+    }
+
+    /// Explicit user reassignment (queue-panel pick, Next, Previous) is this app's existing
+    /// "retry a failed item" path (P32, Part 3 §13): it clears any prior automatic-failure mark on
+    /// the newly-selected item so a deliberate user choice is never permanently suppressed, while
+    /// leaving every other item's mark untouched. Automatic-only advancement
+    /// (`advanceToNextItemSkippingFailedItems`) is the sole path that consults these marks.
+    private func clearFailedStatusForCurrentItem() {
+        let idx = currentSetIndex
+        guard idx >= 0, idx < queueItemIDs.count else { return }
+        skimFailedItemTracker.clearFailed(queueItemIDs[idx])
     }
 
     // MARK: - Bookmarks
@@ -1433,12 +1509,7 @@ class PlayerWindowController: NSWindowController {
         }
 
         cancelSkimPreviewSession(reason: reason)
-
-        if currentDisplayIndex < displayOrder.count - 1 {
-            currentDisplayIndex += 1
-        } else if configuredLoopQueueEnabled {
-            beginNextQueueOrderCycle()
-        }
+        stepDisplayIndexForward()
 
         NSLog("[dwb-playback] %@: advancing to displayIdx=%d mode=%@ loop=%d",
               reason, currentDisplayIndex, configuredQueueOrderMode.rawValue, configuredLoopQueueEnabled ? 1 : 0)
@@ -1447,6 +1518,146 @@ class PlayerWindowController: NSWindowController {
                         preserveCompletionSequence: preserveCompletionSequence,
                         transitionStrategy: transitionStrategy)
         return true
+    }
+
+    /// Steps `currentDisplayIndex` forward by exactly one queue position, applying Loop Queue's
+    /// reshuffle-on-wrap when the end of `displayOrder` is reached. Extracted so
+    /// `advanceToNextItem` and the failed-item-skipping walk below share the exact same
+    /// index-selection semantics — this file's one and only queue-order authority.
+    private func stepDisplayIndexForward() {
+        if currentDisplayIndex < displayOrder.count - 1 {
+            currentDisplayIndex += 1
+        } else if configuredLoopQueueEnabled {
+            beginNextQueueOrderCycle()
+        }
+    }
+
+    /// Automatic-failure recovery's queue advance (P32, Part 3). Unlike `advanceToNextItem`, this
+    /// walks forward — reusing the exact same `stepDisplayIndexForward`/`beginNextQueueOrderCycle`
+    /// traversal, so ordering and shuffle/Loop Queue semantics are untouched — until it lands on an
+    /// item `skimFailedItemTracker` has not already marked failed this session, or determines none
+    /// remain. Only the item actually selected to play is ever assigned to the player; items walked
+    /// past because they are already known-failed are never touched, so a run of consecutive bad
+    /// files costs one real playback attempt, not one per file.
+    ///
+    /// The walk is bounded by `playbackSet.count` steps. Every full pass through
+    /// `stepDisplayIndexForward` (looping or not) visits each distinct item at least once — under
+    /// Loop Queue, `beginNextQueueOrderCycle` reshuffles into a fresh permutation of every item on
+    /// each wrap — so failing to find a playable candidate within that bound is conclusive: every
+    /// reachable item is marked failed, and this must stop rather than spin the queue forever.
+    @discardableResult
+    private func advanceToNextItemSkippingFailedItems(reason: String) -> Bool {
+        guard canAdvanceAfterCompletion else {
+            stopPlaybackAfterAllCandidatesFailed(reason: reason)
+            return false
+        }
+        cancelSkimPreviewSession(reason: reason)
+
+        let maxSteps = max(1, playbackSet.count)
+        var steps = 0
+        while steps < maxSteps {
+            guard canAdvanceAfterCompletion else { break }
+            steps += 1
+            stepDisplayIndexForward()
+            let idx = currentSetIndex
+            guard idx >= 0, idx < queueItemIDs.count else { continue }
+            guard skimFailedItemTracker.isFailed(queueItemIDs[idx]) else {
+                NSLog("[dwb-playback] %@: advancing to displayIdx=%d mode=%@ loop=%d skippedKnownFailed=%d",
+                      reason, currentDisplayIndex, configuredQueueOrderMode.rawValue,
+                      configuredLoopQueueEnabled ? 1 : 0, steps - 1)
+                playCurrentItem(startReason: reason,
+                                expectPlaybackHandshake: true,
+                                transitionStrategy: .reuseCurrentPlayer)
+                return true
+            }
+        }
+
+        stopPlaybackAfterAllCandidatesFailed(reason: reason)
+        return false
+    }
+
+    /// Every reachable candidate for this session is a known playback failure (P32, Part 3 §5).
+    /// Stops cleanly instead of retrying or wrapping indefinitely: cancels any leftover scheduling
+    /// state, stops the player without treating it as natural end-of-queue, and leaves a
+    /// non-blocking status so the user understands why nothing is playing. `queueEndedNaturally`
+    /// reuses the existing "queue finished, Play restarts from the top" affordance — the same
+    /// contract togglePlayPause already honors for a normal queue-end, and the same reset that lets
+    /// a later explicit Play attempt retry these items is `skimFailedItemTracker.reset()` on the
+    /// next `openAndPlay`/`removeAllQueueItems`, not anything time-based here.
+    private func stopPlaybackAfterAllCandidatesFailed(reason: String) {
+        NSLog("[dwb-playback] playbackFailureAllCandidatesFailed: reason=%@ session=%d failedCount=%d",
+              reason, currentPlaybackSessionID, skimFailedItemTracker.failedItemIDs.count)
+        DebugConsoleController.log(level: .warning, category: "playback",
+                                   message: "allQueueCandidatesFailed: reason=\(reason) failedCount=\(skimFailedItemTracker.failedItemIDs.count)")
+        resetPlaybackCompletionSignals(reason: "\(reason)-all-candidates-failed")
+        if currentItemIsImage {
+            clearImageSlideshowState()
+        } else if player.media != nil {
+            isUserStop = true
+            player.stop()
+        }
+        queueEndedNaturally = true
+        showVideoTitleOverlay(title: "Playback stopped — no playable items remain in this queue")
+        needsTransportUpdate = true
+        transport.update()
+    }
+
+    /// Single entry point for every automatic-playback-failure signal in the app (P32, Part 3).
+    ///
+    /// What counts as a failure: VLCKit's own terminal `.error` player state, or the existing
+    /// playback-start handshake (`verifyPlaybackStartHandshake`) exhausting every retry — including
+    /// its one-time same-session player rebuild — without the media ever reaching confirmed
+    /// playback progress. Both are the strongest failure evidence already available in this
+    /// codebase; no second timer, poller, or state machine is introduced to detect them. A
+    /// Progressive Random Skim *seek* retry exhausting (`SkimStartIntentAction.exhausted`, logged in
+    /// `applySkimPreviewSeekIfReady`) is deliberately excluded — that only means a segment's
+    /// playhead could not land exactly on target, not that the media itself is unplayable, so it
+    /// never reaches this method.
+    ///
+    /// Staleness protection: `failedURL` must equal `currentMediaURL` (both standardized), and the
+    /// resolved queue slot's own URL must match too. This is the same captured-URL-vs-live-URL
+    /// pattern the VLC delegate's `.ended`/`.stopped` handlers already use to reject a callback from
+    /// media that is no longer current — a delayed failure signal for an item the user has since
+    /// navigated away from (Next/Previous/queue-panel pick/reassignment) fails this check and is a
+    /// no-op. Callers that already carry a same-purpose check (the handshake path validates
+    /// `currentPlaybackSessionID == expectedSessionID` and `mediaAssigned` immediately before
+    /// calling in) are re-validated here too, cheaply, rather than trusted blindly.
+    private func handleAutomaticPlaybackFailure(reason: String, failedURL: URL?) {
+        guard let failedURL,
+              let liveURL = currentMediaURL,
+              failedURL.standardizedFileURL.path == liveURL.standardizedFileURL.path else {
+            NSLog("[dwb-playback] playbackFailureIgnored: reason=%@ cause=stale-url current=%@ failed=%@",
+                  reason,
+                  currentMediaURL?.lastPathComponent ?? "—",
+                  failedURL?.lastPathComponent ?? "—")
+            return
+        }
+        let idx = currentSetIndex
+        guard idx >= 0, idx < playbackSet.count, idx < queueItemIDs.count,
+              playbackSet[idx].standardizedFileURL.path == failedURL.standardizedFileURL.path else {
+            NSLog("[dwb-playback] playbackFailureIgnored: reason=%@ cause=index-mismatch displayIdx=%d/%d",
+                  reason, currentDisplayIndex, displayOrder.count)
+            return
+        }
+
+        let failedItemID = queueItemIDs[idx]
+        let filename = failedURL.lastPathComponent
+        let firstFailureThisSession = skimFailedItemTracker.markFailed(failedItemID)
+        NSLog("[dwb-playback] playbackFailureDetected: reason=%@ session=%d item=%@ file=%@ firstFailure=%d",
+              reason, currentPlaybackSessionID, failedItemID, filename, firstFailureThisSession ? 1 : 0)
+        DebugConsoleController.log(level: .warning, category: "playback",
+                                   message: "playbackFailure: file=\(filename) reason=\(reason)")
+
+        // Invalidate every piece of scheduling state this failed assignment owns — skim session,
+        // scheduled deadline/readiness work items, playback-start handshake, pending replacement
+        // start — before selecting the next item, so nothing from the failed item's plan can fire
+        // against whatever plays next.
+        resetPlaybackCompletionSignals(reason: "playback-failure-\(reason)")
+        releasePlaybackSleepAssertion()
+
+        showVideoTitleOverlay(title: "Unable to play \"\(filename)\" — skipped")
+
+        _ = advanceToNextItemSkippingFailedItems(reason: "playback-failure-\(reason)")
     }
 
     private func beginNextQueueOrderCycle() {
@@ -1798,6 +2009,7 @@ class PlayerWindowController: NSWindowController {
         displayOrder.removeAll()
         lastPlayedOrdinalByID.removeAll()
         queuePlaybackOrdinal = 0
+        skimFailedItemTracker.reset()
         sourceFolderURLs.removeAll()
         currentDisplayIndex          = -1
         currentMediaURL              = nil
@@ -1829,6 +2041,7 @@ class PlayerWindowController: NSWindowController {
         let removedItemID = queueItemIDs.remove(at: removedSetIndex)
         queueFileIdentities.remove(at: removedSetIndex)
         lastPlayedOrdinalByID.removeValue(forKey: removedItemID)
+        skimFailedItemTracker.clearFailed(removedItemID)
         durationCache.removeValue(forKey: removedURL)
         durationSecondsCache.removeValue(forKey: removedURL)
         displayOrder = displayOrder.map { $0 > removedSetIndex ? $0 - 1 : $0 }
@@ -2726,7 +2939,7 @@ class PlayerWindowController: NSWindowController {
                 clearImageSlideshowState()
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self, self.currentMediaURL?.path == url.path else { return }
-                    _ = self.advanceToNextItem(reason: "image-load-failed")
+                    self.handleAutomaticPlaybackFailure(reason: "image-load-failed", failedURL: url)
                 }
                 return
             }
@@ -2968,17 +3181,51 @@ class PlayerWindowController: NSWindowController {
                                         reason: "readiness-\(requestedSource.rawValue)-terminal-session")
             return
         }
+        // Progressive Random Skim segments after the first are owned exclusively by
+        // `pollProgressiveRandomSkimSegmentSeek` / `advanceToNextProgressiveRandomSkimSegment`; a
+        // readiness callback that outlives the transition to a later segment must not re-evaluate
+        // this path against segment 0's plan.
+        guard context.progressiveRandomSkimSegmentIndex == 0 else {
+            logSkimPreviewStaleCallback(sessionID: sessionID,
+                                        reason: "readiness-\(requestedSource.rawValue)-progressive-segment-advanced")
+            return
+        }
 
         let now = CACurrentMediaTime()
         let metadata = currentSkimPreviewMetadata(context: context)
         let mediaDurationSeconds = metadata.durationSeconds
-        let plan = SkimPreviewPlaybackPlan.plan(
-            mode: context.startMode,
-            skipIntroSeconds: context.skipIntroSeconds,
-            clipDurationSeconds: context.plannedDurationSeconds,
-            mediaDurationSeconds: mediaDurationSeconds,
-            randomValue: context.startRandomValue
-        )
+
+        if configuredProgressiveRandomSkimEnabled, !context.progressiveRandomSkimPlanned, let mediaDurationSeconds {
+            let maxCount = ProgressiveRandomSkimPlanner.maximumPossibleSegmentCount
+            context.progressiveRandomSkimSegments = ProgressiveRandomSkimPlanner.plan(
+                mediaDurationSeconds: mediaDurationSeconds,
+                skipIntroSeconds: context.skipIntroSeconds,
+                positionRandomValues: (0..<maxCount).map { _ in Double.random(in: 0..<1) },
+                durationRandomValues: (0..<maxCount).map { _ in Double.random(in: 0..<1) },
+                segmentCountMultiplier: configuredProgressiveRandomSkimIntensity.segmentCountMultiplier
+            )
+            context.progressiveRandomSkimSegmentIndex = 0
+            context.progressiveRandomSkimPlanned = true
+            skimPreviewPlanContext = context
+            DebugConsoleController.log(
+                "preview",
+                "progressiveRandomSkimPlanned: window=\(debugIdentity) session=\(sessionID) segments=\(context.progressiveRandomSkimSegments.count) duration=\(String(format: "%.2f", mediaDurationSeconds))s skipIntro=\(String(format: "%.2f", context.skipIntroSeconds))s"
+            )
+        }
+
+        let plan: SkimPreviewPlaybackPlan
+        if let firstSegment = context.progressiveRandomSkimSegments.first {
+            plan = SkimPreviewPlaybackPlan(startOffsetSeconds: firstSegment.startOffsetSeconds,
+                                           effectiveClipDurationSeconds: firstSegment.durationSeconds)
+        } else {
+            plan = SkimPreviewPlaybackPlan.plan(
+                mode: context.startMode,
+                skipIntroSeconds: context.skipIntroSeconds,
+                clipDurationSeconds: context.plannedDurationSeconds,
+                mediaDurationSeconds: mediaDurationSeconds,
+                randomValue: context.startRandomValue
+            )
+        }
         activePreviewConfiguredDuration = plan.effectiveClipDurationSeconds
         _ = skimPlaybackStartIntent.updateMetadata(
             playbackSessionID: sessionID,
@@ -3240,6 +3487,12 @@ class PlayerWindowController: NSWindowController {
                 "preview",
                 "deadlineFired: window=\(debugIdentity) session=\(sessionID) duration=\(previewDurationText(skimPreviewSessionScheduler.state?.effectiveDurationSeconds)) reason=skim-preview-auto-advance"
             )
+            if let planContext = skimPreviewPlanContext,
+               planContext.sessionID == sessionID,
+               planContext.progressiveRandomSkimSegmentIndex + 1 < planContext.progressiveRandomSkimSegments.count {
+                advanceToNextProgressiveRandomSkimSegment(sessionID: sessionID, queueItemID: queueItemID)
+                return
+            }
             let advanced = advanceToNextItem(reason: "skim-preview-auto-advance")
             if !advanced {
                 _ = skimPreviewSessionScheduler.allowNaturalEndAfterUnadvancableDeadline(
@@ -3253,6 +3506,143 @@ class PlayerWindowController: NSWindowController {
         }
     }
 
+    /// Progressive Random Skim (P30): advances within the *same* video/session/assignment to the
+    /// next planned segment, instead of `advanceToNextItem`'s queue-level advance. Reuses the same
+    /// start-intent + scheduler restart pattern `beginSkimPreviewSession`/`bindSkimStartIntent` use
+    /// for a brand-new session, so assignment-token ownership stays the single source of truth.
+    ///
+    /// Deliberately does not schedule a deadline here: the countdown must not begin merely because a
+    /// seek was requested. `pollProgressiveRandomSkimSegmentSeek`, driven by the existing 0.25s
+    /// update timer (no second timer), starts the deadline only once the seek is confirmed.
+    private func advanceToNextProgressiveRandomSkimSegment(sessionID: Int, queueItemID: String) {
+        guard var context = skimPreviewPlanContext, context.sessionID == sessionID else { return }
+        let nextIndex = context.progressiveRandomSkimSegmentIndex + 1
+        guard nextIndex < context.progressiveRandomSkimSegments.count else { return }
+        let segment = context.progressiveRandomSkimSegments[nextIndex]
+        context.progressiveRandomSkimSegmentIndex = nextIndex
+        skimPreviewPlanContext = context
+
+        let now = CACurrentMediaTime()
+        skimPlaybackStartIntent.begin(
+            windowID: debugIdentity,
+            queueItemID: queueItemID,
+            playbackSessionID: sessionID,
+            startMode: .beginning,
+            skipIntroSeconds: segment.startOffsetSeconds,
+            previewDurationSeconds: segment.durationSeconds,
+            startRandomValue: 0,
+            createdUptime: now,
+            retryWindow: skimStartIntentRetryWindow
+        )
+        if let assignment = skimMediaAssignments.current {
+            skimPlaybackStartIntent.bindAssignment(playbackSessionID: sessionID,
+                                                   queueItemID: queueItemID,
+                                                   assignment: assignment,
+                                                   wrapperDiagnostic: skimMediaWrapperDiagnostic(player.media))
+        }
+        skimPreviewSessionScheduler.begin(
+            sessionID: sessionID,
+            queueItemID: queueItemID,
+            plannedDurationSeconds: segment.durationSeconds,
+            createdUptime: now,
+            metadataRetryWindow: skimPreviewMetadataRetryWindow
+        )
+        if let mediaDurationSeconds = currentSkimPreviewMediaDurationSeconds(context: context) {
+            _ = skimPlaybackStartIntent.updateMetadata(
+                playbackSessionID: sessionID,
+                queueItemID: queueItemID,
+                durationSeconds: mediaDurationSeconds,
+                readiness: .final
+            )
+            activePreviewRange = PreviewRangePlanner.range(
+                startSeconds: segment.startOffsetSeconds,
+                previewDurationSeconds: segment.durationSeconds,
+                totalDurationSeconds: mediaDurationSeconds
+            )
+            transport.update()
+        }
+        activePreviewConfiguredDuration = segment.durationSeconds
+
+        DebugConsoleController.log(
+            "preview",
+            "progressiveRandomSkimSegmentAdvance: window=\(debugIdentity) session=\(sessionID) index=\(nextIndex) start=\(String(format: "%.2f", segment.startOffsetSeconds))s duration=\(String(format: "%.2f", segment.durationSeconds))s"
+        )
+
+        pollProgressiveRandomSkimSegmentSeek()
+    }
+
+    /// Progressive Random Skim (P30): re-evaluates the pending segment-transition seek on every tick
+    /// of the existing 0.25s update timer (see `startUpdateTimer`) — no dedicated timer is created.
+    /// Only once `SkimPlaybackStartIntentCoordinator.evaluate` reports `.confirmed` (playback has
+    /// actually reached the segment's start, not merely been asked to) does this register readiness
+    /// and let the normal deadline-scheduling path take over for that segment's countdown.
+    private func pollProgressiveRandomSkimSegmentSeek() {
+        guard configuredSkimEnabled, configuredProgressiveRandomSkimEnabled,
+              !isPlayerSessionPaused,
+              let context = skimPreviewPlanContext,
+              context.sessionID == currentPlaybackSessionID,
+              context.progressiveRandomSkimSegmentIndex > 0,
+              context.progressiveRandomSkimSegmentIndex < context.progressiveRandomSkimSegments.count,
+              let intent = skimPlaybackStartIntent.state,
+              intent.playbackSessionID == context.sessionID,
+              !intent.seekWasConfirmed,
+              intent.status != .userOverridden,
+              intent.status != .exhausted,
+              let currentURL = currentMediaURL,
+              currentURL.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path,
+              let assignment = skimMediaAssignments.current,
+              player.media?.url?.standardizedFileURL.path == context.playbackURL.standardizedFileURL.path else { return }
+
+        let now = CACurrentMediaTime()
+        let observedOffset = max(0, Double(player.time.intValue) / 1000)
+        let action = skimPlaybackStartIntent.evaluate(
+            playbackSessionID: context.sessionID,
+            queueItemID: context.queueItemID,
+            assignment: assignment,
+            observedOffsetSeconds: observedOffset,
+            isSeekable: player.isSeekable,
+            isPaused: isPlayerSessionPaused,
+            now: now
+        )
+        switch action {
+        case .requestSeek(let offset, let attempt, let reason):
+            let targetMs = Int((offset * 1000).rounded())
+            player.time = VLCTime(int: Int32(min(targetMs, Int(Int32.max))))
+            DebugConsoleController.log(
+                "preview",
+                "progressiveRandomSkimSeekRequested: window=\(debugIdentity) session=\(context.sessionID) index=\(context.progressiveRandomSkimSegmentIndex) desired=\(String(format: "%.2f", offset))s attempt=\(attempt) observed=\(String(format: "%.2f", observedOffset))s reason=\(reason)"
+            )
+        case .confirmed(let observed):
+            DebugConsoleController.log(
+                "preview",
+                "progressiveRandomSkimSeekConfirmed: window=\(debugIdentity) session=\(context.sessionID) index=\(context.progressiveRandomSkimSegmentIndex) observed=\(String(format: "%.2f", observed))s"
+            )
+            let segment = context.progressiveRandomSkimSegments[context.progressiveRandomSkimSegmentIndex]
+            let update = skimPreviewSessionScheduler.registerReadiness(
+                sessionID: context.sessionID,
+                queueItemID: context.queueItemID,
+                source: .relocation,
+                now: now,
+                effectiveDurationSeconds: segment.durationSeconds
+            )
+            applySkimPreviewDeadlineUpdate(update,
+                                           sessionID: context.sessionID,
+                                           queueItemID: context.queueItemID,
+                                           source: .relocation,
+                                           reason: "progressive-random-skim-segment-confirmed")
+        case .exhausted:
+            DebugConsoleController.log(
+                level: .error,
+                category: "preview",
+                message: "progressiveRandomSkimSeekExhausted: window=\(debugIdentity) session=\(context.sessionID) index=\(context.progressiveRandomSkimSegmentIndex) observed=\(String(format: "%.2f", observedOffset))s"
+            )
+        case .stale(let reason):
+            logSkimPreviewStaleCallback(sessionID: context.sessionID, reason: "progressive-skim-seek-\(reason)")
+        case .none:
+            break
+        }
+    }
+
     private func retrySkimPreviewMetadataIfNeeded() {
         guard configuredSkimEnabled,
               !isPlayerSessionPaused,
@@ -3262,7 +3652,11 @@ class PlayerWindowController: NSWindowController {
               intent.playbackSessionID == context.sessionID,
               !intent.seekWasConfirmed,
               intent.status != .userOverridden,
-              intent.status != .exhausted else { return }
+              intent.status != .exhausted,
+              // Progressive Random Skim segments after the first are owned exclusively by
+              // `pollProgressiveRandomSkimSegmentSeek`; this retry path must not re-evaluate the
+              // intent against segment 0's plan while a later segment's seek is pending confirmation.
+              context.progressiveRandomSkimSegmentIndex == 0 else { return }
         let now = CACurrentMediaTime()
         if currentSkimPreviewMediaDurationSeconds(context: context) != nil {
             applySkimPreviewReadiness(sessionID: context.sessionID,
@@ -3675,6 +4069,10 @@ class PlayerWindowController: NSWindowController {
                   handshake.expectedURL.lastPathComponent)
             cancelPlaybackStartHandshake(reason: "progress-retry-exhausted", suppressLog: true)
             clearCompletionSequence(reason: "handshake-no-progress")
+            // Media was assigned and reported "playing" at least once, but never confirmed real
+            // playback progress even after a same-session player rebuild — the existing readiness
+            // process is exhausted. Automatic playback failure (P32, Part 3).
+            handleAutomaticPlaybackFailure(reason: "handshake-no-progress", failedURL: handshake.expectedURL)
             return
         }
 
@@ -3711,6 +4109,10 @@ class PlayerWindowController: NSWindowController {
               handshake.expectedURL.lastPathComponent)
         cancelPlaybackStartHandshake(reason: "retry-exhausted", suppressLog: true)
         clearCompletionSequence(reason: "handshake-failure")
+        // Media was assigned but never once reached a playing state — including after a
+        // same-session player rebuild attempted recovery. The existing readiness process is
+        // exhausted with no playable media ever established. Automatic playback failure (P32, Part 3).
+        handleAutomaticPlaybackFailure(reason: "handshake-no-playing", failedURL: handshake.expectedURL)
     }
 
     private func rebuildPlayerAfterFailedStart(for handshake: PlaybackStartHandshake) {
@@ -4294,6 +4696,7 @@ class PlayerWindowController: NSWindowController {
                 self.updatePlaybackProgressSnapshot()
             }
             self.retrySkimPreviewMetadataIfNeeded()
+            self.pollProgressiveRandomSkimSegmentSeek()
             self.evaluateCompletionWatchdog(source: "watchdog")
             // M6 + M4: cosmetic transport refresh, gated for efficiency.
             // Skipped when the window is not effectively visible (minimized or occluded)
@@ -5021,18 +5424,14 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
             }
 
         case .error:
-            let filename = player.media?.url?.lastPathComponent ?? "unknown file"
-            NSLog("[dwb-playback] state=error   media=%@", filename)
+            // Strongest failure signal VLCKit offers: a terminal player error for the media it is
+            // currently carrying. Routed through the same automatic-failure handling as an exhausted
+            // playback-start handshake (P32, Part 3) instead of a blocking alert, so a corrupt file
+            // is skipped without requiring the user to dismiss anything or press Play/Next.
+            NSLog("[dwb-playback] state=error   media=%@", capturedMediaName)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.releasePlaybackSleepAssertion()
-                self.resetPlaybackCompletionSignals(reason: "state-error")
-                let alert = NSAlert()
-                alert.messageText     = "Playback Error"
-                alert.informativeText = "Could not play \"\(filename)\". The file may be unsupported or corrupt."
-                alert.alertStyle      = .warning
-                alert.addButton(withTitle: "OK")
-                if let window = self.window { alert.beginSheetModal(for: window) }
+                self.handleAutomaticPlaybackFailure(reason: "vlc-error-state", failedURL: capturedMediaURL)
             }
 
         default:
@@ -5052,6 +5451,7 @@ extension PlayerWindowController: QueuePageViewDelegate {
         DebugConsoleController.log("queue", "select: displayIdx=\(index) source=queuePage")
         cancelSkimPreviewSession(reason: "queue-page-select")
         currentDisplayIndex = index
+        clearFailedStatusForCurrentItem()
         playCurrentItem(startReason: "queue-page-select")
     }
 

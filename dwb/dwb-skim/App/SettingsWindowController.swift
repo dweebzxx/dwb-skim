@@ -167,6 +167,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
     static func currentRandomPreviewDurationRange() -> ClosedRange<Int> { SkimSettingsStore.shared.snapshot().randomDurationRange }
     static func currentSkipIntroSeconds() -> Int { SkimSettingsStore.shared.snapshot().skipIntroSeconds }
+    static func isProgressiveRandomSkimEnabled() -> Bool { SkimSettingsStore.shared.snapshot().progressiveRandomSkimEnabled }
+    static func currentProgressiveRandomSkimIntensity() -> ProgressiveRandomSkimIntensity { SkimSettingsStore.shared.snapshot().progressiveRandomSkimIntensity }
+    static func setProgressiveRandomSkimIntensity(_ intensity: ProgressiveRandomSkimIntensity) { SkimSettingsStore.shared.setProgressiveRandomSkimIntensity(intensity) }
     static func currentStartPositionMode() -> String { SkimSettingsStore.shared.snapshot().startPositionMode }
     static func currentSkimPreviewStartMode() -> SkimPreviewStartMode {
         currentStartPositionMode() == startPositionModeBeginning ? .beginning : .random
@@ -215,6 +218,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private let randomMaximumField = NSTextField()
     private let startPositionControl = NSSegmentedControl()
     private let skipIntroField = NSTextField()
+    private let progressiveRandomSkimCheckbox = NSButton()
+    private let progressiveRandomSkimIntensityControl = NSSegmentedControl()
 
     private let audioSelectedLabel = NSTextField(labelWithString: "No audio track selected")
     private let audioUnavailableLabel = NSTextField(labelWithString: "")
@@ -435,6 +440,15 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         configureNumericField(randomMinimumField, placeholder: "5")
         configureNumericField(randomMaximumField, placeholder: "15")
         configureNumericField(skipIntroField, placeholder: "5")
+        configureCheckbox(progressiveRandomSkimCheckbox, title: "Progressive Random Skim")
+
+        progressiveRandomSkimIntensityControl.segmentCount = 3
+        progressiveRandomSkimIntensityControl.setLabel("Light", forSegment: 0)
+        progressiveRandomSkimIntensityControl.setLabel("Standard", forSegment: 1)
+        progressiveRandomSkimIntensityControl.setLabel("Thorough", forSegment: 2)
+        progressiveRandomSkimIntensityControl.target = self
+        progressiveRandomSkimIntensityControl.action = #selector(progressiveRandomSkimIntensityChanged(_:))
+        progressiveRandomSkimIntensityControl.setAccessibilityLabel("Progressive Random Skim coverage intensity")
 
         // The visual grid label is a sibling view, so AppKit does not associate it
         // with the field; each control carries its own human-facing label.
@@ -459,6 +473,10 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
                 row("Random maximum", secondsControl(randomMaximumField)),
                 row("Start position", startPositionControl),
                 row("Skip intro", secondsControl(skipIntroField)),
+                row(nil, progressiveRandomSkimCheckbox,
+                    helper: "Samples several short, randomized segments spread across videos 30 seconds or longer, always starting no earlier than Skip Intro."),
+                row("Coverage intensity", progressiveRandomSkimIntensityControl,
+                    helper: "How many Progressive Random Skim segments to sample. Standard matches the default behavior; Light samples fewer, Thorough samples more."),
             ]),
         ])
     }
@@ -961,6 +979,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         randomMaximumField.stringValue = String(skim.randomDurationRange.upperBound)
         startPositionControl.selectedSegment = skim.startPositionMode == Self.startPositionModeBeginning ? 0 : 1
         skipIntroField.stringValue = String(skim.skipIntroSeconds)
+        progressiveRandomSkimCheckbox.state = skim.progressiveRandomSkimEnabled ? .on : .off
+        progressiveRandomSkimIntensityControl.selectedSegment = Self.intensitySegment(for: skim.progressiveRandomSkimIntensity)
         updatePreviewRowVisibility()
 
         let audio = BackgroundAudioSettingsStore.shared.snapshot()
@@ -1046,6 +1066,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
             NotificationCenter.default.post(name: .debugConsoleSettingChanged, object: self)
         case verboseCheckbox:
             defaults.set(enabled, forKey: Self.verboseAutoplayTraceKey)
+        case progressiveRandomSkimCheckbox:
+            SkimSettingsStore.shared.setProgressiveRandomSkimEnabled(enabled)
         default: break
         }
     }
@@ -1075,6 +1097,24 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
 
     @objc private func startPositionChanged(_ sender: NSSegmentedControl) {
         Self.setStartPositionMode(sender.selectedSegment == 0 ? Self.startPositionModeBeginning : Self.startPositionModeRandom)
+    }
+
+    private static func intensitySegment(for intensity: ProgressiveRandomSkimIntensity) -> Int {
+        switch intensity {
+        case .light: return 0
+        case .standard: return 1
+        case .thorough: return 2
+        }
+    }
+
+    @objc private func progressiveRandomSkimIntensityChanged(_ sender: NSSegmentedControl) {
+        let intensity: ProgressiveRandomSkimIntensity
+        switch sender.selectedSegment {
+        case 0: intensity = .light
+        case 2: intensity = .thorough
+        default: intensity = .standard
+        }
+        Self.setProgressiveRandomSkimIntensity(intensity)
     }
 
     @objc private func queueOrderChanged(_ sender: NSPopUpButton) {

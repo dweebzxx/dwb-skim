@@ -44,7 +44,9 @@ final class PlaybackBarPresentationTests: XCTestCase {
         snapshot = SkimSettingsSnapshot(skimEnabled: true, imageDurationSeconds: 3, gifLoopCount: 1,
                                         videoAudioNormalizationEnabled: false, previewDurationMode: "random",
                                         fixedDurationSeconds: 10, randomDurationRange: 4...12,
-                                        startPositionMode: "beginning", skipIntroSeconds: 0, queueOrderMode: .sequential,
+                                        startPositionMode: "beginning", skipIntroSeconds: 0,
+                                        progressiveRandomSkimEnabled: false, progressiveRandomSkimIntensity: .standard,
+                                        queueOrderMode: .sequential,
                                         loopQueueEnabled: false)
         XCTAssertEqual(PlaybackBarPresentation.markers(settings: snapshot)[0].compactText, "Clip Random 4–12s")
     }
@@ -127,6 +129,8 @@ final class PlaybackBarPresentationTests: XCTestCase {
                              videoAudioNormalizationEnabled: false,
                              previewDurationMode: "fixed", fixedDurationSeconds: 10,
                              randomDurationRange: 4...12, startPositionMode: start,
-                             skipIntroSeconds: intro, queueOrderMode: queue, loopQueueEnabled: false)
+                             skipIntroSeconds: intro, progressiveRandomSkimEnabled: false,
+                             progressiveRandomSkimIntensity: .standard,
+                             queueOrderMode: queue, loopQueueEnabled: false)
     }
 }

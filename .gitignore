@@ -57,11 +57,10 @@ dwb/*.xcworkspace
 # Node and environment
 node_modules/
 
-# v2.4.0 private-repo workflow Tier 2 block (whole-directory model)
+# v2.4.1 Host Workflow private-control adapters (whole-directory scripts model)
 /AGENTS.md
 /CLAUDE.md
 /metadata-schema.json
-/canonical-blocks-v2.4.0.md
 /skills-lock.json
 /.agents/
 /.agents
@@ -70,6 +69,8 @@ node_modules/
 /audit/
 /.private/
 /.antigravitycli/
+/tools/
+/workflow-templates/
 /build-report-logs/launchers/
 /build-report-logs/logs/
 /build-report-logs/prompts/

@@ -17,6 +17,8 @@ struct SkimSettingsSnapshot: Equatable {
     let randomDurationRange: ClosedRange<Int>
     let startPositionMode: String
     let skipIntroSeconds: Int
+    let progressiveRandomSkimEnabled: Bool
+    let progressiveRandomSkimIntensity: ProgressiveRandomSkimIntensity
     let queueOrderMode: QueueOrderMode
     let loopQueueEnabled: Bool
 }
@@ -66,6 +68,11 @@ final class SkimSettingsStore {
                 ?? SettingsDefaultsRegistry.Defaults.queueOrderMode
         )
         let queueMode = QueueOrderMode(rawValue: queueRaw) ?? .sequential
+        let intensityRaw = SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity(
+            defaults.string(forKey: SettingsDefaultsRegistry.Keys.progressiveRandomSkimIntensity)
+                ?? SettingsDefaultsRegistry.Defaults.progressiveRandomSkimIntensity
+        )
+        let intensity = ProgressiveRandomSkimIntensity(rawValue: intensityRaw) ?? .standard
 
         persistNormalized(imageDuration: imageDuration,
                           gifLoops: gifLoops,
@@ -85,6 +92,8 @@ final class SkimSettingsStore {
                                     randomDurationRange: range,
                                     startPositionMode: start,
                                     skipIntroSeconds: skip,
+                                    progressiveRandomSkimEnabled: defaults.bool(forKey: SettingsDefaultsRegistry.Keys.progressiveRandomSkimEnabled),
+                                    progressiveRandomSkimIntensity: intensity,
                                     queueOrderMode: queueMode,
                                     loopQueueEnabled: defaults.bool(forKey: SettingsDefaultsRegistry.Keys.loopQueueEnabled))
     }
@@ -146,6 +155,15 @@ final class SkimSettingsStore {
     func setSkipIntroSeconds(_ value: Int) {
         setPreviewValue(SettingsDefaultsRegistry.validatedSkipIntroSeconds(value),
                         forKey: SettingsDefaultsRegistry.Keys.skipIntroSeconds)
+    }
+
+    func setProgressiveRandomSkimEnabled(_ enabled: Bool) {
+        setPreviewValue(enabled, forKey: SettingsDefaultsRegistry.Keys.progressiveRandomSkimEnabled)
+    }
+
+    func setProgressiveRandomSkimIntensity(_ intensity: ProgressiveRandomSkimIntensity) {
+        setPreviewValue(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity(intensity.rawValue),
+                        forKey: SettingsDefaultsRegistry.Keys.progressiveRandomSkimIntensity)
     }
 
     func setQueueOrderMode(_ mode: QueueOrderMode) {

@@ -1,0 +1,1552 @@
+{
+  "workflow_version": "v2.4.1",
+  "catalog_version": "metadata-contract-fixtures-v1",
+  "schema_asset": "metadata-schema.json",
+  "description": "Positive and negative instances for every production branch and addressable definition in the Host metadata schema. Each case names the schema root or definition it targets, states whether validation must pass or fail, and carries a diagnostic category when failure is intended. Instances are minimal and synthetic: no project secret, no absolute historical-project path, and no complete historical record.",
+  "target_values": [
+    "root",
+    "definitions.provisional_metadata_full_v1",
+    "definitions.finalized_metadata_compact_v1",
+    "definitions.continuation_state",
+    "definitions.metadata_evidence_index",
+    "definitions.legacy_full_metadata_v2_4_1"
+  ],
+  "diagnostic_categories": [
+    "absolute-path",
+    "branch-discriminator",
+    "cross-branch-mixture",
+    "identity-mismatch",
+    "invalid-archive-candidates",
+    "invalid-check-state",
+    "invalid-enum",
+    "invalid-path-shape",
+    "invalid-sha256",
+    "legacy-conditional-violation",
+    "missing-required",
+    "negative-count",
+    "out-of-range",
+    "path-escape",
+    "prohibited-field",
+    "redundant-flat-field",
+    "status-detail-disagreement",
+    "unknown-field"
+  ],
+  "mutation_semantics": "A case is materialized by deep-copying its base instance and applying mutations. set uses dotted paths, with a numeric segment addressing a list index; remove deletes the addressed key. A case with no mutations validates its base instance unchanged.",
+  "base_instances": {
+    "provisional": {
+      "agent_exit_code": null,
+      "agent_exited_at": null,
+      "agent_started": false,
+      "agent_started_at": null,
+      "agents_md_authority": "bootstrap",
+      "agents_md_authorized": true,
+      "agents_md_claude_same_inode": true,
+      "agents_md_drift_items": [],
+      "agents_md_last_verified_at": "2026-08-04",
+      "agents_md_maintenance_score": 1,
+      "agents_md_present": true,
+      "agents_md_prior_authority": "bootstrap",
+      "agents_md_prior_maintenance_score": 1,
+      "archive_eligible": false,
+      "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+      "artifact_stem_agreement": true,
+      "artifacts": {
+        "clean_log": "build-report-logs/logs/clean-logs/26-08-04_P12_metadata-contract-fixture-clean.log",
+        "continuation_state": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-continuation-state.json",
+        "launcher": "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+        "meta_log": "build-report-logs/logs/meta-logs/26-08-04_P12_metadata-contract-fixture-meta.log",
+        "metadata": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-metadata.json",
+        "nonstandard_outputs": [],
+        "prompt": "build-report-logs/prompts/26-08-04_P12_metadata-contract-fixture-prompt.txt",
+        "raw_log": "build-report-logs/logs/raw-logs/26-08-04_P12_metadata-contract-fixture-raw.log",
+        "report": "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md"
+      },
+      "bootstrap_or_adoption_state": "complete",
+      "build_result": {
+        "artifacts": [],
+        "commands": [],
+        "kind": "build",
+        "limitations": [],
+        "outcome": "unknown"
+      },
+      "capture_process_exit_status": null,
+      "capture_status_contract_id": null,
+      "code_agent": "x",
+      "code_agent_exit_status": null,
+      "code_agent_exit_status_available": false,
+      "code_agent_exit_status_source": null,
+      "collector_clean_log_ready": false,
+      "collector_completed_at": null,
+      "collector_exit_status": null,
+      "collector_status": "pending",
+      "continuation_state_finalized": true,
+      "continuation_state_path": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-continuation-state.json",
+      "date": "2026-08-04",
+      "duration_seconds": null,
+      "effort": "x",
+      "ending_repository_state": {
+        "private": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "private"
+        },
+        "project": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "project"
+        }
+      },
+      "failed_attempt": false,
+      "failed_attempt_number": null,
+      "files_created": [],
+      "files_modified": [],
+      "files_read": [],
+      "finalized_at": null,
+      "gitignore_private_controls_valid": true,
+      "inherited_changes": [],
+      "initialized_at": "2026-08-04T10:00:00Z",
+      "invocation_mode": "direct-interactive-launcher",
+      "issues_encountered": [],
+      "launcher_path": "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+      "launcher_saved": true,
+      "maintenance_score_change_validated": true,
+      "maintenance_score_decreased": false,
+      "metadata_evidence_index_path": null,
+      "metadata_evidence_index_sha256": null,
+      "metadata_finalized": false,
+      "metadata_format_version": "full-provisional-v1",
+      "metadata_path": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-metadata.json",
+      "metadata_schema_path": ".private/metadata-schema.json",
+      "metadata_schema_present": true,
+      "metadata_schema_valid": true,
+      "model": "x",
+      "model_confirmation_reference": "x",
+      "model_selection_confirmed": true,
+      "next_prompt_template": "lean",
+      "objective": "x",
+      "pass_id": "P12",
+      "pass_name": "x",
+      "pass_produced_changes": [],
+      "pass_type": "implementation",
+      "post_pass_completed_at": null,
+      "pre_pass_completed_at": "2026-08-04T10:00:00Z",
+      "private_repo_initialized": true,
+      "product_result": "unknown",
+      "project_name": "x",
+      "project_root": "/synthetic/fixture-project",
+      "prompt_path": "build-report-logs/prompts/26-08-04_P12_metadata-contract-fixture-prompt.txt",
+      "prompt_saved": true,
+      "prompt_template": "lean",
+      "recommended_next_prompt": {
+        "action": "x",
+        "constraints": [],
+        "objective": "x",
+        "required_context": [],
+        "suggested_model_and_effort": "x",
+        "template": "lean"
+      },
+      "report_metadata_mirrors_agree": true,
+      "report_path": "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md",
+      "report_template_path": ".private/workflow-templates/pass-report-template.md",
+      "report_template_present": true,
+      "report_valid": true,
+      "runtime_identity": {
+        "active": false,
+        "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+        "capture_pid": null,
+        "capture_process_start_marker": null,
+        "code_agent_binary": null,
+        "code_agent_pid": null,
+        "code_agent_process_start_marker": null,
+        "launcher_pid": null,
+        "launcher_process_start_marker": null,
+        "lifecycle_session_id": null,
+        "pass_id": "P12",
+        "process_group_id": null,
+        "raw_log_path": "build-report-logs/logs/raw-logs/26-08-04_P12_metadata-contract-fixture-raw.log",
+        "registered_at": null
+      },
+      "session": {
+        "conversation_id": "x",
+        "resume_command": "x",
+        "session_id": "x",
+        "session_slug": "x"
+      },
+      "skill_authorization": {
+        "authorization_performed": false,
+        "lock_path": ".private/skills-lock.json",
+        "skills_changed": [],
+        "skills_lock_valid": true,
+        "skills_used": [],
+        "validation_errors": []
+      },
+      "starting_repository_state": {
+        "private": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "private"
+        },
+        "project": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "project"
+        }
+      },
+      "status": "completed",
+      "telemetry": {
+        "cached_input_tokens": 0,
+        "completeness": "complete",
+        "input_tokens": 0,
+        "legacy_total_scope": "cumulative-session",
+        "limitations": [],
+        "output_tokens": 0,
+        "parser_contract": "provider-telemetry-v1",
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+        "verified_total_scope": "cumulative-session"
+      },
+      "termination_detail": null,
+      "total_tokens_used": null,
+      "unresolved_issues": [],
+      "verification": [],
+      "workflow_files_modified": [],
+      "workflow_finalization_result": null,
+      "workflow_version": "v2.4.1",
+      "write_scope": {
+        "authorized_paths": [],
+        "manifest_path": null,
+        "manifest_required": false,
+        "manifest_valid": null,
+        "unauthorized_changes": [],
+        "write_scope_valid": true
+      }
+    },
+    "compact": {
+      "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+      "changes": {
+        "files_created_count": 0,
+        "files_modified_count": 0,
+        "files_read_count": 0,
+        "inherited_change_count": 0,
+        "pass_produced_change_count": 0,
+        "workflow_file_change_count": 0,
+        "write_scope_valid": true
+      },
+      "checks": {
+        "agents_md_authorized": true,
+        "archive_eligible": true,
+        "continuation_state_finalized": true,
+        "metadata_schema_valid": true,
+        "report_metadata_agreement": true,
+        "report_valid": true
+      },
+      "code_agent": "x",
+      "date": "2026-08-04",
+      "duration_seconds": 741,
+      "effort": "high",
+      "evidence": {
+        "index_path": "build-report-logs/tmp/26-08-04_P12_metadata-contract-fixture/runtime/metadata-evidence-index.json",
+        "index_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "lifecycle": {
+        "agent_exited_at": "2026-08-04T10:00:00Z",
+        "agent_started_at": "2026-08-04T10:00:00Z",
+        "capture_process_exit_status": 0,
+        "code_agent_exit_status": 0,
+        "code_agent_exit_status_source": "darwin-script-child-status-propagation-v1",
+        "collector_exit_status": 0,
+        "collector_status": "succeeded",
+        "finalized_at": "2026-08-04T10:00:00Z",
+        "termination_detail": "normal-zero",
+        "workflow_finalization_result": "succeeded"
+      },
+      "metadata_finalized": true,
+      "metadata_format_version": "compact-final-v1",
+      "model": "x",
+      "objective": "x",
+      "pass_id": "P12",
+      "pass_name": "x",
+      "pass_type": "implementation",
+      "project_name": "x",
+      "project_root": "/synthetic/fixture-project",
+      "result": {
+        "build_outcome": "succeeded",
+        "product_result": "succeeded",
+        "recommended_next_pass": "x",
+        "unresolved_issue_count": 0
+      },
+      "session": {
+        "conversation_id": null,
+        "resume_command": "codex resume 019fca87-77e3-77f3-ae06-dd88df6d5459",
+        "session_id": "019fca87-77e3-77f3-ae06-dd88df6d5459",
+        "session_slug": null
+      },
+      "status": "completed",
+      "telemetry": {
+        "cached_input_tokens": 4128896,
+        "completeness": "complete",
+        "input_tokens": 216752,
+        "legacy_total_scope": "cumulative-session",
+        "limitations": [],
+        "output_tokens": 23152,
+        "parser_contract": "provider-telemetry-v1",
+        "reasoning_tokens": 2826,
+        "total_tokens": 239904,
+        "verified_total_scope": "cumulative-session"
+      },
+      "total_tokens_used": 239904,
+      "workflow_version": "v2.4.1"
+    },
+    "continuation": {
+      "agent_started": true,
+      "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+      "capture_process_exit_status": 0,
+      "code_agent_exit_status": 0,
+      "collector_clean_log_ready": true,
+      "collector_exit_status": 0,
+      "collector_status": "succeeded",
+      "finalized_at": "2026-08-04T10:00:00Z",
+      "pass_id": "P12",
+      "repositories": [
+        {
+          "entries": [],
+          "repository": "project"
+        },
+        {
+          "entries": [],
+          "repository": "private"
+        }
+      ],
+      "runtime_identity": {
+        "active": false,
+        "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+        "capture_pid": 101,
+        "capture_process_start_marker": "m2",
+        "code_agent_binary": "/usr/local/bin/codex",
+        "code_agent_pid": 102,
+        "code_agent_process_start_marker": "m3",
+        "launcher_pid": 100,
+        "launcher_process_start_marker": "m1",
+        "lifecycle_session_id": "ls-1",
+        "pass_id": "P12",
+        "process_group_id": null,
+        "raw_log_path": "build-report-logs/logs/raw-logs/26-08-04_P12_metadata-contract-fixture-raw.log",
+        "registered_at": "2026-08-04T10:00:00Z"
+      },
+      "workflow_finalization_result": "succeeded",
+      "workflow_version": "v2.4.1"
+    },
+    "evidence_index": {
+      "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+      "created_at": "2026-08-04T10:00:00Z",
+      "entries": [
+        {
+          "byte_length": 4096,
+          "path": "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md",
+          "path_candidates": [
+            "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md",
+            "build-report-logs/reports/reports-archive/26-08-04_P12_metadata-contract-fixture-report.md"
+          ],
+          "role": "report",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "byte_length": 8192,
+          "path": "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+          "path_candidates": [
+            "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+            "build-report-logs/launchers/launchers-archive/26-08-04_P12_metadata-contract-fixture-launcher.zsh"
+          ],
+          "role": "launcher",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        {
+          "byte_length": 1024,
+          "path": "build-report-logs/tmp/26-08-04_P12_metadata-contract-fixture/runtime/provider-telemetry.json",
+          "path_candidates": [
+            "build-report-logs/tmp/26-08-04_P12_metadata-contract-fixture/runtime/provider-telemetry.json"
+          ],
+          "role": "provider_telemetry",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      ],
+      "index_version": "metadata-evidence-index-v1",
+      "pass_id": "P12",
+      "workflow_version": "v2.4.1"
+    },
+    "legacy": {
+      "agent_exit_code": null,
+      "agent_exited_at": null,
+      "agent_started": false,
+      "agent_started_at": null,
+      "agents_md_authority": "bootstrap",
+      "agents_md_authorized": true,
+      "agents_md_claude_same_inode": true,
+      "agents_md_drift_items": [],
+      "agents_md_last_verified_at": "2026-08-04",
+      "agents_md_maintenance_score": 1,
+      "agents_md_present": true,
+      "agents_md_prior_authority": "bootstrap",
+      "agents_md_prior_maintenance_score": 1,
+      "archive_eligible": false,
+      "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+      "artifact_stem_agreement": true,
+      "artifacts": {
+        "clean_log": "build-report-logs/logs/clean-logs/26-08-04_P12_metadata-contract-fixture-clean.log",
+        "continuation_state": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-continuation-state.json",
+        "launcher": "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+        "meta_log": "build-report-logs/logs/meta-logs/26-08-04_P12_metadata-contract-fixture-meta.log",
+        "metadata": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-metadata.json",
+        "nonstandard_outputs": [],
+        "prompt": "build-report-logs/prompts/26-08-04_P12_metadata-contract-fixture-prompt.txt",
+        "raw_log": "build-report-logs/logs/raw-logs/26-08-04_P12_metadata-contract-fixture-raw.log",
+        "report": "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md"
+      },
+      "bootstrap_or_adoption_state": "complete",
+      "build_result": {
+        "artifacts": [],
+        "commands": [],
+        "kind": "build",
+        "limitations": [],
+        "outcome": "unknown"
+      },
+      "capture_process_exit_status": null,
+      "code_agent": "x",
+      "code_agent_exit_status": null,
+      "code_agent_exit_status_available": false,
+      "collector_clean_log_ready": false,
+      "collector_completed_at": null,
+      "collector_exit_status": null,
+      "collector_status": "pending",
+      "continuation_state_finalized": true,
+      "continuation_state_path": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-continuation-state.json",
+      "conversation_id": null,
+      "date": "2026-08-04",
+      "duration_seconds": null,
+      "effort": "x",
+      "ending_repository_state": {
+        "private": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "private"
+        },
+        "project": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "project"
+        }
+      },
+      "exit_status_agreement": false,
+      "failed_attempt": false,
+      "failed_attempt_number": null,
+      "files_created": [],
+      "files_modified": [],
+      "files_read": [],
+      "finalized_at": null,
+      "gitignore_private_controls_valid": true,
+      "inherited_changes": [],
+      "initialized_at": "2026-08-04T10:00:00Z",
+      "invocation_mode": "direct-interactive-launcher",
+      "issues_encountered": [],
+      "launcher_path": "build-report-logs/launchers/26-08-04_P12_metadata-contract-fixture-launcher.zsh",
+      "launcher_saved": true,
+      "maintenance_score_change_validated": true,
+      "maintenance_score_decreased": false,
+      "metadata_finalized": false,
+      "metadata_path": "build-report-logs/metadata-reports/26-08-04_P12_metadata-contract-fixture-metadata.json",
+      "metadata_schema_path": ".private/metadata-schema.json",
+      "metadata_schema_present": true,
+      "metadata_schema_valid": true,
+      "model": "x",
+      "model_confirmation_reference": "x",
+      "model_selection_confirmed": true,
+      "next_prompt_template": "lean",
+      "objective": "x",
+      "pass_id": "P12",
+      "pass_name": "x",
+      "pass_produced_changes": [],
+      "pass_type": "implementation",
+      "post_pass_completed_at": null,
+      "pre_pass_completed_at": "2026-08-04T10:00:00Z",
+      "private_repo_initialized": true,
+      "product_result": "unknown",
+      "project_name": "x",
+      "project_root": "/synthetic/fixture-project",
+      "prompt_path": "build-report-logs/prompts/26-08-04_P12_metadata-contract-fixture-prompt.txt",
+      "prompt_saved": true,
+      "prompt_template": "lean",
+      "recommended_next_prompt": {
+        "action": "x",
+        "constraints": [],
+        "objective": "x",
+        "required_context": [],
+        "suggested_model_and_effort": "x",
+        "template": "lean"
+      },
+      "report_metadata_mirrors_agree": true,
+      "report_path": "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md",
+      "report_template_path": ".private/workflow-templates/pass-report-template.md",
+      "report_template_present": true,
+      "report_valid": true,
+      "resume_command": null,
+      "runtime_identity": {
+        "active": false,
+        "artifact_stem": "26-08-04_P12_metadata-contract-fixture",
+        "capture_pid": null,
+        "capture_process_start_marker": null,
+        "code_agent_binary": null,
+        "code_agent_pid": null,
+        "code_agent_process_start_marker": null,
+        "launcher_pid": null,
+        "launcher_process_start_marker": null,
+        "lifecycle_session_id": null,
+        "pass_id": "P12",
+        "process_group_id": null,
+        "raw_log_path": "build-report-logs/logs/raw-logs/26-08-04_P12_metadata-contract-fixture-raw.log",
+        "registered_at": null
+      },
+      "session": {
+        "conversation_id": "x",
+        "resume_command": "x",
+        "session_id": "x",
+        "session_slug": "x"
+      },
+      "session_id": null,
+      "session_slug": null,
+      "skill_authorization": {
+        "authorization_performed": false,
+        "lock_path": ".private/skills-lock.json",
+        "skills_changed": [],
+        "skills_lock_valid": true,
+        "skills_used": [],
+        "validation_errors": []
+      },
+      "starting_repository_state": {
+        "private": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "private"
+        },
+        "project": {
+          "branch": "main",
+          "entries": [],
+          "head": "0000000000000000000000000000000000000000",
+          "present": true,
+          "repository": "project"
+        }
+      },
+      "status": "completed",
+      "telemetry": {
+        "cached_input_tokens": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "total_tokens": null
+      },
+      "telemetry_limitations": [],
+      "tokens_cached_input": null,
+      "tokens_input": null,
+      "tokens_output": null,
+      "tokens_reasoning": null,
+      "tokens_total": null,
+      "unresolved_issues": [],
+      "verification": [],
+      "workflow_files_modified": [],
+      "workflow_finalization_result": null,
+      "workflow_version": "v2.4.1",
+      "write_scope": {
+        "authorized_paths": [],
+        "manifest_path": null,
+        "manifest_required": false,
+        "manifest_valid": null,
+        "unauthorized_changes": [],
+        "write_scope_valid": true
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "root-provisional-accepted",
+      "description": "A detailed working record is accepted through the production root and selects the provisional branch.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "pass"
+    },
+    {
+      "id": "root-compact-accepted",
+      "description": "A finalized compact record is accepted through the production root and selects the compact branch.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "pass"
+    },
+    {
+      "id": "branch-provisional-direct",
+      "description": "The provisional branch validates its own instance when addressed directly.",
+      "target": "definitions.provisional_metadata_full_v1",
+      "base_instance": "provisional",
+      "expect": "pass"
+    },
+    {
+      "id": "branch-compact-direct",
+      "description": "The compact branch validates its own instance when addressed directly.",
+      "target": "definitions.finalized_metadata_compact_v1",
+      "base_instance": "compact",
+      "expect": "pass"
+    },
+    {
+      "id": "provisional-with-finalized-true-rejected",
+      "description": "metadata_finalized=true contradicts the provisional discriminator and matches no branch.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "metadata_finalized": true
+        }
+      },
+      "diagnostic_category": "branch-discriminator"
+    },
+    {
+      "id": "compact-with-finalized-false-rejected",
+      "description": "metadata_finalized=false contradicts the compact discriminator.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "metadata_finalized": false
+        }
+      },
+      "diagnostic_category": "branch-discriminator"
+    },
+    {
+      "id": "provisional-with-compact-version-rejected",
+      "description": "A provisional record claiming compact-final-v1 satisfies neither branch.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "metadata_format_version": "compact-final-v1"
+        }
+      },
+      "diagnostic_category": "branch-discriminator"
+    },
+    {
+      "id": "compact-with-provisional-version-rejected",
+      "description": "A compact record claiming full-provisional-v1 satisfies neither branch.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "metadata_format_version": "full-provisional-v1"
+        }
+      },
+      "diagnostic_category": "branch-discriminator"
+    },
+    {
+      "id": "missing-format-version-rejected",
+      "description": "Without the discriminator the root cannot select a branch.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "remove": [
+          "metadata_format_version"
+        ]
+      },
+      "diagnostic_category": "missing-required"
+    },
+    {
+      "id": "cross-branch-compact-plus-provisional-array",
+      "description": "A compact record carrying a provisional detail array is a cross-branch mixture.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "files_read": []
+        }
+      },
+      "diagnostic_category": "cross-branch-mixture"
+    },
+    {
+      "id": "cross-branch-provisional-plus-compact-group",
+      "description": "A provisional record carrying a compact grouped object is a cross-branch mixture.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle": {
+            "agent_started_at": "2026-08-04T10:00:00Z"
+          }
+        }
+      },
+      "diagnostic_category": "cross-branch-mixture"
+    },
+    {
+      "id": "provisional-rejects-exit-status-agreement",
+      "description": "The removed agreement field is not accepted in the provisional production branch.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "exit_status_agreement": true
+        }
+      },
+      "diagnostic_category": "prohibited-field"
+    },
+    {
+      "id": "compact-rejects-exit-status-agreement",
+      "description": "The removed agreement field is not accepted in the compact production branch.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "exit_status_agreement": false
+        }
+      },
+      "diagnostic_category": "prohibited-field"
+    },
+    {
+      "id": "compact-rejects-flat-tokens-total",
+      "description": "compact-final-v1 does not emit the redundant flat field tokens_total; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_total": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-tokens-input",
+      "description": "compact-final-v1 does not emit the redundant flat field tokens_input; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_input": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-tokens-cached-input",
+      "description": "compact-final-v1 does not emit the redundant flat field tokens_cached_input; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_cached_input": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-tokens-output",
+      "description": "compact-final-v1 does not emit the redundant flat field tokens_output; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_output": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-tokens-reasoning",
+      "description": "compact-final-v1 does not emit the redundant flat field tokens_reasoning; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_reasoning": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-session-id",
+      "description": "compact-final-v1 does not emit the redundant flat field session_id; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "session_id": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-conversation-id",
+      "description": "compact-final-v1 does not emit the redundant flat field conversation_id; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "conversation_id": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-session-slug",
+      "description": "compact-final-v1 does not emit the redundant flat field session_slug; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "session_slug": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-rejects-flat-resume-command",
+      "description": "compact-final-v1 does not emit the redundant flat field resume_command; its canonical value lives in telemetry or session.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "resume_command": null
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "provisional-rejects-flat-tokens-total",
+      "description": "The provisional branch also drops the flat mirrors.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "tokens_total": 1
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "provisional-rejects-telemetry-limitations",
+      "description": "Limitation codes live inside the telemetry object, not at the root.",
+      "target": "root",
+      "base_instance": "provisional",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry_limitations": []
+        }
+      },
+      "diagnostic_category": "redundant-flat-field"
+    },
+    {
+      "id": "compact-null-optional-telemetry-accepted",
+      "description": "Unknown metrics stay null so a caller can distinguish unknown from a measured zero.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "pass",
+      "mutations": {
+        "set": {
+          "total_tokens_used": null,
+          "telemetry.total_tokens": null,
+          "telemetry.input_tokens": null,
+          "telemetry.cached_input_tokens": null,
+          "telemetry.output_tokens": null,
+          "telemetry.reasoning_tokens": null,
+          "telemetry.verified_total_scope": "unknown",
+          "telemetry.legacy_total_scope": "unknown",
+          "telemetry.completeness": "unavailable",
+          "telemetry.limitations": [
+            "no-recognized-provider-output"
+          ],
+          "session.session_id": null,
+          "session.resume_command": null
+        }
+      }
+    },
+    {
+      "id": "compact-measured-zero-accepted",
+      "description": "A measured zero is a real value and is accepted alongside null-capable siblings.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "pass",
+      "mutations": {
+        "set": {
+          "total_tokens_used": 0,
+          "telemetry.total_tokens": 0,
+          "telemetry.input_tokens": 0,
+          "telemetry.cached_input_tokens": 0,
+          "telemetry.output_tokens": 0,
+          "telemetry.reasoning_tokens": 0
+        }
+      }
+    },
+    {
+      "id": "compact-invalid-completeness-rejected",
+      "description": "completeness is a closed enum.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry.completeness": "mostly"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-verified-scope-rejected",
+      "description": "verified_total_scope is a closed enum.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry.verified_total_scope": "guessed"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-legacy-scope-rejected",
+      "description": "legacy_total_scope permits only cumulative-session or unknown.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry.legacy_total_scope": "last-request"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-parser-contract-rejected",
+      "description": "parser_contract is fixed at provider-telemetry-v1.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry.parser_contract": "provider-telemetry-v2"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-status-source-rejected",
+      "description": "code_agent_exit_status_source accepts only the named Darwin contract.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.code_agent_exit_status_source": "assumed"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-termination-detail-rejected",
+      "description": "termination_detail is a closed enum; signal is not a member.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.termination_detail": "signal"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-invalid-product-result-rejected",
+      "description": "product_result is a closed enum.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "result.product_result": "mostly-worked"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "compact-exit-15-ambiguous-accepted",
+      "description": "A status of 15 cannot distinguish an ordinary exit from SIGTERM, so ambiguous-exit-or-signal is the correct label.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "pass",
+      "mutations": {
+        "set": {
+          "lifecycle.capture_process_exit_status": 15,
+          "lifecycle.code_agent_exit_status": 15,
+          "lifecycle.termination_detail": "ambiguous-exit-or-signal"
+        }
+      }
+    },
+    {
+      "id": "compact-exit-15-normal-zero-rejected",
+      "description": "15 labelled normal-zero is a false termination claim.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.capture_process_exit_status": 15,
+          "lifecycle.code_agent_exit_status": 15,
+          "lifecycle.termination_detail": "normal-zero"
+        }
+      },
+      "diagnostic_category": "status-detail-disagreement"
+    },
+    {
+      "id": "compact-exit-15-nonzero-rejected",
+      "description": "15 labelled nonzero drops the ambiguity the platform actually leaves.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.capture_process_exit_status": 15,
+          "lifecycle.code_agent_exit_status": 15,
+          "lifecycle.termination_detail": "nonzero"
+        }
+      },
+      "diagnostic_category": "status-detail-disagreement"
+    },
+    {
+      "id": "compact-exit-0-ambiguous-rejected",
+      "description": "A zero status is unambiguous and may not be labelled ambiguous.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.code_agent_exit_status": 0,
+          "lifecycle.termination_detail": "ambiguous-exit-or-signal"
+        }
+      },
+      "diagnostic_category": "status-detail-disagreement"
+    },
+    {
+      "id": "compact-exit-42-nonzero-accepted",
+      "description": "42 is above the signal range, so nonzero is unambiguous and correct.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "pass",
+      "mutations": {
+        "set": {
+          "lifecycle.capture_process_exit_status": 42,
+          "lifecycle.code_agent_exit_status": 42,
+          "lifecycle.termination_detail": "nonzero"
+        }
+      }
+    },
+    {
+      "id": "compact-exit-42-ambiguous-rejected",
+      "description": "42 cannot be a bare signal number, so the ambiguous label is false.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.capture_process_exit_status": 42,
+          "lifecycle.code_agent_exit_status": 42,
+          "lifecycle.termination_detail": "ambiguous-exit-or-signal"
+        }
+      },
+      "diagnostic_category": "status-detail-disagreement"
+    },
+    {
+      "id": "compact-status-out-of-range-rejected",
+      "description": "Process status is bounded to 0-255.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "lifecycle.code_agent_exit_status": 300
+        }
+      },
+      "diagnostic_category": "out-of-range"
+    },
+    {
+      "id": "compact-negative-change-count-rejected",
+      "description": "Change counts are non-negative.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "changes.files_read_count": -1
+        }
+      },
+      "diagnostic_category": "negative-count"
+    },
+    {
+      "id": "compact-negative-issue-count-rejected",
+      "description": "The unresolved-issue count is non-negative.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "result.unresolved_issue_count": -1
+        }
+      },
+      "diagnostic_category": "negative-count"
+    },
+    {
+      "id": "compact-write-scope-invalid-rejected",
+      "description": "A finalized record cannot record an invalid write scope.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "changes.write_scope_valid": false
+        }
+      },
+      "diagnostic_category": "invalid-check-state"
+    },
+    {
+      "id": "compact-report-invalid-rejected",
+      "description": "A finalized record cannot record a failed report validation.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "checks.report_valid": false
+        }
+      },
+      "diagnostic_category": "invalid-check-state"
+    },
+    {
+      "id": "compact-missing-evidence-rejected",
+      "description": "The evidence index reference is required in a finalized record.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "remove": [
+          "evidence"
+        ]
+      },
+      "diagnostic_category": "missing-required"
+    },
+    {
+      "id": "compact-absolute-index-path-rejected",
+      "description": "Evidence paths are project-relative.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_path": "/synthetic/fixture-project/build-report-logs/tmp/x/runtime/metadata-evidence-index.json"
+        }
+      },
+      "diagnostic_category": "absolute-path"
+    },
+    {
+      "id": "compact-path-escape-index-rejected",
+      "description": "An evidence path may not escape the pass root.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_path": "build-report-logs/tmp/../../../etc/metadata-evidence-index.json"
+        }
+      },
+      "diagnostic_category": "path-escape"
+    },
+    {
+      "id": "compact-prefixed-sha256-rejected",
+      "description": "The evidence-index digest is bare 64-hex, not the sha256: prefixed form.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "diagnostic_category": "invalid-sha256"
+    },
+    {
+      "id": "compact-short-sha256-rejected",
+      "description": "A 63-character digest is not a SHA-256.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "diagnostic_category": "invalid-sha256"
+    },
+    {
+      "id": "compact-uppercase-sha256-rejected",
+      "description": "The digest is lowercase hexadecimal.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      "diagnostic_category": "invalid-sha256"
+    },
+    {
+      "id": "compact-wrong-index-filename-rejected",
+      "description": "The index path must name metadata-evidence-index.json under the pass runtime directory.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "evidence.index_path": "build-report-logs/tmp/26-08-04_P12_metadata-contract-fixture/runtime/other-index.json"
+        }
+      },
+      "diagnostic_category": "invalid-path-shape"
+    },
+    {
+      "id": "compact-invalid-pass-id-rejected",
+      "description": "Pass ID must match the canonical form.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "pass_id": "12"
+        }
+      },
+      "diagnostic_category": "identity-mismatch"
+    },
+    {
+      "id": "compact-invalid-stem-rejected",
+      "description": "Artifact stem must match the canonical form.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "artifact_stem": "not-a-stem"
+        }
+      },
+      "diagnostic_category": "identity-mismatch"
+    },
+    {
+      "id": "compact-unknown-extra-field-rejected",
+      "description": "additionalProperties=false: an unrecognized field is a failure, not tolerated extra.",
+      "target": "root",
+      "base_instance": "compact",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "unexpected_field": 1
+        }
+      },
+      "diagnostic_category": "unknown-field"
+    },
+    {
+      "id": "continuation-accepted",
+      "description": "The continuation-state definition remains independently addressable and validates its artifact.",
+      "target": "definitions.continuation_state",
+      "base_instance": "continuation",
+      "expect": "pass"
+    },
+    {
+      "id": "continuation-missing-repositories-rejected",
+      "description": "Both repository entries are required.",
+      "target": "definitions.continuation_state",
+      "base_instance": "continuation",
+      "expect": "fail",
+      "mutations": {
+        "remove": [
+          "repositories"
+        ]
+      },
+      "diagnostic_category": "missing-required"
+    },
+    {
+      "id": "continuation-invalid-stem-rejected",
+      "description": "Continuation identity must match the canonical stem form.",
+      "target": "definitions.continuation_state",
+      "base_instance": "continuation",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "artifact_stem": "nope"
+        }
+      },
+      "diagnostic_category": "identity-mismatch"
+    },
+    {
+      "id": "continuation-carries-no-telemetry",
+      "description": "Telemetry is deliberately not copied into continuation state.",
+      "target": "definitions.continuation_state",
+      "base_instance": "continuation",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "telemetry": {
+            "total_tokens": 1
+          }
+        }
+      },
+      "diagnostic_category": "unknown-field"
+    },
+    {
+      "id": "evidence-index-accepted",
+      "description": "A well-formed index with archive-aware candidates for the movable roles.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "pass"
+    },
+    {
+      "id": "evidence-index-empty-entries-rejected",
+      "description": "An index with no entries indexes nothing.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries": []
+        }
+      },
+      "diagnostic_category": "missing-required"
+    },
+    {
+      "id": "evidence-index-wrong-stem-rejected",
+      "description": "Every index entry belongs to the declared pass.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "artifact_stem": "nope"
+        }
+      },
+      "diagnostic_category": "identity-mismatch"
+    },
+    {
+      "id": "evidence-index-wrong-version-rejected",
+      "description": "The index version identifier is fixed.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "index_version": "metadata-evidence-index-v2"
+        }
+      },
+      "diagnostic_category": "invalid-enum"
+    },
+    {
+      "id": "evidence-index-absolute-path-rejected",
+      "description": "Index entry paths are project-relative.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.path": "/abs/report.md"
+        }
+      },
+      "diagnostic_category": "absolute-path"
+    },
+    {
+      "id": "evidence-index-path-escape-rejected",
+      "description": "An index entry may not escape the project root.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.path": "build-report-logs/../../etc/passwd"
+        }
+      },
+      "diagnostic_category": "path-escape"
+    },
+    {
+      "id": "evidence-index-missing-byte-length-rejected",
+      "description": "Length and digest are both required; a hash without a length cannot describe a truncation.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "remove": [
+          "entries.0.byte_length"
+        ]
+      },
+      "diagnostic_category": "missing-required"
+    },
+    {
+      "id": "evidence-index-negative-byte-length-rejected",
+      "description": "Byte length is non-negative.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.byte_length": -1
+        }
+      },
+      "diagnostic_category": "negative-count"
+    },
+    {
+      "id": "evidence-index-invalid-sha256-rejected",
+      "description": "Entry digests are bare 64-hex.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      "diagnostic_category": "invalid-sha256"
+    },
+    {
+      "id": "evidence-index-three-candidates-rejected",
+      "description": "A movable role has at most an active and an archive candidate.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.path_candidates": [
+            "a",
+            "b",
+            "c"
+          ]
+        }
+      },
+      "diagnostic_category": "invalid-archive-candidates"
+    },
+    {
+      "id": "evidence-index-zero-candidates-rejected",
+      "description": "Every entry declares at least one permitted path.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.path_candidates": []
+        }
+      },
+      "diagnostic_category": "invalid-archive-candidates"
+    },
+    {
+      "id": "evidence-index-duplicate-candidates-rejected",
+      "description": "Candidate paths are distinct; a duplicated pair cannot resolve to exactly one.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.path_candidates": [
+            "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md",
+            "build-report-logs/reports/26-08-04_P12_metadata-contract-fixture-report.md"
+          ]
+        }
+      },
+      "diagnostic_category": "invalid-archive-candidates"
+    },
+    {
+      "id": "evidence-index-unknown-entry-field-rejected",
+      "description": "Index entries are closed objects.",
+      "target": "definitions.metadata_evidence_index",
+      "base_instance": "evidence_index",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "entries.0.unexpected": 1
+        }
+      },
+      "diagnostic_category": "unknown-field"
+    },
+    {
+      "id": "legacy-record-accepted-by-legacy-definition",
+      "description": "A historical unversioned v2.4.1 record is inspected through the named read-only definition.",
+      "target": "definitions.legacy_full_metadata_v2_4_1",
+      "base_instance": "legacy",
+      "expect": "pass"
+    },
+    {
+      "id": "legacy-record-rejected-by-production-root",
+      "description": "The same historical record is not a newly finalized record and is refused by the production root.",
+      "target": "root",
+      "base_instance": "legacy",
+      "expect": "fail",
+      "diagnostic_category": "branch-discriminator"
+    },
+    {
+      "id": "legacy-definition-retains-agreement-field",
+      "description": "The legacy definition is the only place the removed agreement field survives. An old record that recorded agreement=true alongside a live, available Code Agent status still parses, so historical evidence can be inspected without rewriting it.",
+      "target": "definitions.legacy_full_metadata_v2_4_1",
+      "base_instance": "legacy",
+      "expect": "pass",
+      "mutations": {
+        "set": {
+          "exit_status_agreement": true,
+          "agent_started": true,
+          "agent_started_at": "2026-08-04T10:00:00Z",
+          "code_agent_exit_status_available": true,
+          "code_agent_exit_status": 0,
+          "agent_exit_code": 0,
+          "capture_process_exit_status": 0
+        }
+      }
+    },
+    {
+      "id": "legacy-agreement-conditional-preserved",
+      "description": "The historical conditional attached to the agreement field is preserved intact: agreement=true with an unavailable Code Agent status was invalid under the old contract and still is. The legacy definition is frozen, not relaxed.",
+      "target": "definitions.legacy_full_metadata_v2_4_1",
+      "base_instance": "legacy",
+      "expect": "fail",
+      "mutations": {
+        "set": {
+          "exit_status_agreement": true
+        }
+      },
+      "diagnostic_category": "legacy-conditional-violation"
+    }
+  ]
+}

@@ -1,0 +1,5645 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:cli-workflow-suite:v2.4.1:metadata-schema",
+  "title": "CLI Host Workflow Metadata v2.4.1",
+  "description": "Canonical draft-07 schema for Host metadata. The root selects exactly one of two production branches: definitions.provisional_metadata_full_v1 (metadata_format_version=full-provisional-v1, metadata_finalized=false) and definitions.finalized_metadata_compact_v1 (metadata_format_version=compact-final-v1, metadata_finalized=true). definitions.continuation_state validates the separate continuation-state artifact; definitions.metadata_evidence_index validates the evidence index. definitions.legacy_full_metadata_v2_4_1 is read-only historical inspection and is deliberately excluded from the root.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/provisional_metadata_full_v1"
+    },
+    {
+      "$ref": "#/definitions/finalized_metadata_compact_v1"
+    }
+  ],
+  "definitions": {
+    "project_relative_path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n]+$"
+    },
+    "repository_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "path"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        }
+      }
+    },
+    "file_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "purpose"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "verification_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method",
+        "result",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed",
+            "unavailable",
+            "not-applicable"
+          ]
+        },
+        "details": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "command_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "working_directory",
+        "result"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "working_directory": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed",
+            "unavailable",
+            "not-applicable"
+          ]
+        }
+      }
+    },
+    "build_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "kind",
+        "commands",
+        "artifacts",
+        "limitations"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "partial",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "build",
+            "test",
+            "documentation",
+            "workflow",
+            "other"
+          ]
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/command_result"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/project_relative_path"
+          },
+          "uniqueItems": true
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt",
+        "launcher",
+        "metadata",
+        "report",
+        "raw_log",
+        "clean_log",
+        "meta_log",
+        "continuation_state",
+        "nonstandard_outputs"
+      ],
+      "properties": {
+        "prompt": {
+          "$ref": "#/definitions/prompt_path_value"
+        },
+        "launcher": {
+          "$ref": "#/definitions/launcher_path_value"
+        },
+        "metadata": {
+          "$ref": "#/definitions/metadata_path_value"
+        },
+        "report": {
+          "$ref": "#/definitions/report_path_value"
+        },
+        "raw_log": {
+          "type": "string",
+          "pattern": "^build-report-logs/logs/raw-logs/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-raw\\.log$"
+        },
+        "clean_log": {
+          "type": "string",
+          "pattern": "^build-report-logs/logs/clean-logs/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-clean\\.log$"
+        },
+        "meta_log": {
+          "type": "string",
+          "pattern": "^build-report-logs/logs/meta-logs/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-meta\\.log$"
+        },
+        "continuation_state": {
+          "$ref": "#/definitions/continuation_state_path_value"
+        },
+        "nonstandard_outputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^build-report-logs/outputs/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*/[^\\u0000\\r\\n]+$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "issue_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "impact",
+        "next_action"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next_action": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "recommended_next_prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "template",
+        "objective",
+        "required_context",
+        "constraints",
+        "suggested_model_and_effort"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "lean",
+            "full",
+            null
+          ]
+        },
+        "objective": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "required_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/project_relative_path"
+          },
+          "uniqueItems": true
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "suggested_model_and_effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "drift_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "summary",
+        "affected_path",
+        "resolved"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^DRIFT-[0-9]{3,}$"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_path": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/project_relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolved": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repository_state_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "status_type",
+        "path",
+        "content_signature",
+        "classification",
+        "ignored_noise"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "status_type": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$"
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "original_path": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/project_relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/content_signature"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content_signature": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/content_signature"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "classification": {
+          "$ref": "#/definitions/change_classification"
+        },
+        "ignored_noise": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ignored_noise": {
+                "const": true
+              }
+            },
+            "required": [
+              "ignored_noise"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classification": {
+                "const": "ignored-noise"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "ignored-noise"
+              }
+            },
+            "required": [
+              "classification"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ignored_noise": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    "repository_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "present",
+        "head",
+        "branch",
+        "entries"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "head": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_state_entry"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "present": {
+                "const": false
+              }
+            },
+            "required": [
+              "present"
+            ]
+          },
+          "then": {
+            "properties": {
+              "head": {
+                "type": "null"
+              },
+              "branch": {
+                "type": "null"
+              },
+              "entries": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "repository_state_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "private"
+      ],
+      "properties": {
+        "project": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/repository_snapshot"
+            },
+            {
+              "properties": {
+                "repository": {
+                  "const": "project"
+                }
+              }
+            }
+          ]
+        },
+        "private": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/repository_snapshot"
+            },
+            {
+              "properties": {
+                "repository": {
+                  "const": "private"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "change_delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "path",
+        "classification",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "classification": {
+          "type": "string",
+          "const": "pass-produced"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_entry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_entry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "path_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "type",
+        "signature"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "absent",
+            "symlink",
+            "file",
+            "directory",
+            "other"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/content_signature"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "workflow_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "path",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/path_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/path_state"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "write_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_required",
+        "manifest_path",
+        "manifest_valid",
+        "authorized_paths",
+        "unauthorized_changes",
+        "write_scope_valid"
+      ],
+      "properties": {
+        "manifest_required": {
+          "type": "boolean"
+        },
+        "manifest_path": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/project_relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifest_valid": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "authorized_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_path"
+          },
+          "uniqueItems": true
+        },
+        "unauthorized_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_path"
+          }
+        },
+        "write_scope_valid": {
+          "type": "boolean"
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_tokens",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "legacy_total_scope",
+        "verified_total_scope",
+        "completeness",
+        "parser_contract",
+        "limitations"
+      ],
+      "properties": {
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "legacy_total_scope": {
+          "type": "string",
+          "enum": [
+            "cumulative-session",
+            "unknown"
+          ]
+        },
+        "verified_total_scope": {
+          "type": "string",
+          "enum": [
+            "cumulative-session",
+            "last-request",
+            "current-context",
+            "unknown"
+          ]
+        },
+        "completeness": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "parser_contract": {
+          "type": "string",
+          "const": "provider-telemetry-v1"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "conversation_id",
+        "session_slug",
+        "resume_command"
+      ],
+      "properties": {
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "session_slug": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "resume_command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "skill_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "invocation",
+        "used",
+        "authorized",
+        "lock_record_present",
+        "evaluation_passed",
+        "directory_hash",
+        "lock_directory_hash",
+        "hash_agreement",
+        "authorizing_pass"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "invocation": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "auto"
+          ]
+        },
+        "used": {
+          "type": "boolean"
+        },
+        "authorized": {
+          "type": "boolean"
+        },
+        "lock_record_present": {
+          "type": "boolean"
+        },
+        "evaluation_passed": {
+          "type": "boolean"
+        },
+        "directory_hash": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/sha256_hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lock_directory_hash": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/sha256_hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hash_agreement": {
+          "type": "boolean"
+        },
+        "authorizing_pass": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/artifact_stem_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "used": {
+                "const": true
+              }
+            },
+            "required": [
+              "used"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authorized": {
+                "const": true
+              },
+              "lock_record_present": {
+                "const": true
+              },
+              "evaluation_passed": {
+                "const": true
+              },
+              "hash_agreement": {
+                "const": true
+              },
+              "directory_hash": {
+                "$ref": "#/definitions/sha256_hash"
+              },
+              "lock_directory_hash": {
+                "$ref": "#/definitions/sha256_hash"
+              },
+              "authorizing_pass": {
+                "$ref": "#/definitions/artifact_stem_value"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorized": {
+                "const": false
+              }
+            },
+            "required": [
+              "authorized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "used": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "skill_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "source",
+        "invocation",
+        "evaluation_passed",
+        "directory_hash",
+        "lock_directory_hash",
+        "hash_agreement",
+        "lock_updated",
+        "authorizing_pass"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invocation": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "auto"
+          ]
+        },
+        "evaluation_passed": {
+          "type": "boolean"
+        },
+        "directory_hash": {
+          "$ref": "#/definitions/sha256_hash"
+        },
+        "lock_directory_hash": {
+          "$ref": "#/definitions/sha256_hash"
+        },
+        "hash_agreement": {
+          "type": "boolean"
+        },
+        "lock_updated": {
+          "type": "boolean"
+        },
+        "authorizing_pass": {
+          "$ref": "#/definitions/artifact_stem_value"
+        }
+      }
+    },
+    "skill_authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorization_performed",
+        "skills_used",
+        "skills_changed",
+        "skills_lock_valid",
+        "lock_path",
+        "validation_errors"
+      ],
+      "properties": {
+        "authorization_performed": {
+          "type": "boolean"
+        },
+        "skills_used": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/skill_usage"
+          }
+        },
+        "skills_changed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/skill_change"
+          }
+        },
+        "skills_lock_valid": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "lock_path": {
+          "type": "string",
+          "const": ".private/skills-lock.json"
+        },
+        "validation_errors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "continuation_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status_type",
+        "path",
+        "content_signature",
+        "classification",
+        "ignored_noise"
+      ],
+      "properties": {
+        "status_type": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$"
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "content_signature": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/content_signature"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "classification": {
+          "$ref": "#/definitions/change_classification"
+        },
+        "ignored_noise": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ignored_noise": {
+                "const": true
+              }
+            },
+            "required": [
+              "ignored_noise"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classification": {
+                "const": "ignored-noise"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "const": "ignored-noise"
+              }
+            },
+            "required": [
+              "classification"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ignored_noise": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    "continuation_repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "entries"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/definitions/repository_name"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/continuation_entry"
+          }
+        }
+      }
+    },
+    "runtime_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass_id",
+        "artifact_stem",
+        "lifecycle_session_id",
+        "launcher_pid",
+        "launcher_process_start_marker",
+        "capture_pid",
+        "capture_process_start_marker",
+        "code_agent_pid",
+        "code_agent_binary",
+        "code_agent_process_start_marker",
+        "process_group_id",
+        "raw_log_path",
+        "registered_at",
+        "active"
+      ],
+      "properties": {
+        "lifecycle_session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "launcher_pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "launcher_process_start_marker": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "capture_pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "capture_process_start_marker": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "code_agent_pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "code_agent_binary": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/absolute_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "code_agent_process_start_marker": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "process_group_id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "raw_log_path": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/absolute_path"
+            },
+            {
+              "$ref": "#/definitions/project_relative_path"
+            }
+          ]
+        },
+        "registered_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        }
+      }
+    },
+    "absolute_path": {
+      "type": "string",
+      "pattern": "^/[^\\u0000\\r\\n]*$"
+    },
+    "artifact_stem_value": {
+      "type": "string",
+      "pattern": "^[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "content_signature": {
+      "type": "string",
+      "pattern": "^(?:(?:sha256|tree-sha256|symlink-sha256):[0-9a-f]{64}|git-object:[0-9a-f]{40})$"
+    },
+    "continuation_state_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/metadata-reports/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-continuation-state\\.json$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "launcher_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/launchers/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-launcher\\.zsh$"
+    },
+    "metadata_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/metadata-reports/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-metadata\\.json$"
+    },
+    "pass_id_value": {
+      "type": "string",
+      "pattern": "^P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?$"
+    },
+    "prompt_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/prompts/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-prompt\\.txt$"
+    },
+    "report_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/reports/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*-report\\.md$"
+    },
+    "sha256_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "change_classification": {
+      "type": "string",
+      "enum": [
+        "inherited",
+        "pass-produced",
+        "expected-control-change",
+        "unexpected",
+        "ignored-noise"
+      ]
+    },
+    "repository_name": {
+      "type": "string",
+      "enum": [
+        "project",
+        "private"
+      ]
+    },
+    "continuation_state": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$id": "urn:cli-workflow-suite:v2.4.1:continuation-state",
+      "title": "CLI Host Workflow Continuation State v2.4.1",
+      "description": "Finalized, machine-readable ending repository state for one Host pass.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_version",
+        "pass_id",
+        "artifact_stem",
+        "finalized_at",
+        "agent_started",
+        "runtime_identity",
+        "capture_process_exit_status",
+        "code_agent_exit_status",
+        "collector_exit_status",
+        "collector_status",
+        "collector_clean_log_ready",
+        "workflow_finalization_result",
+        "repositories"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "const": "v2.4.1"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        },
+        "finalized_at": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "agent_started": {
+          "type": "boolean",
+          "const": true
+        },
+        "workflow_finalization_result": {
+          "type": "string",
+          "const": "succeeded"
+        },
+        "repositories": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/definitions/continuation_repository"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "const": "project"
+                  }
+                },
+                "required": [
+                  "repository"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "repository": {
+                    "const": "private"
+                  }
+                },
+                "required": [
+                  "repository"
+                ]
+              }
+            }
+          ]
+        },
+        "runtime_identity": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/runtime_identity"
+            },
+            {
+              "properties": {
+                "active": {
+                  "const": false
+                },
+                "lifecycle_session_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "launcher_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "capture_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "code_agent_pid": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "code_agent_binary": {
+                  "$ref": "#/definitions/absolute_path"
+                },
+                "registered_at": {
+                  "$ref": "#/definitions/timestamp"
+                },
+                "pass_id": {
+                  "$ref": "#/definitions/pass_id_value"
+                },
+                "artifact_stem": {
+                  "$ref": "#/definitions/artifact_stem_value"
+                }
+              }
+            }
+          ]
+        },
+        "capture_process_exit_status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "collector_exit_status": {
+          "const": 0
+        },
+        "collector_status": {
+          "const": "succeeded"
+        },
+        "collector_clean_log_ready": {
+          "const": true
+        }
+      },
+      "definitions": {
+        "project_relative_path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\r\\n]+$"
+        },
+        "continuation_entry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status_type",
+            "path",
+            "content_signature",
+            "classification",
+            "ignored_noise"
+          ],
+          "properties": {
+            "status_type": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\u0000\\r\\n]+$"
+            },
+            "path": {
+              "$ref": "#/definitions/project_relative_path"
+            },
+            "content_signature": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/content_signature"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "classification": {
+              "$ref": "#/definitions/change_classification"
+            },
+            "ignored_noise": {
+              "type": "boolean"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "ignored_noise": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "ignored_noise"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "classification": {
+                    "const": "ignored-noise"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "classification": {
+                    "const": "ignored-noise"
+                  }
+                },
+                "required": [
+                  "classification"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "ignored_noise": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "continuation_repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "entries"
+          ],
+          "properties": {
+            "repository": {
+              "$ref": "#/definitions/repository_name"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/continuation_entry"
+              }
+            }
+          }
+        },
+        "runtime_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pass_id",
+            "artifact_stem",
+            "lifecycle_session_id",
+            "launcher_pid",
+            "launcher_process_start_marker",
+            "capture_pid",
+            "capture_process_start_marker",
+            "code_agent_pid",
+            "code_agent_binary",
+            "code_agent_process_start_marker",
+            "process_group_id",
+            "raw_log_path",
+            "registered_at",
+            "active"
+          ],
+          "properties": {
+            "lifecycle_session_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "launcher_pid": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "launcher_process_start_marker": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "capture_pid": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "capture_process_start_marker": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "code_agent_pid": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "code_agent_binary": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/absolute_path"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "code_agent_process_start_marker": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "process_group_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "raw_log_path": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/absolute_path"
+                },
+                {
+                  "$ref": "#/definitions/project_relative_path"
+                }
+              ]
+            },
+            "registered_at": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/timestamp"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "active": {
+              "type": "boolean"
+            },
+            "pass_id": {
+              "$ref": "#/definitions/pass_id_value"
+            },
+            "artifact_stem": {
+              "$ref": "#/definitions/artifact_stem_value"
+            }
+          }
+        },
+        "absolute_path": {
+          "type": "string",
+          "pattern": "^/[^\\u0000\\r\\n]*$"
+        },
+        "artifact_stem_value": {
+          "type": "string",
+          "pattern": "^[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "content_signature": {
+          "type": "string",
+          "pattern": "^(?:(?:sha256|tree-sha256|symlink-sha256):[0-9a-f]{64}|git-object:[0-9a-f]{40})$"
+        },
+        "pass_id_value": {
+          "type": "string",
+          "pattern": "^P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?$"
+        },
+        "timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "change_classification": {
+          "type": "string",
+          "enum": [
+            "inherited",
+            "pass-produced",
+            "expected-control-change",
+            "unexpected",
+            "ignored-noise"
+          ]
+        },
+        "repository_name": {
+          "type": "string",
+          "enum": [
+            "project",
+            "private"
+          ]
+        }
+      }
+    },
+    "legacy_telemetry_v2_4_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_tokens",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "reasoning_tokens"
+      ],
+      "properties": {
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "byte_length": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "metadata_evidence_index_path_value": {
+      "type": "string",
+      "pattern": "^build-report-logs/tmp/[0-9]{2}-[0-9]{2}-[0-9]{2}_P[0-9]*[1-9][0-9]*(?:\\.[0-9]*[1-9][0-9]*)?_[a-z0-9]+(?:-[a-z0-9]+)*/runtime/metadata-evidence-index\\.json$"
+    },
+    "evidence_index_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "path_candidates",
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path_candidates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/project_relative_path"
+          }
+        },
+        "path": {
+          "$ref": "#/definitions/project_relative_path"
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        },
+        "byte_length": {
+          "$ref": "#/definitions/byte_length"
+        }
+      }
+    },
+    "metadata_evidence_index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_version",
+        "index_version",
+        "pass_id",
+        "artifact_stem",
+        "created_at",
+        "entries"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "const": "v2.4.1"
+        },
+        "index_version": {
+          "type": "string",
+          "const": "metadata-evidence-index-v1"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        },
+        "created_at": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/evidence_index_entry"
+          }
+        }
+      }
+    },
+    "compact_lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_started_at",
+        "agent_exited_at",
+        "finalized_at",
+        "capture_process_exit_status",
+        "code_agent_exit_status",
+        "code_agent_exit_status_source",
+        "termination_detail",
+        "collector_exit_status",
+        "collector_status",
+        "workflow_finalization_result"
+      ],
+      "properties": {
+        "agent_started_at": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "agent_exited_at": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "finalized_at": {
+          "$ref": "#/definitions/timestamp"
+        },
+        "capture_process_exit_status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status_source": {
+          "type": "string",
+          "const": "darwin-script-child-status-propagation-v1"
+        },
+        "termination_detail": {
+          "type": "string",
+          "enum": [
+            "normal-zero",
+            "nonzero",
+            "ambiguous-exit-or-signal"
+          ]
+        },
+        "collector_exit_status": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "collector_status": {
+          "type": "string",
+          "const": "succeeded"
+        },
+        "workflow_finalization_result": {
+          "type": "string",
+          "const": "succeeded"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code_agent_exit_status": {
+                "const": 0
+              }
+            },
+            "required": [
+              "code_agent_exit_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "termination_detail": {
+                "const": "normal-zero"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code_agent_exit_status": {
+                "minimum": 1,
+                "maximum": 31
+              }
+            },
+            "required": [
+              "code_agent_exit_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "termination_detail": {
+                "const": "ambiguous-exit-or-signal"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code_agent_exit_status": {
+                "minimum": 32
+              }
+            },
+            "required": [
+              "code_agent_exit_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "termination_detail": {
+                "const": "nonzero"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "compact_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_result",
+        "build_outcome",
+        "unresolved_issue_count",
+        "recommended_next_pass"
+      ],
+      "properties": {
+        "product_result": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "partial",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "build_outcome": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "partial",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "unresolved_issue_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recommended_next_pass": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "compact_changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_read_count",
+        "files_created_count",
+        "files_modified_count",
+        "inherited_change_count",
+        "pass_produced_change_count",
+        "workflow_file_change_count",
+        "write_scope_valid"
+      ],
+      "properties": {
+        "files_read_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_created_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_modified_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inherited_change_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pass_produced_change_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "workflow_file_change_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "write_scope_valid": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "compact_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "report_valid",
+        "metadata_schema_valid",
+        "continuation_state_finalized",
+        "report_metadata_agreement",
+        "agents_md_authorized",
+        "archive_eligible"
+      ],
+      "properties": {
+        "report_valid": {
+          "type": "boolean",
+          "const": true
+        },
+        "metadata_schema_valid": {
+          "type": "boolean",
+          "const": true
+        },
+        "continuation_state_finalized": {
+          "type": "boolean",
+          "const": true
+        },
+        "report_metadata_agreement": {
+          "type": "boolean",
+          "const": true
+        },
+        "agents_md_authorized": {
+          "type": "boolean"
+        },
+        "archive_eligible": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "compact_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index_path",
+        "index_sha256"
+      ],
+      "properties": {
+        "index_path": {
+          "$ref": "#/definitions/metadata_evidence_index_path_value"
+        },
+        "index_sha256": {
+          "$ref": "#/definitions/sha256_hex"
+        }
+      }
+    },
+    "provisional_metadata_full_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_version",
+        "project_name",
+        "project_root",
+        "pass_id",
+        "pass_name",
+        "artifact_stem",
+        "pass_type",
+        "objective",
+        "date",
+        "status",
+        "code_agent",
+        "model",
+        "effort",
+        "model_selection_confirmed",
+        "model_confirmation_reference",
+        "prompt_template",
+        "prompt_path",
+        "launcher_path",
+        "report_path",
+        "metadata_path",
+        "continuation_state_path",
+        "report_template_path",
+        "metadata_schema_path",
+        "agent_started",
+        "invocation_mode",
+        "runtime_identity",
+        "capture_process_exit_status",
+        "code_agent_exit_status",
+        "code_agent_exit_status_available",
+        "collector_exit_status",
+        "collector_status",
+        "collector_clean_log_ready",
+        "collector_completed_at",
+        "files_read",
+        "files_created",
+        "files_modified",
+        "inherited_changes",
+        "pass_produced_changes",
+        "verification",
+        "product_result",
+        "build_result",
+        "artifacts",
+        "issues_encountered",
+        "unresolved_issues",
+        "recommended_next_prompt",
+        "agents_md_present",
+        "agents_md_authorized",
+        "agents_md_authority",
+        "agents_md_prior_authority",
+        "agents_md_maintenance_score",
+        "agents_md_prior_maintenance_score",
+        "maintenance_score_decreased",
+        "maintenance_score_change_validated",
+        "agents_md_last_verified_at",
+        "agents_md_drift_items",
+        "agents_md_claude_same_inode",
+        "metadata_schema_present",
+        "report_template_present",
+        "private_repo_initialized",
+        "gitignore_private_controls_valid",
+        "prompt_saved",
+        "launcher_saved",
+        "next_prompt_template",
+        "bootstrap_or_adoption_state",
+        "workflow_files_modified",
+        "write_scope",
+        "skill_authorization",
+        "initialized_at",
+        "pre_pass_completed_at",
+        "agent_started_at",
+        "agent_exited_at",
+        "post_pass_completed_at",
+        "finalized_at",
+        "agent_exit_code",
+        "duration_seconds",
+        "telemetry",
+        "session",
+        "starting_repository_state",
+        "ending_repository_state",
+        "continuation_state_finalized",
+        "report_valid",
+        "metadata_schema_valid",
+        "artifact_stem_agreement",
+        "report_metadata_mirrors_agree",
+        "workflow_finalization_result",
+        "metadata_finalized",
+        "failed_attempt",
+        "failed_attempt_number",
+        "archive_eligible",
+        "metadata_format_version",
+        "total_tokens_used",
+        "code_agent_exit_status_source",
+        "capture_status_contract_id",
+        "termination_detail",
+        "metadata_evidence_index_path",
+        "metadata_evidence_index_sha256"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "const": "v2.4.1"
+        },
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_root": {
+          "$ref": "#/definitions/absolute_path"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "pass_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        },
+        "pass_type": {
+          "type": "string",
+          "enum": [
+            "implementation",
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "skill_bootstrap"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "$ref": "#/definitions/date"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "aborted"
+          ]
+        },
+        "code_agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "model_selection_confirmed": {
+          "type": "boolean"
+        },
+        "model_confirmation_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_template": {
+          "type": "string",
+          "enum": [
+            "lean",
+            "full"
+          ]
+        },
+        "prompt_path": {
+          "$ref": "#/definitions/prompt_path_value"
+        },
+        "launcher_path": {
+          "$ref": "#/definitions/launcher_path_value"
+        },
+        "report_path": {
+          "$ref": "#/definitions/report_path_value"
+        },
+        "metadata_path": {
+          "$ref": "#/definitions/metadata_path_value"
+        },
+        "continuation_state_path": {
+          "$ref": "#/definitions/continuation_state_path_value"
+        },
+        "report_template_path": {
+          "type": "string",
+          "const": ".private/workflow-templates/pass-report-template.md"
+        },
+        "metadata_schema_path": {
+          "type": "string",
+          "const": ".private/metadata-schema.json"
+        },
+        "agent_started": {
+          "type": "boolean"
+        },
+        "invocation_mode": {
+          "type": "string",
+          "const": "direct-interactive-launcher"
+        },
+        "runtime_identity": {
+          "$ref": "#/definitions/runtime_identity"
+        },
+        "capture_process_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status_available": {
+          "type": "boolean"
+        },
+        "collector_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "collector_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "collector_clean_log_ready": {
+          "type": "boolean"
+        },
+        "collector_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "files_read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "files_created": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "files_modified": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "inherited_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_state_entry"
+          }
+        },
+        "pass_produced_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/change_delta"
+          }
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/verification_record"
+          }
+        },
+        "product_result": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "partial",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "build_result": {
+          "$ref": "#/definitions/build_result"
+        },
+        "artifacts": {
+          "$ref": "#/definitions/artifacts"
+        },
+        "issues_encountered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issue_record"
+          }
+        },
+        "unresolved_issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issue_record"
+          }
+        },
+        "recommended_next_prompt": {
+          "$ref": "#/definitions/recommended_next_prompt"
+        },
+        "agents_md_present": {
+          "type": "boolean"
+        },
+        "agents_md_authorized": {
+          "type": "boolean"
+        },
+        "agents_md_authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "not-present",
+            "unknown",
+            null
+          ]
+        },
+        "agents_md_prior_authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "not-present",
+            "unknown",
+            null
+          ]
+        },
+        "agents_md_maintenance_score": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "agents_md_prior_maintenance_score": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "maintenance_score_decreased": {
+          "type": "boolean"
+        },
+        "maintenance_score_change_validated": {
+          "type": "boolean"
+        },
+        "agents_md_last_verified_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agents_md_drift_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/drift_item"
+          }
+        },
+        "agents_md_claude_same_inode": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "metadata_schema_present": {
+          "type": "boolean"
+        },
+        "report_template_present": {
+          "type": "boolean"
+        },
+        "private_repo_initialized": {
+          "type": "boolean"
+        },
+        "gitignore_private_controls_valid": {
+          "type": "boolean"
+        },
+        "prompt_saved": {
+          "type": "boolean"
+        },
+        "launcher_saved": {
+          "type": "boolean"
+        },
+        "next_prompt_template": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "lean",
+            "full",
+            null
+          ]
+        },
+        "bootstrap_or_adoption_state": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "bootstrap-needed",
+            "adoption-needed"
+          ]
+        },
+        "workflow_files_modified": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/workflow_change"
+          }
+        },
+        "write_scope": {
+          "$ref": "#/definitions/write_scope"
+        },
+        "skill_authorization": {
+          "$ref": "#/definitions/skill_authorization"
+        },
+        "initialized_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pre_pass_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_exited_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "post_pass_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalized_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "telemetry": {
+          "$ref": "#/definitions/telemetry"
+        },
+        "session": {
+          "$ref": "#/definitions/session"
+        },
+        "starting_repository_state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_set"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ending_repository_state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_set"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "continuation_state_finalized": {
+          "type": "boolean"
+        },
+        "report_valid": {
+          "type": "boolean"
+        },
+        "metadata_schema_valid": {
+          "type": "boolean"
+        },
+        "artifact_stem_agreement": {
+          "type": "boolean"
+        },
+        "report_metadata_mirrors_agree": {
+          "type": "boolean"
+        },
+        "workflow_finalization_result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "succeeded",
+            "failed",
+            null
+          ]
+        },
+        "metadata_finalized": {
+          "type": "boolean",
+          "const": false
+        },
+        "failed_attempt": {
+          "type": "boolean"
+        },
+        "failed_attempt_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "archive_eligible": {
+          "type": "boolean"
+        },
+        "metadata_format_version": {
+          "type": "string",
+          "const": "full-provisional-v1"
+        },
+        "total_tokens_used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "code_agent_exit_status_source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "darwin-script-child-status-propagation-v1",
+            null
+          ]
+        },
+        "capture_status_contract_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "darwin-script-child-status-propagation-v1",
+            null
+          ]
+        },
+        "termination_detail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "normal-zero",
+            "nonzero",
+            "ambiguous-exit-or-signal",
+            null
+          ]
+        },
+        "metadata_evidence_index_path": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/metadata_evidence_index_path_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadata_evidence_index_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/sha256_hex"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "agents_md_maintenance_score": {
+                "minimum": 3
+              }
+            },
+            "required": [
+              "agents_md_maintenance_score"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_drift_items": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": true
+              }
+            },
+            "required": [
+              "agents_md_authorized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_present": {
+                "const": true
+              },
+              "agents_md_authority": {
+                "type": "string",
+                "enum": [
+                  "bootstrap",
+                  "adoption",
+                  "maintenance"
+                ]
+              },
+              "agents_md_last_verified_at": {
+                "$ref": "#/definitions/date"
+              },
+              "agents_md_claude_same_inode": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agents_md_present": {
+                "const": false
+              }
+            },
+            "required": [
+              "agents_md_present"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": false
+              },
+              "agents_md_authority": {
+                "const": "not-present"
+              },
+              "agents_md_last_verified_at": {
+                "type": "null"
+              },
+              "agents_md_claude_same_inode": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "maintenance_score_decreased": {
+                "const": true
+              }
+            },
+            "required": [
+              "maintenance_score_decreased"
+            ]
+          },
+          "then": {
+            "properties": {
+              "pass_type": {
+                "const": "maintenance"
+              },
+              "maintenance_score_change_validated": {
+                "const": true
+              },
+              "agents_md_prior_maintenance_score": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "not": {
+                  "const": "maintenance"
+                }
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maintenance_score_decreased": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agent_started": {
+                "const": false
+              }
+            },
+            "required": [
+              "agent_started"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agent_started_at": {
+                "type": "null"
+              },
+              "agent_exited_at": {
+                "type": "null"
+              },
+              "agent_exit_code": {
+                "type": "null"
+              },
+              "capture_process_exit_status": {
+                "type": "null"
+              },
+              "code_agent_exit_status": {
+                "type": "null"
+              },
+              "code_agent_exit_status_available": {
+                "const": false
+              },
+              "collector_exit_status": {
+                "type": "null"
+              },
+              "collector_status": {
+                "const": "pending"
+              },
+              "collector_clean_log_ready": {
+                "const": false
+              },
+              "collector_completed_at": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agent_started": {
+                "const": true
+              }
+            },
+            "required": [
+              "agent_started"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agent_started_at": {
+                "$ref": "#/definitions/timestamp"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "failed_attempt": {
+                "const": true
+              }
+            },
+            "required": [
+              "failed_attempt"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failed_attempt_number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "agent_started": {
+                "const": false
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "failed_attempt_number": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metadata_finalized": {
+                "const": true
+              }
+            },
+            "required": [
+              "metadata_finalized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "succeeded"
+              },
+              "continuation_state_finalized": {
+                "const": true
+              },
+              "report_valid": {
+                "const": true
+              },
+              "metadata_schema_valid": {
+                "const": true
+              },
+              "artifact_stem_agreement": {
+                "const": true
+              },
+              "report_metadata_mirrors_agree": {
+                "const": true
+              },
+              "archive_eligible": {
+                "const": true
+              },
+              "failed_attempt": {
+                "const": false
+              },
+              "agent_started": {
+                "const": true
+              },
+              "prompt_saved": {
+                "const": true
+              },
+              "launcher_saved": {
+                "const": true
+              },
+              "metadata_schema_present": {
+                "const": true
+              },
+              "report_template_present": {
+                "const": true
+              },
+              "initialized_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "pre_pass_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_started_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_exited_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "post_pass_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "finalized_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_exit_code": {
+                "type": "integer"
+              },
+              "duration_seconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "starting_repository_state": {
+                "$ref": "#/definitions/repository_state_set"
+              },
+              "ending_repository_state": {
+                "$ref": "#/definitions/repository_state_set"
+              },
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "write_scope_valid": {
+                        "const": true
+                      },
+                      "unauthorized_changes": {
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                ]
+              },
+              "invocation_mode": {
+                "const": "direct-interactive-launcher"
+              },
+              "runtime_identity": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/runtime_identity"
+                  },
+                  {
+                    "properties": {
+                      "lifecycle_session_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "launcher_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "launcher_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "capture_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "capture_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "code_agent_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "code_agent_binary": {
+                        "$ref": "#/definitions/absolute_path"
+                      },
+                      "code_agent_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "raw_log_path": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/definitions/absolute_path"
+                          },
+                          {
+                            "$ref": "#/definitions/project_relative_path"
+                          }
+                        ]
+                      },
+                      "registered_at": {
+                        "$ref": "#/definitions/timestamp"
+                      },
+                      "active": {
+                        "const": false
+                      },
+                      "pass_id": {
+                        "$ref": "#/definitions/pass_id_value"
+                      },
+                      "artifact_stem": {
+                        "$ref": "#/definitions/artifact_stem_value"
+                      }
+                    }
+                  }
+                ]
+              },
+              "capture_process_exit_status": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "code_agent_exit_status": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "code_agent_exit_status_available": {
+                "const": true
+              },
+              "collector_exit_status": {
+                "const": 0
+              },
+              "collector_status": {
+                "const": "succeeded"
+              },
+              "collector_clean_log_ready": {
+                "const": true
+              },
+              "collector_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "workflow_finalization_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": true
+              },
+              "continuation_state_finalized": {
+                "const": true
+              },
+              "report_valid": {
+                "const": true
+              },
+              "metadata_schema_valid": {
+                "const": true
+              },
+              "artifact_stem_agreement": {
+                "const": true
+              },
+              "report_metadata_mirrors_agree": {
+                "const": true
+              },
+              "archive_eligible": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "workflow_finalization_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              }
+            },
+            "required": [
+              "metadata_finalized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "succeeded"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "failed"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "partial"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "partial"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "not-run"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "not-run"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "unknown"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "implementation"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": true
+              },
+              "agents_md_maintenance_score": {
+                "maximum": 3
+              },
+              "private_repo_initialized": {
+                "const": true
+              },
+              "bootstrap_or_adoption_state": {
+                "const": "complete"
+              },
+              "workflow_files_modified": {
+                "maxItems": 0
+              },
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "manifest_required": {
+                        "const": false
+                      },
+                      "manifest_path": {
+                        "type": "null"
+                      },
+                      "authorized_paths": {
+                        "maxItems": 0
+                      },
+                      "unauthorized_changes": {
+                        "maxItems": 0
+                      },
+                      "write_scope_valid": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "enum": [
+                  "bootstrap",
+                  "adoption",
+                  "maintenance",
+                  "skill_bootstrap"
+                ]
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "manifest_required": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "maintenance"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "workflow_files_modified": {
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/workflow_change"
+                    },
+                    {
+                      "properties": {
+                        "path": {
+                          "not": {
+                            "pattern": "^(?:skills-lock\\.json|\\.agents/skills(?:/|$)|\\.claude/skills(?:/|$))"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "skill_bootstrap"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "authorization_performed": {
+                        "const": true
+                      },
+                      "skills_changed": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "authorization_performed": {
+                        "const": false
+                      },
+                      "skills_changed": {
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "properties": {
+                  "pass_type": {
+                    "const": "skill_bootstrap"
+                  }
+                },
+                "required": [
+                  "pass_type"
+                ]
+              },
+              {
+                "properties": {
+                  "metadata_finalized": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "metadata_finalized"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "skills_lock_valid": {
+                        "const": true
+                      },
+                      "validation_errors": {
+                        "maxItems": 0
+                      },
+                      "skills_changed": {
+                        "minItems": 1,
+                        "items": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/skill_change"
+                            },
+                            {
+                              "properties": {
+                                "evaluation_passed": {
+                                  "const": true
+                                },
+                                "hash_agreement": {
+                                  "const": true
+                                },
+                                "lock_updated": {
+                                  "const": true
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code_agent_exit_status_available": {
+                "const": false
+              }
+            },
+            "required": [
+              "code_agent_exit_status_available"
+            ]
+          },
+          "then": {
+            "properties": {
+              "code_agent_exit_status": {
+                "type": "null"
+              },
+              "agent_exit_code": {
+                "type": "null"
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collector_status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "collector_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "collector_clean_log_ready": {
+                "const": false
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collector_clean_log_ready": {
+                "const": false
+              }
+            },
+            "required": [
+              "collector_clean_log_ready"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "finalized_metadata_compact_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_version",
+        "metadata_format_version",
+        "metadata_finalized",
+        "project_name",
+        "project_root",
+        "pass_id",
+        "pass_name",
+        "artifact_stem",
+        "pass_type",
+        "date",
+        "status",
+        "objective",
+        "code_agent",
+        "model",
+        "effort",
+        "duration_seconds",
+        "total_tokens_used",
+        "telemetry",
+        "session",
+        "lifecycle",
+        "result",
+        "changes",
+        "checks",
+        "evidence"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "const": "v2.4.1"
+        },
+        "metadata_format_version": {
+          "type": "string",
+          "const": "compact-final-v1"
+        },
+        "metadata_finalized": {
+          "type": "boolean",
+          "const": true
+        },
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_root": {
+          "$ref": "#/definitions/absolute_path"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "pass_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        },
+        "pass_type": {
+          "type": "string",
+          "enum": [
+            "implementation",
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "skill_bootstrap"
+          ]
+        },
+        "date": {
+          "$ref": "#/definitions/date"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "aborted"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code_agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens_used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "telemetry": {
+          "$ref": "#/definitions/telemetry"
+        },
+        "session": {
+          "$ref": "#/definitions/session"
+        },
+        "lifecycle": {
+          "$ref": "#/definitions/compact_lifecycle"
+        },
+        "result": {
+          "$ref": "#/definitions/compact_result"
+        },
+        "changes": {
+          "$ref": "#/definitions/compact_changes"
+        },
+        "checks": {
+          "$ref": "#/definitions/compact_checks"
+        },
+        "evidence": {
+          "$ref": "#/definitions/compact_evidence"
+        }
+      }
+    },
+    "legacy_full_metadata_v2_4_1": {
+      "description": "Read-only historical definition for unversioned v2.4.1 records. Excluded from the production root oneOf. Addressed explicitly for inspection only; it never validates a newly finalized record. This is the only definition permitted to retain exit_status_agreement.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_version",
+        "project_name",
+        "project_root",
+        "pass_id",
+        "pass_name",
+        "artifact_stem",
+        "pass_type",
+        "objective",
+        "date",
+        "status",
+        "code_agent",
+        "model",
+        "effort",
+        "model_selection_confirmed",
+        "model_confirmation_reference",
+        "prompt_template",
+        "prompt_path",
+        "launcher_path",
+        "report_path",
+        "metadata_path",
+        "continuation_state_path",
+        "report_template_path",
+        "metadata_schema_path",
+        "agent_started",
+        "invocation_mode",
+        "runtime_identity",
+        "capture_process_exit_status",
+        "code_agent_exit_status",
+        "code_agent_exit_status_available",
+        "collector_exit_status",
+        "collector_status",
+        "collector_clean_log_ready",
+        "collector_completed_at",
+        "exit_status_agreement",
+        "files_read",
+        "files_created",
+        "files_modified",
+        "inherited_changes",
+        "pass_produced_changes",
+        "verification",
+        "product_result",
+        "build_result",
+        "artifacts",
+        "issues_encountered",
+        "unresolved_issues",
+        "recommended_next_prompt",
+        "agents_md_present",
+        "agents_md_authorized",
+        "agents_md_authority",
+        "agents_md_prior_authority",
+        "agents_md_maintenance_score",
+        "agents_md_prior_maintenance_score",
+        "maintenance_score_decreased",
+        "maintenance_score_change_validated",
+        "agents_md_last_verified_at",
+        "agents_md_drift_items",
+        "agents_md_claude_same_inode",
+        "metadata_schema_present",
+        "report_template_present",
+        "private_repo_initialized",
+        "gitignore_private_controls_valid",
+        "prompt_saved",
+        "launcher_saved",
+        "next_prompt_template",
+        "bootstrap_or_adoption_state",
+        "workflow_files_modified",
+        "write_scope",
+        "skill_authorization",
+        "initialized_at",
+        "pre_pass_completed_at",
+        "agent_started_at",
+        "agent_exited_at",
+        "post_pass_completed_at",
+        "finalized_at",
+        "agent_exit_code",
+        "duration_seconds",
+        "telemetry",
+        "session",
+        "telemetry_limitations",
+        "starting_repository_state",
+        "ending_repository_state",
+        "continuation_state_finalized",
+        "report_valid",
+        "metadata_schema_valid",
+        "artifact_stem_agreement",
+        "report_metadata_mirrors_agree",
+        "workflow_finalization_result",
+        "metadata_finalized",
+        "failed_attempt",
+        "failed_attempt_number",
+        "archive_eligible"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "const": "v2.4.1"
+        },
+        "project_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_root": {
+          "$ref": "#/definitions/absolute_path"
+        },
+        "pass_id": {
+          "$ref": "#/definitions/pass_id_value"
+        },
+        "pass_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_stem": {
+          "$ref": "#/definitions/artifact_stem_value"
+        },
+        "pass_type": {
+          "type": "string",
+          "enum": [
+            "implementation",
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "skill_bootstrap"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "$ref": "#/definitions/date"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "aborted"
+          ]
+        },
+        "code_agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "model_selection_confirmed": {
+          "type": "boolean"
+        },
+        "model_confirmation_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_template": {
+          "type": "string",
+          "enum": [
+            "lean",
+            "full"
+          ]
+        },
+        "prompt_path": {
+          "$ref": "#/definitions/prompt_path_value"
+        },
+        "launcher_path": {
+          "$ref": "#/definitions/launcher_path_value"
+        },
+        "report_path": {
+          "$ref": "#/definitions/report_path_value"
+        },
+        "metadata_path": {
+          "$ref": "#/definitions/metadata_path_value"
+        },
+        "continuation_state_path": {
+          "$ref": "#/definitions/continuation_state_path_value"
+        },
+        "report_template_path": {
+          "type": "string",
+          "const": ".private/workflow-templates/pass-report-template.md"
+        },
+        "metadata_schema_path": {
+          "type": "string",
+          "const": ".private/metadata-schema.json"
+        },
+        "agent_started": {
+          "type": "boolean"
+        },
+        "invocation_mode": {
+          "type": "string",
+          "const": "direct-interactive-launcher"
+        },
+        "runtime_identity": {
+          "$ref": "#/definitions/runtime_identity"
+        },
+        "capture_process_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "code_agent_exit_status_available": {
+          "type": "boolean"
+        },
+        "collector_exit_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "collector_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "collector_clean_log_ready": {
+          "type": "boolean"
+        },
+        "collector_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit_status_agreement": {
+          "type": "boolean",
+          "description": "Diagnostic only: true when independently recorded capture-process and Code Agent exit statuses are numerically equal. Equality is not inferred and is not a workflow-finalization requirement."
+        },
+        "files_read": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "files_created": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "files_modified": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/file_record"
+          }
+        },
+        "inherited_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/repository_state_entry"
+          }
+        },
+        "pass_produced_changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/change_delta"
+          }
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/verification_record"
+          }
+        },
+        "product_result": {
+          "type": "string",
+          "enum": [
+            "succeeded",
+            "failed",
+            "partial",
+            "not-run",
+            "unknown"
+          ]
+        },
+        "build_result": {
+          "$ref": "#/definitions/build_result"
+        },
+        "artifacts": {
+          "$ref": "#/definitions/artifacts"
+        },
+        "issues_encountered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issue_record"
+          }
+        },
+        "unresolved_issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/issue_record"
+          }
+        },
+        "recommended_next_prompt": {
+          "$ref": "#/definitions/recommended_next_prompt"
+        },
+        "agents_md_present": {
+          "type": "boolean"
+        },
+        "agents_md_authorized": {
+          "type": "boolean"
+        },
+        "agents_md_authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "not-present",
+            "unknown",
+            null
+          ]
+        },
+        "agents_md_prior_authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "bootstrap",
+            "adoption",
+            "maintenance",
+            "not-present",
+            "unknown",
+            null
+          ]
+        },
+        "agents_md_maintenance_score": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "agents_md_prior_maintenance_score": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "maintenance_score_decreased": {
+          "type": "boolean"
+        },
+        "maintenance_score_change_validated": {
+          "type": "boolean"
+        },
+        "agents_md_last_verified_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agents_md_drift_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/drift_item"
+          }
+        },
+        "agents_md_claude_same_inode": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "metadata_schema_present": {
+          "type": "boolean"
+        },
+        "report_template_present": {
+          "type": "boolean"
+        },
+        "private_repo_initialized": {
+          "type": "boolean"
+        },
+        "gitignore_private_controls_valid": {
+          "type": "boolean"
+        },
+        "prompt_saved": {
+          "type": "boolean"
+        },
+        "launcher_saved": {
+          "type": "boolean"
+        },
+        "next_prompt_template": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "lean",
+            "full",
+            null
+          ]
+        },
+        "bootstrap_or_adoption_state": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "bootstrap-needed",
+            "adoption-needed"
+          ]
+        },
+        "workflow_files_modified": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/workflow_change"
+          }
+        },
+        "write_scope": {
+          "$ref": "#/definitions/write_scope"
+        },
+        "skill_authorization": {
+          "$ref": "#/definitions/skill_authorization"
+        },
+        "initialized_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pre_pass_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_started_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_exited_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "post_pass_completed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalized_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "telemetry": {
+          "$ref": "#/definitions/legacy_telemetry_v2_4_1"
+        },
+        "session": {
+          "$ref": "#/definitions/session"
+        },
+        "telemetry_limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "tokens_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tokens_input": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tokens_cached_input": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tokens_output": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "tokens_reasoning": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "conversation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "session_slug": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "resume_command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "starting_repository_state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_set"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ending_repository_state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/repository_state_set"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "continuation_state_finalized": {
+          "type": "boolean"
+        },
+        "report_valid": {
+          "type": "boolean"
+        },
+        "metadata_schema_valid": {
+          "type": "boolean"
+        },
+        "artifact_stem_agreement": {
+          "type": "boolean"
+        },
+        "report_metadata_mirrors_agree": {
+          "type": "boolean"
+        },
+        "workflow_finalization_result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "succeeded",
+            "failed",
+            null
+          ]
+        },
+        "metadata_finalized": {
+          "type": "boolean"
+        },
+        "failed_attempt": {
+          "type": "boolean"
+        },
+        "failed_attempt_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "archive_eligible": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "agents_md_maintenance_score": {
+                "minimum": 3
+              }
+            },
+            "required": [
+              "agents_md_maintenance_score"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_drift_items": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": true
+              }
+            },
+            "required": [
+              "agents_md_authorized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_present": {
+                "const": true
+              },
+              "agents_md_authority": {
+                "type": "string",
+                "enum": [
+                  "bootstrap",
+                  "adoption",
+                  "maintenance"
+                ]
+              },
+              "agents_md_last_verified_at": {
+                "$ref": "#/definitions/date"
+              },
+              "agents_md_claude_same_inode": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agents_md_present": {
+                "const": false
+              }
+            },
+            "required": [
+              "agents_md_present"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": false
+              },
+              "agents_md_authority": {
+                "const": "not-present"
+              },
+              "agents_md_last_verified_at": {
+                "type": "null"
+              },
+              "agents_md_claude_same_inode": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "maintenance_score_decreased": {
+                "const": true
+              }
+            },
+            "required": [
+              "maintenance_score_decreased"
+            ]
+          },
+          "then": {
+            "properties": {
+              "pass_type": {
+                "const": "maintenance"
+              },
+              "maintenance_score_change_validated": {
+                "const": true
+              },
+              "agents_md_prior_maintenance_score": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "not": {
+                  "const": "maintenance"
+                }
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maintenance_score_decreased": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agent_started": {
+                "const": false
+              }
+            },
+            "required": [
+              "agent_started"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agent_started_at": {
+                "type": "null"
+              },
+              "agent_exited_at": {
+                "type": "null"
+              },
+              "agent_exit_code": {
+                "type": "null"
+              },
+              "capture_process_exit_status": {
+                "type": "null"
+              },
+              "code_agent_exit_status": {
+                "type": "null"
+              },
+              "code_agent_exit_status_available": {
+                "const": false
+              },
+              "collector_exit_status": {
+                "type": "null"
+              },
+              "collector_status": {
+                "const": "pending"
+              },
+              "collector_clean_log_ready": {
+                "const": false
+              },
+              "collector_completed_at": {
+                "type": "null"
+              },
+              "exit_status_agreement": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "agent_started": {
+                "const": true
+              }
+            },
+            "required": [
+              "agent_started"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agent_started_at": {
+                "$ref": "#/definitions/timestamp"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "failed_attempt": {
+                "const": true
+              }
+            },
+            "required": [
+              "failed_attempt"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failed_attempt_number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "agent_started": {
+                "const": false
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "failed_attempt_number": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metadata_finalized": {
+                "const": true
+              }
+            },
+            "required": [
+              "metadata_finalized"
+            ]
+          },
+          "then": {
+            "required": [
+              "tokens_total",
+              "tokens_input",
+              "tokens_cached_input",
+              "tokens_output",
+              "tokens_reasoning",
+              "session_id",
+              "conversation_id",
+              "session_slug",
+              "resume_command"
+            ],
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "succeeded"
+              },
+              "continuation_state_finalized": {
+                "const": true
+              },
+              "report_valid": {
+                "const": true
+              },
+              "metadata_schema_valid": {
+                "const": true
+              },
+              "artifact_stem_agreement": {
+                "const": true
+              },
+              "report_metadata_mirrors_agree": {
+                "const": true
+              },
+              "archive_eligible": {
+                "const": true
+              },
+              "failed_attempt": {
+                "const": false
+              },
+              "agent_started": {
+                "const": true
+              },
+              "prompt_saved": {
+                "const": true
+              },
+              "launcher_saved": {
+                "const": true
+              },
+              "metadata_schema_present": {
+                "const": true
+              },
+              "report_template_present": {
+                "const": true
+              },
+              "initialized_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "pre_pass_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_started_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_exited_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "post_pass_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "finalized_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "agent_exit_code": {
+                "type": "integer"
+              },
+              "duration_seconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "starting_repository_state": {
+                "$ref": "#/definitions/repository_state_set"
+              },
+              "ending_repository_state": {
+                "$ref": "#/definitions/repository_state_set"
+              },
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "write_scope_valid": {
+                        "const": true
+                      },
+                      "unauthorized_changes": {
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                ]
+              },
+              "invocation_mode": {
+                "const": "direct-interactive-launcher"
+              },
+              "runtime_identity": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/runtime_identity"
+                  },
+                  {
+                    "properties": {
+                      "lifecycle_session_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "launcher_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "launcher_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "capture_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "capture_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "code_agent_pid": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "code_agent_binary": {
+                        "$ref": "#/definitions/absolute_path"
+                      },
+                      "code_agent_process_start_marker": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "raw_log_path": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/definitions/absolute_path"
+                          },
+                          {
+                            "$ref": "#/definitions/project_relative_path"
+                          }
+                        ]
+                      },
+                      "registered_at": {
+                        "$ref": "#/definitions/timestamp"
+                      },
+                      "active": {
+                        "const": false
+                      },
+                      "pass_id": {
+                        "$ref": "#/definitions/pass_id_value"
+                      },
+                      "artifact_stem": {
+                        "$ref": "#/definitions/artifact_stem_value"
+                      }
+                    }
+                  }
+                ]
+              },
+              "capture_process_exit_status": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "code_agent_exit_status": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "code_agent_exit_status_available": {
+                "const": true
+              },
+              "collector_exit_status": {
+                "const": 0
+              },
+              "collector_status": {
+                "const": "succeeded"
+              },
+              "collector_clean_log_ready": {
+                "const": true
+              },
+              "collector_completed_at": {
+                "$ref": "#/definitions/timestamp"
+              },
+              "exit_status_agreement": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "workflow_finalization_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": true
+              },
+              "continuation_state_finalized": {
+                "const": true
+              },
+              "report_valid": {
+                "const": true
+              },
+              "metadata_schema_valid": {
+                "const": true
+              },
+              "artifact_stem_agreement": {
+                "const": true
+              },
+              "report_metadata_mirrors_agree": {
+                "const": true
+              },
+              "archive_eligible": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "workflow_finalization_result": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "workflow_finalization_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              }
+            },
+            "required": [
+              "metadata_finalized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "succeeded"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "succeeded"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "failed"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "partial"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "partial"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "not-run"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "not-run"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "product_result": {
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "product_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "build_result": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/build_result"
+                  },
+                  {
+                    "properties": {
+                      "outcome": {
+                        "const": "unknown"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "implementation"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agents_md_authorized": {
+                "const": true
+              },
+              "agents_md_maintenance_score": {
+                "maximum": 3
+              },
+              "private_repo_initialized": {
+                "const": true
+              },
+              "bootstrap_or_adoption_state": {
+                "const": "complete"
+              },
+              "workflow_files_modified": {
+                "maxItems": 0
+              },
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "manifest_required": {
+                        "const": false
+                      },
+                      "manifest_path": {
+                        "type": "null"
+                      },
+                      "authorized_paths": {
+                        "maxItems": 0
+                      },
+                      "unauthorized_changes": {
+                        "maxItems": 0
+                      },
+                      "write_scope_valid": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "enum": [
+                  "bootstrap",
+                  "adoption",
+                  "maintenance",
+                  "skill_bootstrap"
+                ]
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "write_scope": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/write_scope"
+                  },
+                  {
+                    "properties": {
+                      "manifest_required": {
+                        "const": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "maintenance"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "workflow_files_modified": {
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/workflow_change"
+                    },
+                    {
+                      "properties": {
+                        "path": {
+                          "not": {
+                            "pattern": "^(?:skills-lock\\.json|\\.agents/skills(?:/|$)|\\.claude/skills(?:/|$))"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pass_type": {
+                "const": "skill_bootstrap"
+              }
+            },
+            "required": [
+              "pass_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "authorization_performed": {
+                        "const": true
+                      },
+                      "skills_changed": {
+                        "minItems": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "authorization_performed": {
+                        "const": false
+                      },
+                      "skills_changed": {
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "properties": {
+                  "pass_type": {
+                    "const": "skill_bootstrap"
+                  }
+                },
+                "required": [
+                  "pass_type"
+                ]
+              },
+              {
+                "properties": {
+                  "metadata_finalized": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "metadata_finalized"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "skill_authorization": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/skill_authorization"
+                  },
+                  {
+                    "properties": {
+                      "skills_lock_valid": {
+                        "const": true
+                      },
+                      "validation_errors": {
+                        "maxItems": 0
+                      },
+                      "skills_changed": {
+                        "minItems": 1,
+                        "items": {
+                          "allOf": [
+                            {
+                              "$ref": "#/definitions/skill_change"
+                            },
+                            {
+                              "properties": {
+                                "evaluation_passed": {
+                                  "const": true
+                                },
+                                "hash_agreement": {
+                                  "const": true
+                                },
+                                "lock_updated": {
+                                  "const": true
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code_agent_exit_status_available": {
+                "const": false
+              }
+            },
+            "required": [
+              "code_agent_exit_status_available"
+            ]
+          },
+          "then": {
+            "properties": {
+              "code_agent_exit_status": {
+                "type": "null"
+              },
+              "agent_exit_code": {
+                "type": "null"
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collector_status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "collector_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "collector_clean_log_ready": {
+                "const": false
+              },
+              "metadata_finalized": {
+                "const": false
+              },
+              "continuation_state_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "collector_clean_log_ready": {
+                "const": false
+              }
+            },
+            "required": [
+              "collector_clean_log_ready"
+            ]
+          },
+          "then": {
+            "properties": {
+              "metadata_finalized": {
+                "const": false
+              },
+              "archive_eligible": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "exit_status_agreement": {
+                "const": true
+              }
+            },
+            "required": [
+              "exit_status_agreement"
+            ]
+          },
+          "then": {
+            "properties": {
+              "code_agent_exit_status_available": {
+                "const": true
+              },
+              "code_agent_exit_status": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "agent_exit_code": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -21,6 +21,8 @@ final class BottomRailView: NSView {
     private let nextButton = RailButton()
     private let volumeButton = RailButton()
     private let fullscreenButton = RailButton()
+    private let settingsButton = RailButton()
+    private let manualAdvanceButton = RailButton()
     private var markerLabels: [NSTextField] = []
     private var pendingSeekPosition: Float?
     private var pendingSeekDate: Date?
@@ -64,15 +66,21 @@ final class BottomRailView: NSView {
         configure(nextButton, symbol: "forward.end.fill", label: "Next", help: "Next item (])", action: #selector(nextTapped))
         configure(volumeButton, symbol: "speaker.wave.2.fill", label: "Mute or Unmute", help: "Mute or Unmute (M)", action: #selector(volumeTapped))
         configure(fullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", label: "Fullscreen", help: "Toggle Fullscreen (F)", action: #selector(fullscreenTapped))
+        configure(settingsButton, symbol: "gearshape", label: "Settings", help: "Open Settings", action: #selector(settingsTapped))
+        configure(manualAdvanceButton, symbol: "forward.frame.fill", label: "Advance Segment",
+                 help: "Manually advance to the next Progressive Random Skim segment (active only when Progressive Random Skim is on)",
+                 action: #selector(manualAdvanceTapped))
         previousButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.previousIdentifier)
         skimButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.toggleIdentifier)
         queueButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.queueIdentifier)
-        queueButton.nextKeyView = skimButton
+        queueButton.nextKeyView = manualAdvanceButton
+        manualAdvanceButton.nextKeyView = skimButton
         skimButton.nextKeyView = previousButton
         previousButton.nextKeyView = playPauseButton
         playPauseButton.nextKeyView = nextButton
         nextButton.nextKeyView = volumeButton
         volumeButton.nextKeyView = fullscreenButton
+        fullscreenButton.nextKeyView = settingsButton
 
         markerLabels = (0..<4).map { _ in
             let label = NSTextField(labelWithString: "")
@@ -112,8 +120,12 @@ final class BottomRailView: NSView {
         let y: CGFloat = 3
         queueButton.frame = NSRect(x: side, y: y + 3, width: button, height: button)
         queueButton.layer?.cornerRadius = button / 2
+        manualAdvanceButton.frame = NSRect(x: side + button + gap, y: y + 3, width: button, height: button)
+        manualAdvanceButton.layer?.cornerRadius = button / 2
         fullscreenButton.frame = NSRect(x: max(side, width - side - button), y: y + 3, width: button, height: button)
         fullscreenButton.layer?.cornerRadius = button / 2
+        settingsButton.frame = NSRect(x: max(side, fullscreenButton.frame.minX - gap - button), y: y + 3, width: button, height: button)
+        settingsButton.layer?.cornerRadius = button / 2
         for control in [skimButton, previousButton] {
             control.frame = NSRect(x: x, y: y + 3, width: button, height: button)
             control.layer?.cornerRadius = button / 2
@@ -149,8 +161,10 @@ final class BottomRailView: NSView {
         queueButton.isToggled = controller?.isQueuePageOpen ?? false
         previousButton.isEnabled = controller?.hasPrevious ?? false
         nextButton.isEnabled = controller?.hasNext ?? false
+        manualAdvanceButton.isEnabled = controller?.canManuallyAdvanceProgressiveRandomSkimSegment ?? false
         updateSkimButton()
         updateMarkers()
+        updateSegmentMarkers()
 
         if isImageMode {
             scrubber.isHidden = true
@@ -185,6 +199,20 @@ final class BottomRailView: NSView {
             else { pendingSeekPosition = nil; pendingSeekDate = nil }
         }
         if position.isFinite { scrubber.doubleValue = Double(max(0, min(1, position))) }
+    }
+
+    /// Part 4: normalizes `controller.progressiveRandomSkimSegmentStartSeconds` (playback seconds,
+    /// always sourced from the live plan — see that property's doc) against the current media
+    /// duration for the scrub bar's segment tick marks. Empty markers when there's no known duration
+    /// yet, mirroring how `activeRange` position itself only renders once duration is known.
+    private func updateSegmentMarkers() {
+        let totalDuration = Double(player?.media?.length.intValue ?? 0) / 1000
+        guard !isImageMode, totalDuration.isFinite, totalDuration > 0,
+              let starts = controller?.progressiveRandomSkimSegmentStartSeconds, !starts.isEmpty else {
+            scrubber.segmentStarts = []
+            return
+        }
+        scrubber.segmentStarts = starts.map { CGFloat(max(0, min(1, $0 / totalDuration))) }
     }
 
     private func updateMarkers() {
@@ -250,6 +278,8 @@ final class BottomRailView: NSView {
     @objc private func nextTapped() { controller?.playNext() }
     @objc private func volumeTapped() { controller?.toggleMuteFromTransport() }
     @objc private func fullscreenTapped() { window?.toggleFullScreen(nil) }
+    @objc private func settingsTapped() { SettingsWindowController.shared.openSettings() }
+    @objc private func manualAdvanceTapped() { controller?.manuallyAdvanceProgressiveRandomSkimSegment() }
 }
 
 final class PreviewRangeSlider: NSSlider {
@@ -258,6 +288,16 @@ final class PreviewRangeSlider: NSSlider {
     var activeRange: ActivePreviewRange? {
         didSet {
             (cell as? PreviewRangeSliderCell)?.activeRange = activeRange
+            needsDisplay = true
+        }
+    }
+
+    /// Part 4: normalized (0...1) Progressive Random Skim segment start positions, rendered as small
+    /// tick marks distinct from the active-range highlight. Position-only — no "segment X of Y" text.
+    var segmentStarts: [CGFloat] = [] {
+        didSet {
+            guard segmentStarts != oldValue else { return }
+            (cell as? PreviewRangeSliderCell)?.segmentStarts = segmentStarts
             needsDisplay = true
         }
     }
@@ -284,11 +324,13 @@ final class PreviewRangeSlider: NSSlider {
 private final class PreviewRangeSliderCell: NSSliderCell {
     var activeRange: ActivePreviewRange?
     var emphasizesThumb = false
+    var segmentStarts: [CGFloat] = []
 
     override func drawBar(inside rect: NSRect, flipped: Bool) {
         let bar = NSRect(x: rect.minX, y: rect.midY - 1, width: rect.width, height: 2)
         NSColor.white.withAlphaComponent(0.18).setFill()
         NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1).fill()
+        drawSegmentMarkers(bar: bar)
         guard let range = activeRange, range.totalDurationSeconds > 0 else { return }
         let start = CGFloat(range.normalizedStart)
         let end = CGFloat(range.normalizedEnd)
@@ -307,6 +349,18 @@ private final class PreviewRangeSliderCell: NSSliderCell {
                                 height: active.height)
         SkimColors.periwinkle.setFill()
         NSBezierPath(roundedRect: progressed, xRadius: 2, yRadius: 2).fill()
+    }
+
+    /// Small vertical ticks marking each planned Progressive Random Skim segment's start position.
+    /// Position indicators only — no label text, per the Part 4 spec.
+    private func drawSegmentMarkers(bar: NSRect) {
+        guard !segmentStarts.isEmpty else { return }
+        NSColor.white.withAlphaComponent(0.55).setFill()
+        for start in segmentStarts {
+            let x = bar.minX + bar.width * max(0, min(1, start))
+            let tick = NSRect(x: x - 0.75, y: bar.midY - 4, width: 1.5, height: 8)
+            NSBezierPath(roundedRect: tick, xRadius: 0.75, yRadius: 0.75).fill()
+        }
     }
 
     override func drawKnob(_ knobRect: NSRect) {

@@ -28,6 +28,8 @@ enum SettingsDefaultsRegistry {
         static let randomPreviewMaximumSeconds = "randomPreviewMaximumSeconds"
         static let startPositionMode = "startPositionMode"
         static let skipIntroSeconds = "skipIntroSeconds"
+        static let progressiveRandomSkimEnabled = "progressiveRandomSkimEnabled"
+        static let progressiveRandomSkimIntensity = "progressiveRandomSkimIntensity"
         static let queueOrderMode = "queueOrderMode"
         static let loopQueueEnabled = "loopQueueEnabled"
         static let backgroundAudioBookmark = "backgroundAudioBookmark"
@@ -58,6 +60,8 @@ enum SettingsDefaultsRegistry {
         static let startPositionModeRandom = "random"
         static let startPositionMode = startPositionModeRandom
         static let skipIntroSeconds = 5
+        static let progressiveRandomSkimEnabled = false
+        static let progressiveRandomSkimIntensity = ProgressiveRandomSkimIntensity.standard.rawValue
         static let queueOrderModeSequential = "sequential"
         static let queueOrderModeShuffle = "shuffle"
         static let queueOrderModeWeighted = "weighted"
@@ -115,6 +119,8 @@ enum SettingsDefaultsRegistry {
             Keys.randomPreviewMaximumSeconds: Defaults.randomPreviewMaximumSeconds,
             Keys.startPositionMode: Defaults.startPositionMode,
             Keys.skipIntroSeconds: Defaults.skipIntroSeconds,
+            Keys.progressiveRandomSkimEnabled: Defaults.progressiveRandomSkimEnabled,
+            Keys.progressiveRandomSkimIntensity: Defaults.progressiveRandomSkimIntensity,
             Keys.queueOrderMode: Defaults.queueOrderMode,
             Keys.loopQueueEnabled: Defaults.loopQueueEnabled,
             Keys.backgroundAudioMixMode: Defaults.backgroundAudioMixMode,
@@ -164,6 +170,10 @@ enum SettingsDefaultsRegistry {
 
     static func validatedStartPositionMode(_ value: String) -> String {
         value == Defaults.startPositionModeBeginning ? Defaults.startPositionModeBeginning : Defaults.startPositionModeRandom
+    }
+
+    static func validatedProgressiveRandomSkimIntensity(_ value: String) -> String {
+        ProgressiveRandomSkimIntensity(rawValue: value)?.rawValue ?? Defaults.progressiveRandomSkimIntensity
     }
 
     static func validatedQueueOrderMode(_ value: String) -> String {
