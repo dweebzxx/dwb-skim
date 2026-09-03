@@ -616,7 +616,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
             ("REVIEW ACTIONS", [("keep_", "K"), ("delete_", "D"), ("Rename", "R"), ("Undo", "Z")]),
             ("PREFIX RENAME", [("Primary prefix (toggle / replace)", "N"), ("Secondary prefix (toggle / replace)", "M")]),
             ("QUEUE NAVIGATION", [("Previous item", ","), ("Next item", "."), ("Toggle queue panel", "Q")]),
-            ("PLAYBACK", [("Play/Pause", "Space"), ("Fullscreen", "F"), ("Next Progressive Random Skim segment", "\u{2192}")]),
+            ("PLAYBACK", [("Play/Pause", "Space"), ("Fullscreen", "F")]
+                + SkimKeyboardShortcut.tenSecondSeekSettingsRows
+                + [("Next Progressive Random Skim segment", "\u{2192}")]),
             ("APP AND WINDOW", [("Open media or folder", "Command-O"), ("Open Settings", "Command-,"), ("Close window", "Command-W")]),
         ]
         return page(sections: groups.map { title, items in

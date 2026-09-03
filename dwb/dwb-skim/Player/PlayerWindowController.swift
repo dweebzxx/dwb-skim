@@ -825,11 +825,35 @@ class PlayerWindowController: NSWindowController {
     }
 
     func handleSkimShortcut(_ event: NSEvent) -> Bool {
-        guard !event.isARepeat, !isTextEntryFocused else { return false }
+        guard !isTextEntryFocused else { return false }
         let forbidden = event.modifierFlags.intersection([.command, .option, .control, .shift])
         guard forbidden.isEmpty,
               let key = event.charactersIgnoringModifiers?.lowercased(),
               let shortcut = SkimKeyboardShortcut(unmodifiedKey: key) else { return false }
+        // AppKit delivers normal key-repeat as additional key-down events. Only
+        // non-Skim arrows consume those repeats; all existing Skim and non-arrow
+        // shortcut repeat behavior remains unchanged.
+        guard !event.isARepeat || shortcut.handlesKeyRepeat(isSkimEnabled: configuredSkimEnabled) else { return false }
+
+        if let arrowDispatch = shortcut.arrowDispatch(
+            isSkimEnabled: configuredSkimEnabled,
+            isProgressiveRandomSkimSessionActive: isProgressiveRandomSkimSessionActive,
+            canManuallyAdvanceProgressiveRandomSkimSegment: canManuallyAdvanceProgressiveRandomSkimSegment
+        ) {
+            switch arrowDispatch {
+            case .seek(let seconds):
+                seekByArrowKey(seconds: seconds)
+                return true
+            case .advanceProgressiveRandomSkimSegment:
+                manuallyAdvanceProgressiveRandomSkimSegment()
+                return true
+            case .consume:
+                return true
+            case .passThrough:
+                return false
+            }
+        }
+
         switch shortcut {
         case .reviewKeep: performReviewKeepCurrentItem(); return true
         case .reviewDelete: performReviewDeletePrefixCurrentItem(); return true
@@ -842,17 +866,28 @@ class PlayerWindowController: NSWindowController {
         case .toggleQueuePanel: toggleQueuePage(); return true
         case .togglePlayPause: togglePlayPause(); return true
         case .toggleFullScreen: window?.toggleFullScreen(nil); return true
-        case .advanceProgressiveRandomSkimSegment:
-            if canManuallyAdvanceProgressiveRandomSkimSegment {
-                manuallyAdvanceProgressiveRandomSkimSegment()
-                return true
-            }
-            // While a Progressive Random Skim session is controlling playback,
-            // Right Arrow is a no-op at the final planned segment rather than
-            // falling through to queue-level Next. Outside such a session, keep
-            // the pre-P36 Right Arrow behavior (unhandled → passes through).
-            return isProgressiveRandomSkimSessionActive
+        case .seekBackwardTenSeconds, .seekForwardTenSeconds:
+            assertionFailure("Arrow shortcuts must be resolved before the standard shortcut switch")
+            return false
         }
+    }
+
+    /// Uses VLCKit's native relative seek operation, including its established
+    /// stream-boundary behavior, rather than maintaining a second duration or
+    /// clamping system in the keyboard path.
+    private func seekByArrowKey(seconds: Int) {
+        guard !configuredSkimEnabled,
+              !currentItemIsImage,
+              currentMediaURL != nil,
+              player.media != nil,
+              player.isSeekable else { return }
+        notifyUserSeek(source: "arrow-key-\\(seconds > 0 ? \"forward\" : \"backward\")")
+        if seconds > 0 {
+            player.jumpForward(Int32(seconds))
+        } else {
+            player.jumpBackward(Int32(-seconds))
+        }
+        transport.update()
     }
 
     func toggleSkimEnabled(source: String) {

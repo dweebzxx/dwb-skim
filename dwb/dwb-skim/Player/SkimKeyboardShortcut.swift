@@ -5,7 +5,7 @@ import AppKit
 /// AppKit event plumbing; `PlayerWindowController.handleSkimShortcut` is the
 /// only production caller and owns modifier rejection and text-entry guards.
 ///
-/// P36 mapping (unmodified keys):
+/// P38 mapping (unmodified keys):
 ///
 /// | Key | Action                        |
 /// | --- | ----------------------------- |
@@ -20,7 +20,8 @@ import AppKit
 /// | `q` | Toggle queue panel            |
 /// | ` ` | Play / Pause                  |
 /// | `f` | Toggle fullscreen             |
-/// | `→` | Advance Progressive Random Skim segment |
+/// | `←` | Seek backward 10 seconds when Skim is off |
+/// | `→` | Seek forward 10 seconds when Skim is off; advance Progressive Random Skim when it owns the key |
 ///
 /// P36 removed the pre-P36 bindings `[` (Previous Video), `]` (Next Video), and
 /// `m` (Mute). Those keys are intentionally absent from this table so they no
@@ -37,11 +38,57 @@ enum SkimKeyboardShortcut: Equatable, CaseIterable {
     case toggleQueuePanel
     case togglePlayPause
     case toggleFullScreen
-    case advanceProgressiveRandomSkimSegment
+    case seekBackwardTenSeconds
+    case seekForwardTenSeconds
 
-    /// The key equivalent for the Advance Progressive Random Skim Segment
-    /// action (Right Arrow), as it appears in `charactersIgnoringModifiers`.
+    static let tenSecondSeekInterval = 10
+
+    /// Arrow key equivalents as they appear in `charactersIgnoringModifiers`.
+    static let leftArrowKey = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
     static let rightArrowKey = String(UnicodeScalar(NSRightArrowFunctionKey)!)
+
+    /// Fixed-shortcut rows consumed by the existing Settings → Shortcuts page.
+    static let tenSecondSeekSettingsRows = [
+        ("Seek backward 10 seconds", "←"),
+        ("Seek forward 10 seconds", "→"),
+    ]
+
+    var isArrowKey: Bool {
+        switch self {
+        case .seekBackwardTenSeconds, .seekForwardTenSeconds:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// AppKit repeat events are actionable only for normal-playback arrows.
+    /// Skim retains P36's original single-key-down routing.
+    func handlesKeyRepeat(isSkimEnabled: Bool) -> Bool {
+        isArrowKey && !isSkimEnabled
+    }
+
+    /// Resolves the one authoritative player-window arrow-key context into one
+    /// action. The caller supplies its existing Skim and Progressive Random
+    /// Skim state; this table does not own or infer either state.
+    func arrowDispatch(isSkimEnabled: Bool,
+                       isProgressiveRandomSkimSessionActive: Bool,
+                       canManuallyAdvanceProgressiveRandomSkimSegment: Bool) -> SkimArrowKeyDispatch? {
+        switch self {
+        case .seekBackwardTenSeconds:
+            return isSkimEnabled ? .passThrough : .seek(seconds: -Self.tenSecondSeekInterval)
+        case .seekForwardTenSeconds:
+            guard !isSkimEnabled else {
+                if canManuallyAdvanceProgressiveRandomSkimSegment {
+                    return .advanceProgressiveRandomSkimSegment
+                }
+                return isProgressiveRandomSkimSessionActive ? .consume : .passThrough
+            }
+            return .seek(seconds: Self.tenSecondSeekInterval)
+        default:
+            return nil
+        }
+    }
 
     /// Maps an already-lowercased, modifier-free key to its action, or `nil`
     /// when the key is not bound.
@@ -58,8 +105,16 @@ enum SkimKeyboardShortcut: Equatable, CaseIterable {
         case "q": self = .toggleQueuePanel
         case " ": self = .togglePlayPause
         case "f": self = .toggleFullScreen
-        case Self.rightArrowKey: self = .advanceProgressiveRandomSkimSegment
+        case Self.leftArrowKey: self = .seekBackwardTenSeconds
+        case Self.rightArrowKey: self = .seekForwardTenSeconds
         default: return nil
         }
     }
+}
+
+enum SkimArrowKeyDispatch: Equatable {
+    case seek(seconds: Int)
+    case advanceProgressiveRandomSkimSegment
+    case consume
+    case passThrough
 }

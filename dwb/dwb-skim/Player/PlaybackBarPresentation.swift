@@ -29,6 +29,12 @@ struct PlaybackBarMarker: Equatable {
     }
 }
 
+/// Pure display state for normal-playback timing in the bottom rail.
+struct PlaybackDurationPresentation: Equatable {
+    let text: String
+    let accessibilityValue: String
+}
+
 enum PlaybackBarPresentation {
     static let controlOrder = ["Queue", "Skim", "Previous", "Play/Pause", "Next", "Volume", "Fullscreen"]
 
@@ -61,8 +67,27 @@ enum PlaybackBarPresentation {
         let markerCells = (0..<4).map {
             CGRect(x: edgeInset + CGFloat($0) * cellWidth, y: 42, width: cellWidth, height: 14)
         }
+        let durationWidth = min(180, railWidth)
+        let durationTimerFrame = CGRect(x: (width - durationWidth) / 2, y: 42,
+                                        width: durationWidth, height: 14)
         return PlaybackBarLayout(edgeInset: edgeInset, gap: availableGap, centeredWidth: centeredWidth,
-                                 markerCells: markerCells)
+                                 markerCells: markerCells, durationTimerFrame: durationTimerFrame)
+    }
+
+    static func duration(elapsedMilliseconds: Int32,
+                         durationMilliseconds: Int32,
+                         isSkimEnabled: Bool,
+                         isImageMode: Bool) -> PlaybackDurationPresentation? {
+        guard !isSkimEnabled, !isImageMode, durationMilliseconds > 0 else { return nil }
+        let durationSeconds = Int(durationMilliseconds) / 1_000
+        let elapsedSeconds = max(0, min(durationSeconds, Int(elapsedMilliseconds) / 1_000))
+        let remainingSeconds = durationSeconds - elapsedSeconds
+        let elapsed = formatTime(elapsedSeconds)
+        let remaining = formatTime(remainingSeconds)
+        return PlaybackDurationPresentation(
+            text: "\(elapsed)  -\(remaining)",
+            accessibilityValue: "Elapsed \(elapsed), remaining \(remaining)"
+        )
     }
 
     private static func marker(compact: String, full: String, active: Bool) -> PlaybackBarMarker {
@@ -78,6 +103,10 @@ enum PlaybackBarPresentation {
         case .weighted: return "Weighted"
         }
     }
+
+    private static func formatTime(_ seconds: Int) -> String {
+        String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
 }
 
 struct PlaybackBarLayout: Equatable {
@@ -85,6 +114,7 @@ struct PlaybackBarLayout: Equatable {
     let gap: CGFloat
     let centeredWidth: CGFloat
     let markerCells: [CGRect]
+    let durationTimerFrame: CGRect
 
     var markerRail: CGRect {
         guard let first = markerCells.first, let last = markerCells.last else { return .zero }

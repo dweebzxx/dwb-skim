@@ -23,6 +23,7 @@ final class BottomRailView: NSView {
     private let fullscreenButton = RailButton()
     private let settingsButton = RailButton()
     private let manualAdvanceButton = RailButton()
+    private let durationLabel = NSTextField(labelWithString: "")
     private var markerLabels: [NSTextField] = []
     private var pendingSeekPosition: Float?
     private var pendingSeekDate: Date?
@@ -81,6 +82,16 @@ final class BottomRailView: NSView {
         nextButton.nextKeyView = volumeButton
         volumeButton.nextKeyView = fullscreenButton
         fullscreenButton.nextKeyView = settingsButton
+
+        durationLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        durationLabel.alignment = .center
+        durationLabel.textColor = .secondaryLabelColor
+        durationLabel.maximumNumberOfLines = 1
+        durationLabel.isHidden = true
+        durationLabel.setAccessibilityElement(true)
+        durationLabel.setAccessibilityLabel("Playback Time")
+        durationLabel.identifier = NSUserInterfaceItemIdentifier("playbackDurationTimer")
+        addSubview(durationLabel)
 
         markerLabels = (0..<4).map { _ in
             let label = NSTextField(labelWithString: "")
@@ -143,6 +154,7 @@ final class BottomRailView: NSView {
         for (label, cell) in zip(markerLabels, geometry.markerCells) {
             label.frame = cell
         }
+        durationLabel.frame = geometry.durationTimerFrame
         scrubber.frame = NSRect(x: side, y: 58, width: max(0, width - side * 2), height: 12)
     }
 
@@ -163,7 +175,8 @@ final class BottomRailView: NSView {
         nextButton.isEnabled = controller?.hasNext ?? false
         manualAdvanceButton.isEnabled = controller?.canManuallyAdvanceProgressiveRandomSkimSegment ?? false
         updateSkimButton()
-        updateMarkers()
+        let isShowingDuration = updateDurationLabel()
+        updateMarkers(isHidden: isShowingDuration)
         updateSegmentMarkers()
 
         if isImageMode {
@@ -215,10 +228,11 @@ final class BottomRailView: NSView {
         scrubber.segmentStarts = starts.map { CGFloat(max(0, min(1, $0 / totalDuration))) }
     }
 
-    private func updateMarkers() {
+    private func updateMarkers(isHidden: Bool) {
         let markers = PlaybackBarPresentation.markers(settings: SkimSettingsStore.shared.snapshot())
         let geometry = PlaybackBarPresentation.layout(width: bounds.width)
         for ((label, marker), cell) in zip(zip(markerLabels, markers), geometry.markerCells) {
+            label.isHidden = isHidden
             label.stringValue = marker.displayText(at: cell.width)
             label.toolTip = marker.fullText
             label.setAccessibilityLabel(marker.fullText.components(separatedBy: " ").prefix(2).joined(separator: " "))
@@ -226,6 +240,19 @@ final class BottomRailView: NSView {
             label.textColor = marker.isActive ? .secondaryLabelColor : .tertiaryLabelColor
             label.alphaValue = marker.isActive ? 0.9 : 0.48
         }
+    }
+
+    private func updateDurationLabel() -> Bool {
+        let presentation = PlaybackBarPresentation.duration(
+            elapsedMilliseconds: player?.time.intValue ?? 0,
+            durationMilliseconds: player?.media?.length.intValue ?? 0,
+            isSkimEnabled: controller?.isSkimEnabled ?? true,
+            isImageMode: isImageMode
+        )
+        durationLabel.isHidden = presentation == nil
+        durationLabel.stringValue = presentation?.text ?? ""
+        durationLabel.setAccessibilityValue(presentation?.accessibilityValue ?? "")
+        return presentation != nil
     }
 
     private func setPlaySymbol(isPlaying: Bool) {

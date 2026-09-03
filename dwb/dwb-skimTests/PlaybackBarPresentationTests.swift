@@ -18,6 +18,58 @@ final class PlaybackBarPresentationTests: XCTestCase {
         XCTAssertGreaterThan(layout.centeredWidth, 0)
     }
 
+    func testDurationTimerIsCenteredDirectlyAbovePlayPause() {
+        let layout = PlaybackBarPresentation.layout(width: 980)
+        XCTAssertEqual(layout.durationTimerFrame.midX, 490, accuracy: 0.001)
+        XCTAssertEqual(layout.durationTimerFrame.minY, 42, accuracy: 0.001)
+    }
+
+    func testSkimOffVideoShowsElapsedAndRemainingDuration() {
+        let presentation = PlaybackBarPresentation.duration(
+            elapsedMilliseconds: 83_000,
+            durationMilliseconds: 308_000,
+            isSkimEnabled: false,
+            isImageMode: false
+        )
+        XCTAssertEqual(presentation?.text, "01:23  -03:45")
+        XCTAssertEqual(presentation?.accessibilityValue, "Elapsed 01:23, remaining 03:45")
+    }
+
+    func testDurationTimerClampsAtMediaBoundaries() {
+        XCTAssertEqual(
+            PlaybackBarPresentation.duration(elapsedMilliseconds: -1,
+                                             durationMilliseconds: 60_000,
+                                             isSkimEnabled: false,
+                                             isImageMode: false)?.text,
+            "00:00  -01:00"
+        )
+        XCTAssertEqual(
+            PlaybackBarPresentation.duration(elapsedMilliseconds: 75_000,
+                                             durationMilliseconds: 60_000,
+                                             isSkimEnabled: false,
+                                             isImageMode: false)?.text,
+            "01:00  -00:00"
+        )
+    }
+
+    func testDurationTimerIsHiddenWhenSkimOwnsPlayback() {
+        XCTAssertNil(PlaybackBarPresentation.duration(elapsedMilliseconds: 10_000,
+                                                       durationMilliseconds: 60_000,
+                                                       isSkimEnabled: true,
+                                                       isImageMode: false))
+    }
+
+    func testDurationTimerIsHiddenForImagesAndUnknownMedia() {
+        XCTAssertNil(PlaybackBarPresentation.duration(elapsedMilliseconds: 10_000,
+                                                       durationMilliseconds: 60_000,
+                                                       isSkimEnabled: false,
+                                                       isImageMode: true))
+        XCTAssertNil(PlaybackBarPresentation.duration(elapsedMilliseconds: 0,
+                                                       durationMilliseconds: 0,
+                                                       isSkimEnabled: false,
+                                                       isImageMode: false))
+    }
+
     func testMarkerCellsSpanTheSameRailAsTheEdgeControls() {
         let layout = PlaybackBarPresentation.layout(width: 980)
         XCTAssertEqual(layout.markerCells.count, 4)

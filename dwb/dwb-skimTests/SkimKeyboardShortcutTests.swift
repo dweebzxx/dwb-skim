@@ -21,9 +21,86 @@ final class SkimKeyboardShortcutTests: XCTestCase {
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "m"), .secondaryPrefixRename)
     }
 
-    func testRightArrowMapsToAdvanceProgressiveRandomSkimSegment() {
+    func testRightArrowMapsToForwardTenSecondSeekShortcut() {
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: SkimKeyboardShortcut.rightArrowKey),
-                       .advanceProgressiveRandomSkimSegment)
+                       .seekForwardTenSeconds)
+    }
+
+    func testLeftArrowMapsToBackwardTenSecondSeekShortcut() {
+        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: SkimKeyboardShortcut.leftArrowKey),
+                       .seekBackwardTenSeconds)
+    }
+
+    func testSkimOffRightArrowDispatchesForwardTenSecondSeek() {
+        XCTAssertEqual(SkimKeyboardShortcut.seekForwardTenSeconds.arrowDispatch(
+            isSkimEnabled: false,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        ), .seek(seconds: 10))
+    }
+
+    func testSkimOffLeftArrowDispatchesBackwardTenSecondSeek() {
+        XCTAssertEqual(SkimKeyboardShortcut.seekBackwardTenSeconds.arrowDispatch(
+            isSkimEnabled: false,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        ), .seek(seconds: -10))
+    }
+
+    func testRepeatedArrowKeyDownIsHandledOnlyWhenSkimIsOff() {
+        XCTAssertTrue(SkimKeyboardShortcut.seekForwardTenSeconds.handlesKeyRepeat(isSkimEnabled: false))
+        XCTAssertTrue(SkimKeyboardShortcut.seekBackwardTenSeconds.handlesKeyRepeat(isSkimEnabled: false))
+        XCTAssertFalse(SkimKeyboardShortcut.seekForwardTenSeconds.handlesKeyRepeat(isSkimEnabled: true))
+        XCTAssertFalse(SkimKeyboardShortcut.seekBackwardTenSeconds.handlesKeyRepeat(isSkimEnabled: true))
+        XCTAssertFalse(SkimKeyboardShortcut.nextVideo.handlesKeyRepeat(isSkimEnabled: false))
+
+        let forward = SkimKeyboardShortcut.seekForwardTenSeconds.arrowDispatch(
+            isSkimEnabled: false,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        )
+        let backward = SkimKeyboardShortcut.seekBackwardTenSeconds.arrowDispatch(
+            isSkimEnabled: false,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        )
+        XCTAssertEqual(forward, .seek(seconds: 10))
+        XCTAssertEqual(backward, .seek(seconds: -10))
+    }
+
+    func testSkimActiveArrowsDoNotDispatchTenSecondSeeks() {
+        XCTAssertEqual(SkimKeyboardShortcut.seekForwardTenSeconds.arrowDispatch(
+            isSkimEnabled: true,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        ), .passThrough)
+        XCTAssertEqual(SkimKeyboardShortcut.seekBackwardTenSeconds.arrowDispatch(
+            isSkimEnabled: true,
+            isProgressiveRandomSkimSessionActive: false,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        ), .passThrough)
+    }
+
+    func testProgressiveRandomSkimRightArrowRetainsNextSegmentDispatch() {
+        XCTAssertEqual(SkimKeyboardShortcut.seekForwardTenSeconds.arrowDispatch(
+            isSkimEnabled: true,
+            isProgressiveRandomSkimSessionActive: true,
+            canManuallyAdvanceProgressiveRandomSkimSegment: true
+        ), .advanceProgressiveRandomSkimSegment)
+    }
+
+    func testProgressiveRandomSkimFinalSegmentRightArrowRemainsConsumed() {
+        XCTAssertEqual(SkimKeyboardShortcut.seekForwardTenSeconds.arrowDispatch(
+            isSkimEnabled: true,
+            isProgressiveRandomSkimSessionActive: true,
+            canManuallyAdvanceProgressiveRandomSkimSegment: false
+        ), .consume)
+    }
+
+    func testTenSecondSeekSettingsRowsContainBothArrowKeysExactlyOnce() {
+        XCTAssertEqual(SkimKeyboardShortcut.tenSecondSeekSettingsRows.map(\.0),
+                       ["Seek backward 10 seconds", "Seek forward 10 seconds"])
+        XCTAssertEqual(SkimKeyboardShortcut.tenSecondSeekSettingsRows.map(\.1), ["←", "→"])
     }
 
     // MARK: - Superseded bindings are removed, not retained as aliases
