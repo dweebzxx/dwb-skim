@@ -71,7 +71,7 @@ A successful maintenance pass resolves every drift item in its approved scope, r
 <!-- BEGIN CANONICAL: PROTECTED_FILES -->
 ## Protected Files
 
-Implementation passes must not modify Host Workflow controls, including `AGENTS.md`, `CLAUDE.md`, `metadata-schema.json`, `skills-lock.json`, the installed Host report template, `.agents/**`, `.claude/skills`, tool-specific workflow configuration, workflow-owned report and metadata adapters, continuation-state controls, the eight `scripts/cli-*.zsh` paths, or their physical `.private/` targets.
+Implementation passes must not modify Host Workflow controls, including `AGENTS.md`, `CLAUDE.md`, `metadata-schema.json`, `skills-lock.json`, the installed Host report template, `.agents/**`, `.claude/skills`, tool-specific workflow configuration, workflow-owned report and metadata adapters, continuation-state controls, the eight `scripts/cli-*.zsh` paths, or their physical `.dwbskim-private/` targets.
 
 Implementation passes also must not modify `.git/**`, credentials, signing or notarization material, production environment files, secrets, user data, or project-specific protected paths named elsewhere in this document.
 
@@ -88,9 +88,9 @@ Bootstrap, adoption, maintenance, and skill-authorization work may write only th
 | Workflow guide version | v2.4.1 |
 | AGENTS.md present at project root | yes / no |
 | AGENTS.md authorized | yes / no |
-| AGENTS.md and CLAUDE.md resolve to one inode in .private/ | yes / no / n/a |
+| AGENTS.md and CLAUDE.md resolve to one inode in .dwbskim-private/ | yes / no / n/a |
 | metadata-schema.json present | yes / no |
-| .private/ initialized | yes / no |
+| .dwbskim-private/ initialized | yes / no |
 | .gitignore covers private workflow controls | yes / no |
 | Prompt saved | yes / no |
 | Launcher saved | yes / no |
@@ -102,11 +102,11 @@ Bootstrap, adoption, maintenance, and skill-authorization work may write only th
 <!-- BEGIN CANONICAL: PRIVATE_REPO_WORKFLOW -->
 ## Private-Repo Workflow
 
-Host Workflow controls live physically under `.private/` and are read through stable project-root adapters.
+Host Workflow controls live physically under `.dwbskim-private/` and are read through stable project-root adapters.
 
 The project repository must not track those adapters or physical private targets.
 
-Implementation passes do not run Git commands inside `.private/` and do not modify Host Workflow controls.
+Implementation passes do not run Git commands inside `.dwbskim-private/` and do not modify Host Workflow controls.
 
 Bootstrap, adoption, maintenance, and skill-authorization work use an isolated non-protected branch when a repository branch exists, modify only their authorized control scope, and never push.
 

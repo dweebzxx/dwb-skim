@@ -67,7 +67,7 @@ node_modules/
 /.codex/
 /.claude/
 /audit/
-/.private/
+/.dwbskim-private/
 /.antigravitycli/
 /tools/
 /workflow-templates/

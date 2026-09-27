@@ -89,7 +89,7 @@ required={"pass_id","artifact_stem","lifecycle_session_id","launcher_pid","launc
 if not isinstance(identity,dict) or not required.issubset(identity): raise SystemExit(1)
 if identity.get("active") is not False or identity.get("raw_log_path")!=sys.argv[4]: raise SystemExit(1)'   "$AI_RUNTIME_STATE_PATH" "$AI_COLLECTOR_STATE_PATH" "$AI_ARTIFACT_STEM" "$AI_RAW_LOG_PATH" "$AI_CLEAN_LOG_PATH"   || die 40 collector "clean-log readiness or lifecycle completion is invalid"
 need_file "$AI_CLEAN_LOG_PATH" "clean log"
-[[ "$AI_REPORT_TEMPLATE" == "$AI_PROJECT_ROOT/.private/workflow-templates/pass-report-template.md" ]] || die 60 report-template "Host report template must be .private/workflow-templates/pass-report-template.md"
+[[ "$AI_REPORT_TEMPLATE" == "$AI_PROJECT_ROOT/.dwbskim-private/workflow-templates/pass-report-template.md" ]] || die 60 report-template "Host report template must be .dwbskim-private/workflow-templates/pass-report-template.md"
 inside "$AI_TMP_ROOT" "$AI_REPORT_ROOT"
 inside "$AI_OUTPUT_ROOT" "$AI_REPORT_ROOT"
 inside "$AI_REPORT_PATH" "$AI_REPORT_ROOT"
@@ -123,8 +123,8 @@ inside "$AI_RUNNER_CONTROL_PATH" "$AI_REPORT_ROOT"
 [[ "$AI_META_LOG_PATH" == "$AI_REPORT_ROOT/logs/meta-logs/${AI_ARTIFACT_STEM}-meta.log" ]] \
   || die 20 path "meta-log path does not match the canonical artifact path"
 
-[[ "$AI_METADATA_SCHEMA" == "$AI_PROJECT_ROOT/.private/metadata-schema.json" ]] \
-  || die 20 path "metadata schema path must be .private/metadata-schema.json"
+[[ "$AI_METADATA_SCHEMA" == "$AI_PROJECT_ROOT/.dwbskim-private/metadata-schema.json" ]] \
+  || die 20 path "metadata schema path must be .dwbskim-private/metadata-schema.json"
 
 [[ "$AI_TMP_ROOT" == "$AI_REPORT_ROOT/tmp/$AI_ARTIFACT_STEM" ]] \
   || die 20 path "temporary root does not match the canonical artifact path"
@@ -215,10 +215,10 @@ def path_state(root,rel):
  return {"path":rel,"type":"other","signature":None}
 
 root=sys.argv[1]
-save(sys.argv[2],snap(root,"project")); save(sys.argv[3],snap(os.path.join(root,".private"),"private"))
+save(sys.argv[2],snap(root,"project")); save(sys.argv[3],snap(os.path.join(root,".dwbskim-private"),"private"))
 protected=["AGENTS.md","CLAUDE.md","metadata-schema.json","skills-lock.json",".agents",".claude/skills"]
 protected += ["scripts"] if os.path.islink(os.path.join(root,"scripts")) else ["scripts/cli-initialize.zsh","scripts/cli-pre-pass.zsh","scripts/cli-agent-runner.zsh","scripts/cli-post-pass.zsh","scripts/cli-log-collector.zsh","scripts/cli-commit.zsh","scripts/cli-push.zsh","scripts/cli-session-abort.zsh"]
-private=[".private/AGENTS.md",".private/metadata-schema.json",".private/skills-lock.json",".private/workflow-templates/pass-report-template.md",".private/.agents/skills",".private/.agents/skills-store",".private/scripts"]
+private=[".dwbskim-private/AGENTS.md",".dwbskim-private/metadata-schema.json",".dwbskim-private/skills-lock.json",".dwbskim-private/workflow-templates/pass-report-template.md",".dwbskim-private/.agents/skills",".dwbskim-private/.agents/skills-store",".dwbskim-private/scripts"]
 save(sys.argv[4],{"paths":[path_state(root,p) for p in protected+private]})' \
   "$AI_PROJECT_ROOT" "$pub" "$priv" "$protected_end" 2>>"$diagnostics" \
   || die 30 repository-state "cannot capture ending repository/control state; diagnostics retained at ${diagnostics#$AI_PROJECT_ROOT/}"
@@ -267,8 +267,8 @@ workflow=[]
 for path in sorted(set(protected_start)|set(protected_end)):
  before=protected_start.get(path); after=protected_end.get(path)
  if before!=after:
-  repo="private" if path.startswith(".private/") else "project"
-  rel=path[len(".private/"):] if repo=="private" else path
+  repo="private" if path.startswith(".dwbskim-private/") else "project"
+  rel=path[len(".dwbskim-private/"):] if repo=="private" else path
   workflow.append({"repository":repo,"path":rel,"before":before,"after":after})
 allowed=[]
 if auth_path:
@@ -722,7 +722,7 @@ snapshot=table_after("## Pass Execution Snapshot",report)
 identity_map=dict(identity); snapshot_map=dict(snapshot)
 identity_order=["Pass ID","Pass Name","Pass Type","Date","Status","Product Result","Workflow Finalization Result","Workflow Guide Version","Code Agent","Model","Effort","Pass Duration","Total Tokens Used","Verified Total Tokens","Token Source and Scope","Input Tokens","Cached Input Tokens","Output Tokens","Reasoning Tokens","Token Completeness","Session or Conversation ID","Session Resume Command","Artifact Stem","Project","Project Root"]
 if [k for k,v in identity]!=identity_order: raise SystemExit("identity table rows or order are invalid")
-workflow_order=["Workflow guide version","AGENTS.md present at project root","AGENTS.md authorized","AGENTS.md and CLAUDE.md resolve to one inode in .private/","metadata-schema.json present",".private/ initialized",".gitignore covers private workflow controls","Prompt saved","Launcher saved","Next prompt template","Bootstrap or adoption state","AGENTS.md maintenance score"]
+workflow_order=["Workflow guide version","AGENTS.md present at project root","AGENTS.md authorized","AGENTS.md and CLAUDE.md resolve to one inode in .dwbskim-private/","metadata-schema.json present",".dwbskim-private/ initialized",".gitignore covers private workflow controls","Prompt saved","Launcher saved","Next prompt template","Bootstrap or adoption state","AGENTS.md maintenance score"]
 if [k for k,v in workflow]!=workflow_order: raise SystemExit("Workflow State rows or order are invalid")
 if dict(workflow).get("Workflow guide version")!="v2.4.1": raise SystemExit("Workflow State version must be v2.4.1")
 if dict(workflow).get("Prompt saved")!="yes" or dict(workflow).get("Launcher saved")!="yes": raise SystemExit("Workflow State must confirm prompt and launcher")

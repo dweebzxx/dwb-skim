@@ -58,7 +58,7 @@ local seed_mode_active=false
 [[ "$(uname -s 2>/dev/null)" == Darwin ]] || blockers+=("platform must be macOS")
 [[ "$(uname -m 2>/dev/null)" == arm64 ]] || blockers+=("machine architecture must be arm64")
 [[ -d "$AI_PROJECT_ROOT/.git" || "$AI_PASS_TYPE" == bootstrap || "$AI_PASS_TYPE" == adoption ]] || blockers+=("project Git repository is missing")
-[[ -d "$AI_PROJECT_ROOT/.private" || "$AI_PASS_TYPE" == bootstrap || "$AI_PASS_TYPE" == adoption ]] || blockers+=("private workflow root is missing")
+[[ -d "$AI_PROJECT_ROOT/.dwbskim-private" || "$AI_PASS_TYPE" == bootstrap || "$AI_PASS_TYPE" == adoption ]] || blockers+=("private workflow root is missing")
 
 if [[ "$AI_PASS_TYPE" != bootstrap && "$AI_PASS_TYPE" != adoption ]]; then
   [[ -L "$AI_PROJECT_ROOT/AGENTS.md" ]] || blockers+=("AGENTS.md is not a symlink")
@@ -67,18 +67,18 @@ if [[ "$AI_PASS_TYPE" != bootstrap && "$AI_PASS_TYPE" != adoption ]]; then
     local a c p
     a="$(stat -L -f '%d:%i' "$AI_PROJECT_ROOT/AGENTS.md" 2>/dev/null)"
     c="$(stat -L -f '%d:%i' "$AI_PROJECT_ROOT/CLAUDE.md" 2>/dev/null)"
-    p="$(stat -L -f '%d:%i' "$AI_PROJECT_ROOT/.private/AGENTS.md" 2>/dev/null)"
+    p="$(stat -L -f '%d:%i' "$AI_PROJECT_ROOT/.dwbskim-private/AGENTS.md" 2>/dev/null)"
     [[ -n "$a" && "$a" == "$c" ]] || blockers+=("AGENTS.md and CLAUDE.md do not resolve to one inode")
-    [[ -n "$p" && "$a" == "$p" ]] || blockers+=("AGENTS.md and CLAUDE.md do not resolve to .private/AGENTS.md")
+    [[ -n "$p" && "$a" == "$p" ]] || blockers+=("AGENTS.md and CLAUDE.md do not resolve to .dwbskim-private/AGENTS.md")
   fi
 fi
 
 [[ -f "$AI_REPORT_TEMPLATE" ]] || blockers+=("Host report template is missing: $AI_REPORT_TEMPLATE")
-[[ "$AI_REPORT_TEMPLATE" == "$AI_PROJECT_ROOT/.private/workflow-templates/pass-report-template.md" ]] || blockers+=("Host report template path must be .private/workflow-templates/pass-report-template.md")
+[[ "$AI_REPORT_TEMPLATE" == "$AI_PROJECT_ROOT/.dwbskim-private/workflow-templates/pass-report-template.md" ]] || blockers+=("Host report template path must be .dwbskim-private/workflow-templates/pass-report-template.md")
 [[ -f "$AI_METADATA_SCHEMA" ]] || blockers+=("metadata schema is missing: $AI_METADATA_SCHEMA")
 
 if [[ "$seed_mode_active" == true ]]; then
-  [[ -x "$AI_PROJECT_ROOT/.private/scripts/$CLI_SCRIPT_NAME" ]] || blockers+=("seeded private script is missing or not executable: .private/scripts/$CLI_SCRIPT_NAME")
+  [[ -x "$AI_PROJECT_ROOT/.dwbskim-private/scripts/$CLI_SCRIPT_NAME" ]] || blockers+=("seeded private script is missing or not executable: .dwbskim-private/scripts/$CLI_SCRIPT_NAME")
 else
   [[ -x "$AI_PROJECT_ROOT/scripts/$CLI_SCRIPT_NAME" ]] || blockers+=("stable root script is missing or not executable: scripts/$CLI_SCRIPT_NAME")
 fi
@@ -89,7 +89,7 @@ fi
 # A pass may not begin on a partially installed or mixed-version engine. The
 # three outcomes are distinguished deliberately, because the corrective action
 # differs: a partial installation is completed, a mixed-version installation is
-# refused, and an authorized seed-mode pass inspects the physical .private/
+# refused, and an authorized seed-mode pass inspects the physical .dwbskim-private/
 # destinations before root adapters exist.
 #
 # No tool is executed here. Presence and readability only; the parser, the
@@ -125,22 +125,22 @@ check_engine_member() {
 local engine_name
 for engine_name in $engine_scripts; do
   check_engine_member \
-    "$AI_PROJECT_ROOT/.private/scripts/$engine_name" \
+    "$AI_PROJECT_ROOT/.dwbskim-private/scripts/$engine_name" \
     "$AI_PROJECT_ROOT/scripts/$engine_name" \
     "canonical Host script $engine_name" || continue
   # A script that declares a different workflow version makes the installation
   # mixed rather than merely stale.
-  grep -q 'CLI_WORKFLOW_VERSION="v2.4.1"' "$AI_PROJECT_ROOT/.private/scripts/$engine_name" 2>/dev/null \
-    || engine_mixed+=("installed script does not declare v2.4.1: .private/scripts/$engine_name")
+  grep -q 'CLI_WORKFLOW_VERSION="v2.4.1"' "$AI_PROJECT_ROOT/.dwbskim-private/scripts/$engine_name" 2>/dev/null \
+    || engine_mixed+=("installed script does not declare v2.4.1: .dwbskim-private/scripts/$engine_name")
 done
 
 for engine_name in $engine_tools; do
   check_engine_member \
-    "$AI_PROJECT_ROOT/.private/tools/$engine_name" \
+    "$AI_PROJECT_ROOT/.dwbskim-private/tools/$engine_name" \
     "$AI_PROJECT_ROOT/tools/$engine_name" \
     "governed tool $engine_name" || continue
-  [[ -r "$AI_PROJECT_ROOT/.private/tools/$engine_name" ]] \
-    || engine_missing+=("governed tool is not readable: .private/tools/$engine_name")
+  [[ -r "$AI_PROJECT_ROOT/.dwbskim-private/tools/$engine_name" ]] \
+    || engine_missing+=("governed tool is not readable: .dwbskim-private/tools/$engine_name")
 done
 
 if (( ${#engine_mixed} )); then
@@ -181,8 +181,8 @@ python3 -c 'import jsonschema' >/dev/null 2>&1 \
 
 local reports_path="$AI_REPORT_ROOT/reports"
 local metadata_reports_path="$AI_REPORT_ROOT/metadata-reports"
-local expected_reports="$AI_PROJECT_ROOT/.private/build-report-logs/reports"
-local expected_metadata_reports="$AI_PROJECT_ROOT/.private/build-report-logs/metadata-reports"
+local expected_reports="$AI_PROJECT_ROOT/.dwbskim-private/build-report-logs/reports"
+local expected_metadata_reports="$AI_PROJECT_ROOT/.dwbskim-private/build-report-logs/metadata-reports"
 local allow_missing_private_artifact_links=false
 
 [[ "$AI_PASS_TYPE" == bootstrap || "$AI_PASS_TYPE" == adoption ]] \
@@ -257,12 +257,12 @@ check_ds_store_repo() {
 }
 
 check_ds_store_repo "$AI_PROJECT_ROOT" project
-check_ds_store_repo "$AI_PROJECT_ROOT/.private" private
+check_ds_store_repo "$AI_PROJECT_ROOT/.dwbskim-private" private
 
 check_skill_catalog_shape() {
-  local store="${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills-store}"
-  local catalog="${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills}"
-  local lock="${AI_SKILLS_LOCK_PATH:-$AI_PROJECT_ROOT/.private/skills-lock.json}"
+  local store="${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills-store}"
+  local catalog="${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills}"
+  local lock="${AI_SKILLS_LOCK_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/skills-lock.json}"
 
   [[ -d "$catalog" ]] || return 0
 

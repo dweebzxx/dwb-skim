@@ -90,6 +90,7 @@ targets:
       - path: dwb-skim/Player/PreviewRangePlanner.swift
       - path: dwb-skim/Player/BackgroundAudioPlaybackController.swift
       - path: dwb-skim/Player/PlaybackBarPresentation.swift
+      - path: dwb-skim/Player/QueueRemovalPlanner.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: "YES"

@@ -537,7 +537,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         renameItem.tag    = 11
         fileMenu.addItem(renameItem)
 
-        let removeItem = NSMenuItem(title: "Remove Current from Queue",
+        let removeItem = NSMenuItem(title: QueueRemovalPresentation.menuItemTitle,
                                     action: #selector(removeCurrentQueueItem(_:)),
                                     keyEquivalent: "")
         removeItem.target = self

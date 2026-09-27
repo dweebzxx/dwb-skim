@@ -58,7 +58,7 @@ root="$(resolve_dir "$root")" || die 30 repository "cannot resolve project root"
 [[ "$repo_sel" == project || "$repo_sel" == private ]] || die 70 authorization "invalid repository selection"
 [[ "$stem" =~ $CLI_STEM_RE ]] || die 20 identity "invalid artifact stem: $stem"
 local repo="$root"
-[[ "$repo_sel" == private ]] && repo="$root/.private"
+[[ "$repo_sel" == private ]] && repo="$root/.dwbskim-private"
 [[ -d "$repo/.git" ]] || die 30 repository "selected repository unavailable"
 
 [[ -n "${AI_EXPECTED_REMOTE_URL:-}" ]] \

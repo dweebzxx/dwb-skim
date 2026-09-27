@@ -1082,7 +1082,7 @@
         },
         "lock_path": {
           "type": "string",
-          "const": ".private/skills-lock.json"
+          "const": ".dwbskim-private/skills-lock.json"
         },
         "validation_errors": {
           "type": "array",
@@ -2359,11 +2359,11 @@
         },
         "report_template_path": {
           "type": "string",
-          "const": ".private/workflow-templates/pass-report-template.md"
+          "const": ".dwbskim-private/workflow-templates/pass-report-template.md"
         },
         "metadata_schema_path": {
           "type": "string",
-          "const": ".private/metadata-schema.json"
+          "const": ".dwbskim-private/metadata-schema.json"
         },
         "agent_started": {
           "type": "boolean"
@@ -4134,11 +4134,11 @@
         },
         "report_template_path": {
           "type": "string",
-          "const": ".private/workflow-templates/pass-report-template.md"
+          "const": ".dwbskim-private/workflow-templates/pass-report-template.md"
         },
         "metadata_schema_path": {
           "type": "string",
-          "const": ".private/metadata-schema.json"
+          "const": ".dwbskim-private/metadata-schema.json"
         },
         "agent_started": {
           "type": "boolean"

@@ -63,12 +63,19 @@ final class SkimSettingsStoreTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertEqual(store.snapshot().progressiveRandomSkimIntensity, .standard)
 
-        store.setProgressiveRandomSkimIntensity(.thorough)
-        XCTAssertEqual(store.snapshot().progressiveRandomSkimIntensity, .thorough)
+        for intensity in ProgressiveRandomSkimIntensity.allCases {
+            store.setProgressiveRandomSkimIntensity(intensity)
+            XCTAssertEqual(store.snapshot().progressiveRandomSkimIntensity, intensity)
 
-        // Simulate relaunch: a fresh store instance backed by the same persisted defaults.
-        let relaunched = SkimSettingsStore(defaults: defaults, notificationCenter: NotificationCenter())
-        XCTAssertEqual(relaunched.snapshot().progressiveRandomSkimIntensity, .thorough)
+            // Simulate relaunch: a fresh store instance backed by the same persisted defaults.
+            let relaunched = SkimSettingsStore(defaults: defaults, notificationCenter: NotificationCenter())
+            XCTAssertEqual(relaunched.snapshot().progressiveRandomSkimIntensity, intensity)
+        }
+
+        // Invalid persisted raw value falls back to standard default
+        defaults.set("not_a_valid_intensity", forKey: SettingsDefaultsRegistry.Keys.progressiveRandomSkimIntensity)
+        let fallbackStore = SkimSettingsStore(defaults: defaults, notificationCenter: NotificationCenter())
+        XCTAssertEqual(fallbackStore.snapshot().progressiveRandomSkimIntensity, .standard)
     }
 
     func testProgressiveRandomSkimIntensityChangeNotifiesOncePerChange() {

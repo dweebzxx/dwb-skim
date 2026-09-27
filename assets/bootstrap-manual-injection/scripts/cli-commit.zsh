@@ -88,7 +88,7 @@ local commit_message="$pass_id: $message"
 
 local -a selected
 [[ "$repos" == project || "$repos" == both ]] && selected+=("$root")
-[[ "$repos" == private || "$repos" == both ]] && selected+=("$root/.private")
+[[ "$repos" == private || "$repos" == both ]] && selected+=("$root/.dwbskim-private")
 
 local receipt_root="$root/build-report-logs/tmp/$stem/human-actions"
 mkdir -p -- "$receipt_root" || die 90 receipt "cannot create receipt directory"
@@ -137,7 +137,7 @@ for repo in "${selected[@]}"; do
     || die 30 repository "selected repository unavailable: $repo"
 
   local label=project
-  [[ "$repo" == "$root/.private" ]] && label=private
+  [[ "$repo" == "$root/.dwbskim-private" ]] && label=private
 
   local expected_branch="$project_branch"
   local expected_head="$project_head"
@@ -215,7 +215,7 @@ print -- "Reviewed pass-local commit plan:"
 
 for repo in "${selected[@]}"; do
   local label=project
-  [[ "$repo" == "$root/.private" ]] && label=private
+  [[ "$repo" == "$root/.dwbskim-private" ]] && label=private
 
   local validated_paths="$receipt_root/.validated-$label.paths"
 
@@ -258,7 +258,7 @@ undo_$done_label=git -C $done_repo reset --soft $done_head
 # repository, identity, metadata, and manifest checks have passed.
 for repo in "${selected[@]}"; do
   local label=project
-  [[ "$repo" == "$root/.private" ]] && label=private
+  [[ "$repo" == "$root/.dwbskim-private" ]] && label=private
 
   local expected_branch="$project_branch"
   local expected_head="$project_head"

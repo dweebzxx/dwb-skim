@@ -31,6 +31,7 @@
 		28FA88C2BC9A07A31C6E300C /* BackgroundAudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AE484B8F499E8D6856BA77 /* BackgroundAudioPlaybackController.swift */; };
 		29F7E397E278BE4EAA887A05 /* SettingsDefaultsRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */; };
 		2A1D5BE6633AE10708330F44 /* SkimPreviewSessionScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6864433C73852FCC235000 /* SkimPreviewSessionScheduler.swift */; };
+		2BA72547FE06AD649F213A09 /* QueueRemovalPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */; };
 		2E91C9220EF6D5D49E5F0CFC /* SkimKeyboardShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */; };
 		2FEE5DB0A32671476F2A845B /* SkimFolderDropShuffle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */; };
 		3372422D1C1A7F94E499A9B2 /* BackgroundAudioPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64AE484B8F499E8D6856BA77 /* BackgroundAudioPlaybackController.swift */; };
@@ -74,6 +75,7 @@
 		8BB41804C1B2437E88AF037A /* SkimPreviewSessionSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07BD4A74BEBA02541EA69F4B /* SkimPreviewSessionSchedulerTests.swift */; };
 		8EB26203F5DC7B42F7906496 /* BackgroundAudioPlaybackControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103F351B26253A8A3F2017E2 /* BackgroundAudioPlaybackControllerTests.swift */; };
 		8EF717CDDCE1FFE4219B72F0 /* SkimMediaAssignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */; };
+		9387AF0A7F729BF8294851D6 /* QueueRemovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */; };
 		97B24372658E9C01C4E81BFD /* SkimColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076AF22351917042F110E38D /* SkimColors.swift */; };
 		98FE630FCBFC8D4DF0383A89 /* VolumeOverlayPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C8E013B037FD1201EBB3D /* VolumeOverlayPresentation.swift */; };
 		9921692C577067EBD9E558A3 /* SettingsDefaultsRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B074674387F7AC2350AFE33 /* SettingsDefaultsRegistry.swift */; };
@@ -127,6 +129,7 @@
 		F92EEF49DB96FC355CDC5933 /* SkimFolderDropShuffle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */; };
 		FADDF51E131563ABF49B8F60 /* PlayerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E082862FFA44C3ED91F059 /* PlayerWindowController.swift */; };
 		FE5618E2850E3CD56BE2CB86 /* IdleAutohideController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD6D01E610D3A73E6FA6442 /* IdleAutohideController.swift */; };
+		FEF0B941FEFCF98DAF668E3F /* QueueRemovalPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */; };
 		FFDE92D02538CACA3CCC50B8 /* SkimPlaybackStartIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */; };
 /* End PBXBuildFile section */
 
@@ -176,9 +179,11 @@
 		7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenameReconcilerTests.swift; sourceTree = "<group>"; };
 		795BBB21310949758B09652D /* DebugLogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogSanitizerTests.swift; sourceTree = "<group>"; };
 		7AC28720F906AE3536C64444 /* dwb-skimTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "dwb-skimTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRemovalPlanner.swift; sourceTree = "<group>"; };
 		81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimMediaAssignment.swift; sourceTree = "<group>"; };
 		87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlanner.swift; sourceTree = "<group>"; };
 		89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFolderDropShuffleTests.swift; sourceTree = "<group>"; };
+		89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRemovalTests.swift; sourceTree = "<group>"; };
 		8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueDisplayProjectionTests.swift; sourceTree = "<group>"; };
 		8B23AA3F5F3D052A89AF28BB /* VolumeOverlayPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayPresentationTests.swift; sourceTree = "<group>"; };
 		8D9E1C1CD9E94DE463F71A19 /* PlayerWindowReactivationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlannerTests.swift; sourceTree = "<group>"; };
@@ -261,6 +266,7 @@
 				EF7BF2658982FCE47559C5EE /* ProgressiveRandomSkimPlanTests.swift */,
 				8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */,
 				1F63BA24D5F52BC71E089EC9 /* QueueOrderPlannerTests.swift */,
+				89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */,
 				7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */,
 				90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */,
 				9812E37C75E80B7C1CF2EDA1 /* SettingsPresentationTests.swift */,
@@ -340,6 +346,7 @@
 				B1A1E285B8F81B7015A4C998 /* QueueDisplayProjection.swift */,
 				9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */,
 				54E8682BD05143B3383F3CE6 /* QueuePageView.swift */,
+				7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */,
 				C64BA2FF07366335BF0EFE58 /* QueueRenameReconciler.swift */,
 				B4AD18EC8A6566CD89B83757 /* RailButton.swift */,
 				DE3772071B27CA36C2D6126A /* ScaleMode.swift */,
@@ -495,6 +502,7 @@
 				4E35C0EF095C98827A2ADD20 /* QueueDisplayProjection.swift in Sources */,
 				F0FF056478282F44E0F27BC6 /* QueueOrderPlanner.swift in Sources */,
 				D5DD51594A1501D08A605137 /* QueuePageView.swift in Sources */,
+				FEF0B941FEFCF98DAF668E3F /* QueueRemovalPlanner.swift in Sources */,
 				A9267B251406AA30EB8B35F8 /* QueueRenameReconciler.swift in Sources */,
 				D9456095F7A9AF3DA4B3759E /* RailButton.swift in Sources */,
 				84D49E71C10E27BFE5920198 /* ScaleMode.swift in Sources */,
@@ -561,6 +569,8 @@
 				55936E8077A04BBB11570817 /* QueueDisplayProjectionTests.swift in Sources */,
 				25AF6FF31FFE0AAD4055B0A2 /* QueueOrderPlanner.swift in Sources */,
 				A3D548A9CF06220E596CBFB8 /* QueueOrderPlannerTests.swift in Sources */,
+				2BA72547FE06AD649F213A09 /* QueueRemovalPlanner.swift in Sources */,
+				9387AF0A7F729BF8294851D6 /* QueueRemovalTests.swift in Sources */,
 				3F74F5F9CB9E9CB074329F2D /* QueueRenameReconciler.swift in Sources */,
 				87AFC967F1F88228A947987A /* QueueRenameReconcilerTests.swift in Sources */,
 				C9D6E6E4A33EC089FF62867C /* SettingsDefaultsRegistry.swift in Sources */,

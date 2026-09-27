@@ -35,9 +35,9 @@
 | Workflow guide version | v2.4.1 |
 | AGENTS.md present at project root | yes / no |
 | AGENTS.md authorized | yes / no |
-| AGENTS.md and CLAUDE.md resolve to one inode in .private/ | yes / no / n/a |
+| AGENTS.md and CLAUDE.md resolve to one inode in .dwbskim-private/ | yes / no / n/a |
 | metadata-schema.json present | yes / no |
-| .private/ initialized | yes / no |
+| .dwbskim-private/ initialized | yes / no |
 | .gitignore covers private workflow controls | yes / no |
 | Prompt saved | yes / no |
 | Launcher saved | yes / no |

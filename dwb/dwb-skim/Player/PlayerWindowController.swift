@@ -2084,17 +2084,19 @@ class PlayerWindowController: NSWindowController {
     }
 
     func removeQueueItem(displayIndex: Int) {
-        guard displayIndex >= 0, displayIndex < displayOrder.count else { return }
-        let removedSetIndex = displayOrder[displayIndex]
-        guard removedSetIndex >= 0, removedSetIndex < playbackSet.count else { return }
+        guard let plan = QueueRemovalPlanner.planRemoval(displayIndex: displayIndex,
+                                                         displayOrder: displayOrder,
+                                                         currentDisplayIndex: currentDisplayIndex,
+                                                         totalSetCount: playbackSet.count) else { return }
 
-        let removingCurrent = displayIndex == currentDisplayIndex
+        let removingCurrent = plan.removingCurrent
+        let removedSetIndex = plan.removedSetIndex
         let removedURL = playbackSet[removedSetIndex]
-        NSLog("[dwb-playback] queueDelete: displayIdx=%d setIdx=%d current=%d file=%@",
+        NSLog("[dwb-playback] queueRemove: displayIdx=%d setIdx=%d current=%d file=%@",
               displayIndex, removedSetIndex, removingCurrent ? 1 : 0, removedURL.lastPathComponent)
         DebugConsoleController.log("queue", "remove: file=\(removedURL.lastPathComponent) isCurrent=\(removingCurrent)")
 
-        displayOrder.remove(at: displayIndex)
+        displayOrder = plan.displayOrder
         playbackSet.remove(at: removedSetIndex)
         let removedItemID = queueItemIDs.remove(at: removedSetIndex)
         queueFileIdentities.remove(at: removedSetIndex)
@@ -2102,11 +2104,14 @@ class PlayerWindowController: NSWindowController {
         skimFailedItemTracker.clearFailed(removedItemID)
         durationCache.removeValue(forKey: removedURL)
         durationSecondsCache.removeValue(forKey: removedURL)
-        displayOrder = displayOrder.map { $0 > removedSetIndex ? $0 - 1 : $0 }
 
-        if playbackSet.isEmpty || displayOrder.isEmpty {
-            if removingCurrent, player.media != nil {
-                enqueueStopPlaybackCommand(reason: "queue-delete-empty")
+        if plan.isQueueEmpty {
+            if removingCurrent {
+                if currentItemIsImage {
+                    clearImageSlideshowState()
+                } else if player.media != nil {
+                    enqueueStopPlaybackCommand(reason: "queue-remove-empty")
+                }
             }
             currentDisplayIndex = -1
             currentMediaURL = nil
@@ -2114,29 +2119,25 @@ class PlayerWindowController: NSWindowController {
             updateWindowTitle(Self.defaultWindowTitle)
             transport.update()
             if isQueuePageOpen { refreshQueuePage() }
-            logPlaybackQueueSnapshot("queueDelete-empty")
+            logPlaybackQueueSnapshot("queueRemove-empty")
             return
         }
 
+        currentDisplayIndex = plan.currentDisplayIndex
+
         if removingCurrent {
-            cancelSkimPreviewSession(reason: "queue-delete-current")
-            currentDisplayIndex = min(displayIndex, displayOrder.count - 1)
+            cancelSkimPreviewSession(reason: "queue-remove-current")
             if configuredQueueOrderMode != .sequential {
-                rebuildQueueOrderCycleKeepingCurrent(reason: "queue-delete-current", refreshUI: false)
+                rebuildQueueOrderCycleKeepingCurrent(reason: "queue-remove-current", refreshUI: false)
             }
-            playCurrentItem(startReason: "queue-delete-current")
+            playCurrentItem(startReason: "queue-remove-current")
         } else {
-            if displayIndex < currentDisplayIndex {
-                currentDisplayIndex -= 1
-            } else if currentDisplayIndex >= displayOrder.count {
-                currentDisplayIndex = displayOrder.count - 1
-            }
             if configuredQueueOrderMode != .sequential {
-                rebuildQueueOrderCycleKeepingCurrent(reason: "queue-delete", refreshUI: false)
+                rebuildQueueOrderCycleKeepingCurrent(reason: "queue-remove", refreshUI: false)
             }
             transport.update()
             if isQueuePageOpen { refreshQueuePage() }
-            logPlaybackQueueSnapshot("queueDelete")
+            logPlaybackQueueSnapshot("queueRemove")
         }
     }
 
@@ -3300,14 +3301,18 @@ class PlayerWindowController: NSWindowController {
                 skipIntroSeconds: context.skipIntroSeconds,
                 positionRandomValues: (0..<maxCount).map { _ in Double.random(in: 0..<1) },
                 durationRandomValues: (0..<maxCount).map { _ in Double.random(in: 0..<1) },
-                segmentCountMultiplier: configuredProgressiveRandomSkimIntensity.segmentCountMultiplier
+                segmentCountMultiplier: configuredProgressiveRandomSkimIntensity.segmentCountMultiplier,
+                durationMode: configuredPreviewDurationMode,
+                fixedDurationSeconds: Double(configuredClipDurationSeconds),
+                randomMinimumSeconds: Double(configuredRandomPreviewDurationRange.lowerBound),
+                randomMaximumSeconds: Double(configuredRandomPreviewDurationRange.upperBound)
             )
             context.progressiveRandomSkimSegmentIndex = 0
             context.progressiveRandomSkimPlanned = true
             skimPreviewPlanContext = context
             DebugConsoleController.log(
                 "preview",
-                "progressiveRandomSkimPlanned: window=\(debugIdentity) session=\(sessionID) segments=\(context.progressiveRandomSkimSegments.count) duration=\(String(format: "%.2f", mediaDurationSeconds))s skipIntro=\(String(format: "%.2f", context.skipIntroSeconds))s"
+                "progressiveRandomSkimPlanned: window=\(debugIdentity) session=\(sessionID) segments=\(context.progressiveRandomSkimSegments.count) duration=\(String(format: "%.2f", mediaDurationSeconds))s skipIntro=\(String(format: "%.2f", context.skipIntroSeconds))s mode=\(configuredPreviewDurationMode.rawValue) clipDuration=\(configuredClipDurationSeconds)s randomRange=\(configuredRandomPreviewDurationRange.lowerBound)-\(configuredRandomPreviewDurationRange.upperBound)s"
             )
         }
 
@@ -5896,13 +5901,14 @@ extension PlayerWindowController: QueuePageViewDelegate {
         }
     }
 
-    /// Multi-row deletion from Queue Page keyboard delete. Indices are pre-sorted descending.
+    /// Multi-row removal from Queue Page. Indices are sorted descending so index shifts are avoided.
     func queuePage(_ view: QueuePageView, didRequestDeleteRows indices: [Int]) {
-        for index in indices {
+        for index in indices.sorted(by: >) {
             removeQueueItem(displayIndex: index)
         }
     }
 
+    /// Legacy trash action retained for interface compatibility; P40 removed all callers in favor of queue removal.
     func queuePage(_ view: QueuePageView, didRequestTrashRows indices: [Int]) {
         let rows = Array(Set(indices)).sorted(by: >)
         let targets = rows.compactMap { index -> (Int, URL)? in

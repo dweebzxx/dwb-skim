@@ -108,4 +108,29 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(labels.contains("Background audio volume"))
         XCTAssertTrue(labels.contains("Restore All Settings to Default"))
     }
+
+    func testProgressiveRandomSkimCoverageIntensityPresentationExposesFiveLevels() {
+        XCTAssertEqual(SettingsPresentation.progressiveRandomSkimIntensityOptions.count, 5)
+        XCTAssertEqual(SettingsPresentation.progressiveRandomSkimIntensityOptions, [
+            .light, .standard, .thorough, .ultra, .max
+        ])
+        XCTAssertEqual(SettingsPresentation.progressiveRandomSkimIntensityLabels, [
+            "Light", "Standard", "Thorough", "Ultra", "Max"
+        ])
+
+        for (expectedSegment, intensity) in SettingsPresentation.progressiveRandomSkimIntensityOptions.enumerated() {
+            XCTAssertEqual(SettingsPresentation.intensitySegment(for: intensity), expectedSegment)
+            XCTAssertEqual(SettingsPresentation.intensity(forSegment: expectedSegment), intensity)
+        }
+
+        // Out-of-bounds segment fallback
+        XCTAssertEqual(SettingsPresentation.intensity(forSegment: -1), .standard)
+        XCTAssertEqual(SettingsPresentation.intensity(forSegment: 5), .standard)
+        XCTAssertEqual(SettingsPresentation.intensity(forSegment: 99), .standard)
+
+        XCTAssertEqual(
+            SettingsPresentation.progressiveRandomSkimCoverageHelperText,
+            "How many Progressive Random Skim segments to sample across the video.\nSnippet lengths follow the Clip Duration settings above."
+        )
+    }
 }

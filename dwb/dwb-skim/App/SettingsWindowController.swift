@@ -450,10 +450,10 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         configureNumericField(skipIntroField, placeholder: "5")
         configureCheckbox(progressiveRandomSkimCheckbox, title: "Progressive Random Skim")
 
-        progressiveRandomSkimIntensityControl.segmentCount = 3
-        progressiveRandomSkimIntensityControl.setLabel("Light", forSegment: 0)
-        progressiveRandomSkimIntensityControl.setLabel("Standard", forSegment: 1)
-        progressiveRandomSkimIntensityControl.setLabel("Thorough", forSegment: 2)
+        progressiveRandomSkimIntensityControl.segmentCount = SettingsPresentation.progressiveRandomSkimIntensityOptions.count
+        for (index, label) in SettingsPresentation.progressiveRandomSkimIntensityLabels.enumerated() {
+            progressiveRandomSkimIntensityControl.setLabel(label, forSegment: index)
+        }
         progressiveRandomSkimIntensityControl.target = self
         progressiveRandomSkimIntensityControl.action = #selector(progressiveRandomSkimIntensityChanged(_:))
         progressiveRandomSkimIntensityControl.setAccessibilityLabel("Progressive Random Skim coverage intensity")
@@ -462,8 +462,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         // with the field; each control carries its own human-facing label.
         previewDurationModeControl.setAccessibilityLabel("Clip duration mode")
         fixedDurationField.setAccessibilityLabel("Fixed clip duration in seconds")
+        fixedDurationField.toolTip = "Controls Progressive segment length in Fixed mode."
         randomMinimumField.setAccessibilityLabel("Minimum random clip duration in seconds")
+        randomMinimumField.toolTip = "Bounds Progressive segment length in Random mode."
         randomMaximumField.setAccessibilityLabel("Maximum random clip duration in seconds")
+        randomMaximumField.toolTip = "Bounds Progressive segment length in Random mode."
         startPositionControl.setAccessibilityLabel("Start position")
         skipIntroField.setAccessibilityLabel("Skip intro in seconds")
 
@@ -476,15 +479,18 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         return page(sections: [
             section("SKIM PREVIEW", rows: [
                 row("Clip duration", previewDurationModeControl),
-                row("Fixed duration", secondsControl(fixedDurationField), helper: "0 plays the full file."),
-                row("Random minimum", secondsControl(randomMinimumField)),
-                row("Random maximum", secondsControl(randomMaximumField)),
+                row("Fixed duration", secondsControl(fixedDurationField),
+                    helper: "0 plays the full file. Controls Progressive segment length in Fixed mode."),
+                row("Random minimum", secondsControl(randomMinimumField),
+                    helper: "Bounds Progressive segment length in Random mode."),
+                row("Random maximum", secondsControl(randomMaximumField),
+                    helper: "Bounds Progressive segment length in Random mode."),
                 row("Start position", startPositionControl),
                 row("Skip intro", secondsControl(skipIntroField)),
                 row(nil, progressiveRandomSkimCheckbox,
                     helper: "Samples several short, randomized segments spread across videos 30 seconds or longer, always starting no earlier than Skip Intro."),
                 row("Coverage intensity", progressiveRandomSkimIntensityControl,
-                    helper: "How many Progressive Random Skim segments to sample. Standard matches the default behavior; Light samples fewer, Thorough samples more."),
+                    helper: SettingsPresentation.progressiveRandomSkimCoverageHelperText),
             ]),
         ])
     }
@@ -1111,20 +1117,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     private static func intensitySegment(for intensity: ProgressiveRandomSkimIntensity) -> Int {
-        switch intensity {
-        case .light: return 0
-        case .standard: return 1
-        case .thorough: return 2
-        }
+        SettingsPresentation.intensitySegment(for: intensity)
     }
 
     @objc private func progressiveRandomSkimIntensityChanged(_ sender: NSSegmentedControl) {
-        let intensity: ProgressiveRandomSkimIntensity
-        switch sender.selectedSegment {
-        case 0: intensity = .light
-        case 2: intensity = .thorough
-        default: intensity = .standard
-        }
+        let intensity = SettingsPresentation.intensity(forSegment: sender.selectedSegment)
         Self.setProgressiveRandomSkimIntensity(intensity)
     }
 

@@ -59,6 +59,8 @@ final class SettingsDefaultsRegistryTests: XCTestCase {
         XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("light"), "light")
         XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("standard"), "standard")
         XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("thorough"), "thorough")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("ultra"), "ultra")
+        XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("max"), "max")
         XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity("invalid"), "standard")
         XCTAssertEqual(SettingsDefaultsRegistry.validatedProgressiveRandomSkimIntensity(""), "standard")
     }

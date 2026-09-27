@@ -118,4 +118,31 @@ enum SettingsPresentation {
         "Open queue panel when a player window opens", "Show debug console", "Verbose autoplay diagnostics",
         "Clear All Bookmarks...", "Restore All Settings to Default",
     ]
+
+    // MARK: - Progressive Random Skim Coverage Intensity
+
+    static let progressiveRandomSkimIntensityOptions: [ProgressiveRandomSkimIntensity] = ProgressiveRandomSkimIntensity.allCases
+    static let progressiveRandomSkimIntensityLabels: [String] = progressiveRandomSkimIntensityOptions.map(\.displayTitle)
+    static let progressiveRandomSkimCoverageHelperText = "How many Progressive Random Skim segments to sample across the video.\nSnippet lengths follow the Clip Duration settings above."
+
+    static func intensitySegment(for intensity: ProgressiveRandomSkimIntensity) -> Int {
+        switch intensity {
+        case .light: return 0
+        case .standard: return 1
+        case .thorough: return 2
+        case .ultra: return 3
+        case .max: return 4
+        }
+    }
+
+    static func intensity(forSegment segment: Int) -> ProgressiveRandomSkimIntensity {
+        switch segment {
+        case 0: return .light
+        case 1: return .standard
+        case 2: return .thorough
+        case 3: return .ultra
+        case 4: return .max
+        default: return .standard
+        }
+    }
 }

@@ -13,14 +13,28 @@ enum ProgressiveRandomSkimIntensity: String, CaseIterable, Equatable {
     case light
     case standard
     case thorough
+    case ultra
+    case max
 
-    /// Applied to the Part 2 adaptive segment count before the existing safe-reduction loop; never
+    /// Applied to the adaptive segment count before the safe timeline fitting loop; never
     /// read by the planner from settings — callers resolve this and pass the raw `Double` in.
     var segmentCountMultiplier: Double {
         switch self {
         case .light: return 0.7
         case .standard: return 1.0
         case .thorough: return 1.5
+        case .ultra: return 2.0
+        case .max: return 2.5
+        }
+    }
+
+    var displayTitle: String {
+        switch self {
+        case .light: return "Light"
+        case .standard: return "Standard"
+        case .thorough: return "Thorough"
+        case .ultra: return "Ultra"
+        case .max: return "Max"
         }
     }
 }
@@ -31,62 +45,32 @@ enum ProgressiveRandomSkimIntensity: String, CaseIterable, Equatable {
 /// real player and drive advancement through the existing `SkimPreviewSessionScheduler` /
 /// `SkimPlaybackStartIntentCoordinator` machinery, one segment at a time.
 ///
-/// ## Adaptive planning (Part 2)
+/// ## Adaptive planning & Clip Duration integration (P42)
 ///
-/// The planner optimizes for *useful exposure per second spent skimming*, not for the largest
-/// possible number of previews. A longer video has more content worth sampling, so it earns more
-/// previews and more timeline coverage — but each additional minute of video should buy a
-/// progressively smaller increase in total skim time. Both preview count and preview duration are
-/// therefore driven by natural-log growth curves of the usable duration (`mediaDurationSeconds -
-/// skipIntroSeconds`): cheap to reason about, monotonic, and self-limiting without hard-coded
-/// duration tiers.
-///
-/// - **Count** (`adaptiveSegmentCount`): `minimumSegmentCount + countGrowthScale *
-///   ln(usableDuration / eligibilityThresholdSeconds)`, clamped to
-///   `minimumSegmentCount...maximumSegmentCount`. Doubling the usable duration adds a constant
-///   number of previews (`countGrowthScale * ln(2) ≈ 1.4`), not a constant *factor* — so a 1-hour
-///   video gets noticeably more previews than a 5-minute one, but a 3-hour video only gets a little
-///   more than a 1-hour one.
-/// - **Duration** (`targetSegmentDuration`): `durationBaseSeconds + durationGrowthScale *
-///   ln(max(usableDuration / eligibilityThresholdSeconds, 1))`, clamped to
-///   `minimumSegmentDurationSeconds...maximumSegmentDurationSeconds`. Previews stay short glimpses
-///   even for very long videos; they never grow proportionally with the video.
-/// - **Coverage / spacing**: the usable timeline is divided into `count` ordered, consecutive
-///   buckets (unchanged from Part 1). Each segment's duration and position are randomized within its
-///   own bucket, so every bucket — early, middle, late — gets a sampling opportunity, positions stay
-///   randomized and strictly forward-moving, and segments never overlap. As duration grows, bucket
-///   spans grow, which naturally increases the *distance* between previews rather than clustering
-///   them near the start.
-/// - **Graceful degradation**: if the usable timeline can't safely hold the target count/duration
-///   combination (e.g. a large Skip Intro), segment count is reduced first, then duration is
-///   narrowed per-bucket, before ever violating timeline bounds or producing overlaps. The planner
-///   always returns a valid plan, down to an empty one.
+/// Snippet durations follow the authoritative Clip Duration configuration:
+/// - **Fixed Duration mode**: each segment targets `max(2.0, configuredFixedDurationSeconds)` with
+///   zero intentional flutter or variation.
+/// - **Random Duration mode**: each segment uniformly selects its target duration within
+///   `[max(2.0, randomMinimumSeconds), max(lowerBound, randomMaximumSeconds)]`.
+/// - **Dynamic Eligibility**: media is eligible only if `mediaDurationSeconds >= max(30.0, minimumSnippetDuration * 2.0)`.
+///   Videos below the threshold receive an empty plan, gracefully falling back to standard skim preview.
+/// - **Safe Timeline Fitting**: if the requested segment count (scaled by intensity) is too dense for
+///   the configured minimum snippet duration (`usableDuration / count < minimumSnippetDuration`),
+///   the count is reduced until snippets safely fit without overlap or artificial shrinkage, down to 1 (or empty).
 enum ProgressiveRandomSkimPlanner {
-    /// Videos shorter than this are never eligible for Progressive Random Skim.
-    static let eligibilityThresholdSeconds: Double = 30
+    /// Absolute floor on any single preview's duration, regardless of video length or settings.
+    static let minimumEffectiveDurationSeconds: Double = 2.0
 
-    /// Absolute floor/ceiling on any single preview's duration, regardless of video length. Chosen
-    /// so a preview always reads as a "glimpse": long enough to orient the viewer (2.5s), never long
-    /// enough to itself become something worth watching in full (10s).
-    static let minimumSegmentDurationSeconds: Double = 2.5
-    static let maximumSegmentDurationSeconds: Double = 10
+    /// Baseline media duration for eligibility when snippets are at or below 15s.
+    static let baselineEligibilityThresholdSeconds: Double = 30.0
 
-    /// Baseline target duration at the eligibility threshold, and the per-doubling growth added on
-    /// top of it. `durationGrowthScale * ln(2) ≈ 0.83s` added per doubling of usable duration — a
-    /// slow, sub-linear climb toward `maximumSegmentDurationSeconds`.
-    static let durationBaseSeconds: Double = 3
-    static let durationGrowthScale: Double = 1.2
-    /// Random per-segment variation applied around the target duration (±30%), so segments within
-    /// the same plan aren't all identical lengths.
-    static let durationVariationFraction: Double = 0.3
+    /// Backward-compatibility alias for the baseline 30-second eligibility floor.
+    static let eligibilityThresholdSeconds: Double = baselineEligibilityThresholdSeconds
 
-    /// Smallest and largest number of previews a plan may contain. The minimum matches "a video
-    /// barely over 30 seconds should only receive a few useful glimpses"; the maximum keeps very
-    /// long videos from producing an unbounded number of previews — at the ceiling, total skim time
-    /// is still capped at `maximumSegmentCount * maximumSegmentDurationSeconds` = 160s regardless of
-    /// how long the source video is.
+    /// Smallest and largest number of previews a plan may contain.
     static let minimumSegmentCount = 2
-    static let maximumSegmentCount = 16
+    static let maximumSegmentCount = 40
+
     /// Per-doubling growth in segment count: `countGrowthScale * ln(2) ≈ 1.4` extra previews each
     /// time usable duration doubles.
     static let countGrowthScale: Double = 2.0
@@ -95,56 +79,86 @@ enum ProgressiveRandomSkimPlanner {
     /// fixed pool of random values up front.
     static let maximumPossibleSegmentCount = maximumSegmentCount
 
-    /// Adaptive duration-to-segment-count rule (see type documentation for the rationale). Count
-    /// increases with usable duration with diminishing returns, and is capped at
-    /// `maximumSegmentCount`.
+    /// Effective minimum snippet duration given the active duration mode and parameters.
+    /// Clamped to at least `minimumEffectiveDurationSeconds` (2.0s).
+    static func effectiveMinimumSnippetDuration(durationMode: SkimPreviewDurationMode,
+                                                fixedDurationSeconds: Double,
+                                                randomMinimumSeconds: Double) -> Double {
+        switch durationMode {
+        case .fixed:
+            return max(minimumEffectiveDurationSeconds, fixedDurationSeconds)
+        case .random:
+            return max(minimumEffectiveDurationSeconds, randomMinimumSeconds)
+        }
+    }
+
+    /// Dynamic eligibility threshold for Progressive Random Skim: `max(30.0, minimumSnippetDuration * 2.0)`.
+    static func eligibilityThresholdSeconds(minimumSnippetDuration: Double) -> Double {
+        max(baselineEligibilityThresholdSeconds, minimumSnippetDuration * 2.0)
+    }
+
+    /// Dynamic eligibility threshold for Progressive Random Skim given the active duration mode and settings.
+    static func eligibilityThresholdSeconds(durationMode: SkimPreviewDurationMode,
+                                            fixedDurationSeconds: Double,
+                                            randomMinimumSeconds: Double) -> Double {
+        let minimumSnippet = effectiveMinimumSnippetDuration(durationMode: durationMode,
+                                                             fixedDurationSeconds: fixedDurationSeconds,
+                                                             randomMinimumSeconds: randomMinimumSeconds)
+        return eligibilityThresholdSeconds(minimumSnippetDuration: minimumSnippet)
+    }
+
+    /// Adaptive duration-to-segment-count rule. Count increases with usable duration with diminishing
+    /// returns, and is capped at `maximumSegmentCount`.
     static func adaptiveSegmentCount(forUsableDurationSeconds usableDuration: Double) -> Int {
         guard usableDuration.isFinite, usableDuration > 0 else { return 0 }
-        let ratio = usableDuration / eligibilityThresholdSeconds
+        let ratio = usableDuration / baselineEligibilityThresholdSeconds
         let raw = Double(minimumSegmentCount) + countGrowthScale * log(ratio)
         let clamped = min(Double(maximumSegmentCount), max(Double(minimumSegmentCount), raw))
         return Int(clamped.rounded())
     }
 
-    /// Adaptive target preview duration for a given usable duration (see type documentation). Actual
-    /// per-segment durations are randomized around this target and further narrowed to fit their
-    /// bucket, but never leave `minimumSegmentDurationSeconds...maximumSegmentDurationSeconds`.
-    static func targetSegmentDuration(forUsableDurationSeconds usableDuration: Double) -> Double {
-        guard usableDuration.isFinite, usableDuration > 0 else { return minimumSegmentDurationSeconds }
-        let ratio = usableDuration / eligibilityThresholdSeconds
-        let raw = durationBaseSeconds + durationGrowthScale * log(max(ratio, 1))
-        return min(maximumSegmentDurationSeconds, max(minimumSegmentDurationSeconds, raw))
-    }
-
     /// - Parameters:
-    ///   - mediaDurationSeconds: Total media duration. Videos under `eligibilityThresholdSeconds`
-    ///     seconds are ineligible and receive an empty plan.
+    ///   - mediaDurationSeconds: Total media duration. Videos under the dynamic eligibility threshold
+    ///     receive an empty plan and fall back to normal skim.
     ///   - skipIntroSeconds: Earliest allowed position for the first preview segment. Clamped to
-    ///     `0...mediaDurationSeconds`. `usableDuration = mediaDurationSeconds - skipIntroSeconds`
-    ///     drives every adaptive calculation below.
+    ///     `0...mediaDurationSeconds`. `usableDuration = mediaDurationSeconds - skipIntroSeconds`.
     ///   - positionRandomValues: One value in `0..<1` per planned segment, choosing where within its
-    ///     bucket the segment starts. Missing entries are treated as `0`. Tests inject deterministic
-    ///     sequences instead of `Double.random`.
+    ///     bucket the segment starts. Missing entries are treated as `0`. Tests inject deterministic sequences.
     ///   - durationRandomValues: One value in `0..<1` per planned segment, choosing the segment's
-    ///     duration within the adaptive target's variation range (narrowed further if its bucket is
-    ///     too small to hold that range).
-    ///   - segmentCountMultiplier: Coverage-intensity scale (Part 4) applied to the adaptive segment
-    ///     count only, before the existing safe-reduction loop below. `1.0` (the default, matching
-    ///     `ProgressiveRandomSkimIntensity.standard`) reproduces the unscaled Part 2 count exactly.
-    ///     The planner stays pure: callers resolve the user-facing intensity to this raw multiplier
-    ///     themselves rather than this function reading settings.
+    ///     duration within `[lowerBound, upperBound]` in Random mode. Ignored in Fixed mode.
+    ///   - segmentCountMultiplier: Coverage-intensity scale applied to the adaptive segment count.
+    ///   - durationMode: Fixed or Random duration mode from authoritative Clip Duration settings.
+    ///   - fixedDurationSeconds: Configured fixed duration in seconds.
+    ///   - randomMinimumSeconds: Configured random minimum duration in seconds.
+    ///   - randomMaximumSeconds: Configured random maximum duration in seconds.
     /// - Returns: An ordered list of segments, each strictly starting after the previous segment
     ///   ends, none extending past `mediaDurationSeconds`, and none starting before `skipIntroSeconds`.
-    ///   When the usable timeline cannot safely hold the adaptive segment count, the count is reduced
-    ///   (down to zero) rather than producing overlapping or out-of-range segments.
     static func plan(mediaDurationSeconds: Double,
                      skipIntroSeconds: Double,
-                     positionRandomValues: [Double],
-                     durationRandomValues: [Double],
-                     segmentCountMultiplier: Double = 1.0) -> [ProgressiveRandomSkimSegment] {
-        guard mediaDurationSeconds.isFinite, mediaDurationSeconds >= eligibilityThresholdSeconds else {
+                     positionRandomValues: [Double] = [],
+                     durationRandomValues: [Double] = [],
+                     segmentCountMultiplier: Double = 1.0,
+                     durationMode: SkimPreviewDurationMode = .fixed,
+                     fixedDurationSeconds: Double = Double(SettingsDefaultsRegistry.Defaults.clipDurationSeconds),
+                     randomMinimumSeconds: Double = Double(SettingsDefaultsRegistry.Defaults.randomPreviewMinimumSeconds),
+                     randomMaximumSeconds: Double = Double(SettingsDefaultsRegistry.Defaults.randomPreviewMaximumSeconds)) -> [ProgressiveRandomSkimSegment] {
+        let fixedTarget = max(minimumEffectiveDurationSeconds, fixedDurationSeconds)
+        let randomLower = max(minimumEffectiveDurationSeconds, randomMinimumSeconds)
+        let randomUpper = max(randomLower, randomMaximumSeconds)
+
+        let minimumSnippetDuration: Double
+        switch durationMode {
+        case .fixed:
+            minimumSnippetDuration = fixedTarget
+        case .random:
+            minimumSnippetDuration = randomLower
+        }
+
+        let threshold = eligibilityThresholdSeconds(minimumSnippetDuration: minimumSnippetDuration)
+        guard mediaDurationSeconds.isFinite, mediaDurationSeconds >= threshold else {
             return []
         }
+
         let usableStart = max(0, min(skipIntroSeconds, mediaDurationSeconds))
         let usableEnd = mediaDurationSeconds
         let usableDuration = usableEnd - usableStart
@@ -152,26 +166,29 @@ enum ProgressiveRandomSkimPlanner {
 
         let baseCount = adaptiveSegmentCount(forUsableDurationSeconds: usableDuration)
         var count = scaledSegmentCount(baseCount: baseCount, multiplier: segmentCountMultiplier)
-        while count > 1 && usableDuration / Double(count) < minimumSegmentDurationSeconds {
+        while count > 1 && usableDuration / Double(count) < minimumSnippetDuration {
             count -= 1
         }
-        guard count >= 1, usableDuration >= minimumSegmentDurationSeconds else { return [] }
-
-        let target = targetSegmentDuration(forUsableDurationSeconds: usableDuration)
-        let targetLow = max(minimumSegmentDurationSeconds, target * (1 - durationVariationFraction))
-        let targetHigh = min(maximumSegmentDurationSeconds, target * (1 + durationVariationFraction))
+        guard count >= 1, usableDuration >= minimumSnippetDuration else { return [] }
 
         var segments: [ProgressiveRandomSkimSegment] = []
         var cursor = usableStart
         for index in 0..<count {
             let remainingBuckets = count - index
             let remainingSpan = usableEnd - cursor
-            guard remainingSpan >= minimumSegmentDurationSeconds else { break }
+            guard remainingSpan >= minimumSnippetDuration else { break }
             let bucketSpan = remainingSpan / Double(remainingBuckets)
-            let maxDuration = min(targetHigh, bucketSpan)
-            let minDuration = min(targetLow, maxDuration)
-            let durationRandom = clampedUnit(durationRandomValues[safe: index] ?? 0)
-            let duration = minDuration + (maxDuration - minDuration) * durationRandom
+
+            let target: Double
+            switch durationMode {
+            case .fixed:
+                target = fixedTarget
+            case .random:
+                let durationRandom = clampedUnit(durationRandomValues[safe: index] ?? 0)
+                target = randomLower + (randomUpper - randomLower) * durationRandom
+            }
+
+            let duration = min(target, bucketSpan)
             guard duration > 0 else { break }
             let slack = max(0, bucketSpan - duration)
             let positionRandom = clampedUnit(positionRandomValues[safe: index] ?? 0)
@@ -194,7 +211,8 @@ enum ProgressiveRandomSkimPlanner {
     }
 
     private static func clampedUnit(_ value: Double) -> Double {
-        min(max(value, 0), 1)
+        guard value.isFinite else { return 0 }
+        return min(max(value, 0), 1)
     }
 }
 

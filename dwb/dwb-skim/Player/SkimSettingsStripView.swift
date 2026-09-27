@@ -60,8 +60,11 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
             configureNumberField($0, allowsFloats: false, minimum: 0, width: 34)
         }
         fixedDuration.setAccessibilityLabel("Fixed clip duration in seconds")
+        fixedDuration.toolTip = "Controls Progressive segment length in Fixed mode."
         randomMinimum.setAccessibilityLabel("Minimum random clip duration in seconds")
+        randomMinimum.toolTip = "Bounds Progressive segment length in Random mode."
         randomMaximum.setAccessibilityLabel("Maximum random clip duration in seconds")
+        randomMaximum.toolTip = "Bounds Progressive segment length in Random mode."
         skipIntro.setAccessibilityLabel("Skip intro in seconds")
         configureNumberField(imageDuration,
                              allowsFloats: true,

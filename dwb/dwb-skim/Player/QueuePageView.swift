@@ -22,7 +22,7 @@ protocol QueuePageViewDelegate: AnyObject {
     /// Called when the user presses Delete/Backspace with multiple rows selected.
     /// `indices` is sorted descending so the caller can delete safely without index shifts.
     func queuePage(_ view: QueuePageView, didRequestDeleteRows indices: [Int])
-    /// Moves the selected media files to the system Trash after confirmation.
+    /// Legacy trash action — no longer invoked by QueuePageView as of P40 (Delete action removes from queue only).
     func queuePage(_ view: QueuePageView, didRequestTrashRows indices: [Int])
     /// Called from the queue empty state to use the app's existing media-open flow.
     func queuePageDidRequestAddMedia(_ view: QueuePageView)
@@ -542,16 +542,17 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         deleteButton.isBordered     = false
         deleteButton.bezelStyle     = .regularSquare
         deleteButton.imageScaling   = .scaleProportionallyDown
-        let trashCfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
-        if let img = NSImage(systemSymbolName: "trash", accessibilityDescription: "Delete Selected") {
-            deleteButton.image = img.withSymbolConfiguration(trashCfg) ?? img
+        let symbolCfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        if let img = NSImage(systemSymbolName: QueueRemovalPresentation.buttonSymbolName,
+                             accessibilityDescription: QueueRemovalPresentation.buttonAccessibilityLabel) {
+            deleteButton.image = img.withSymbolConfiguration(symbolCfg) ?? img
         }
-        deleteButton.title = "Delete"
+        deleteButton.title = QueueRemovalPresentation.buttonTitle
         deleteButton.imagePosition = .imageLeading
         deleteButton.font = .systemFont(ofSize: 10.5, weight: .medium)
         deleteButton.contentTintColor = PlayerBrandColors.crimson.withAlphaComponent(0.78)
-        deleteButton.toolTip   = "Delete Selected media files by moving them to Trash"
-        deleteButton.setAccessibilityLabel("Delete Selected media files")
+        deleteButton.toolTip   = QueueRemovalPresentation.buttonToolTip
+        deleteButton.setAccessibilityLabel(QueueRemovalPresentation.buttonAccessibilityLabel)
         deleteButton.target    = self
         deleteButton.action    = #selector(deleteTapped)
         bottomBar.addSubview(deleteButton)
@@ -825,7 +826,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         let spacing: CGFloat = 6
         let topRowY: CGFloat = 34
         let bottomRowY: CGFloat = 5
-        deleteButton.frame = NSRect(x: bottomEdgePad, y: topRowY, width: 56, height: buttonH)
+        deleteButton.frame = NSRect(x: bottomEdgePad, y: topRowY, width: 62, height: buttonH)
         let nextX = deleteButton.frame.maxX + spacing
 
         // Review controls pill — always visible; operates on the current/selected item.
@@ -855,7 +856,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         reviewX += reviewDividerW
         reviewUndoButton.frame = NSRect(x: reviewX, y: 0, width: undoW, height: reviewBtnH)
         let hasItems = !items.isEmpty
-        for button in [reviewKeepButton, reviewDeleteButton, reviewRenameButton, reviewUndoButton] {
+        for button in [deleteButton, reviewKeepButton, reviewDeleteButton, reviewRenameButton, reviewUndoButton] {
             button.isEnabled = hasItems
         }
         prefixPill.isHidden = true
@@ -1232,7 +1233,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
     private func selectedRowsOrCurrentRowDescending() -> [Int] {
         let selected = tableView.selectedRowIndexes
         if !selected.isEmpty {
-            return selected.sorted(by: >).compactMap { displayIndex(forVisibleRow: $0) }
+            return selected.compactMap { displayIndex(forVisibleRow: $0) }.sorted(by: >)
         }
         return currentDisplayIndexIfVisible().map { [$0] } ?? []
     }
@@ -1369,9 +1370,25 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
     }
 
     @objc private func deleteTapped() {
+        let selectedRows = tableView.selectedRowIndexes
+        let minRow = selectedRows.min()
         let rows = selectedRowsOrCurrentRowDescending()
         guard !rows.isEmpty else { return }
-        delegate?.queuePage(self, didRequestTrashRows: rows)
+        if rows.count == 1 {
+            delegate?.queuePage(self, didRequestDeleteAt: rows[0])
+        } else {
+            delegate?.queuePage(self, didRequestDeleteRows: rows)
+        }
+        if let minRow {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                let count = self.tableView.numberOfRows
+                guard count > 0 else { return }
+                let newRow = min(minRow, count - 1)
+                self.tableView.selectRowIndexes(IndexSet(integer: newRow), byExtendingSelection: false)
+                self.tableView.scrollRowToVisible(newRow)
+            }
+        }
     }
 
     /// Resolves the single item review controls (keep_/delete_/rename) act on:
@@ -1607,7 +1624,7 @@ final class QueuePageView: NSView, NSSearchFieldDelegate {
         addContextItem("Reveal in Finder", action: #selector(contextReveal(_:)), row: row, to: menu)
         addContextItem("Rename...", action: #selector(contextRename(_:)), row: row, to: menu)
         menu.addItem(.separator())
-        addContextItem("Remove from Queue", action: #selector(contextDelete(_:)), row: row, to: menu)
+        addContextItem(QueueRemovalPresentation.contextMenuItemTitle, action: #selector(contextDelete(_:)), row: row, to: menu)
         return menu
     }
 

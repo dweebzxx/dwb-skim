@@ -175,8 +175,8 @@ local protected_start="$AI_TMP_ROOT/runtime/protected-workflow-start.json"
 # or the gate's own bootstrap of an empty catalog/store reads as an
 # unauthorized pass-produced change at cli-post-pass.zsh's write-scope check.
 mkdir -p -- \
-  "${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills-store}" \
-  "${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills}" \
+  "${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills-store}" \
+  "${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills}" \
   || die 90 skills "cannot pre-create skill gate paths before snapshot"
 
 # ---------------------------------------------------------------------------
@@ -369,10 +369,10 @@ def path_state(root,rel):
  return {"path":rel,"type":"other","signature":None}
 
 root=sys.argv[1]
-save(sys.argv[2],snap(root,"project")); save(sys.argv[3],snap(os.path.join(root,".private"),"private"))
+save(sys.argv[2],snap(root,"project")); save(sys.argv[3],snap(os.path.join(root,".dwbskim-private"),"private"))
 protected=["AGENTS.md","CLAUDE.md","metadata-schema.json","skills-lock.json",".agents",".claude/skills"]
 protected += ["scripts"] if os.path.islink(os.path.join(root,"scripts")) else ["scripts/cli-initialize.zsh","scripts/cli-pre-pass.zsh","scripts/cli-agent-runner.zsh","scripts/cli-post-pass.zsh","scripts/cli-log-collector.zsh","scripts/cli-commit.zsh","scripts/cli-push.zsh","scripts/cli-session-abort.zsh"]
-private=[".private/AGENTS.md",".private/metadata-schema.json",".private/skills-lock.json",".private/workflow-templates/pass-report-template.md",".private/.agents/skills",".private/.agents/skills-store",".private/scripts"]
+private=[".dwbskim-private/AGENTS.md",".dwbskim-private/metadata-schema.json",".dwbskim-private/skills-lock.json",".dwbskim-private/workflow-templates/pass-report-template.md",".dwbskim-private/.agents/skills",".dwbskim-private/.agents/skills-store",".dwbskim-private/scripts"]
 save(sys.argv[4],{"paths":[path_state(root,p) for p in protected+private]})' \
   "$AI_PROJECT_ROOT" "$pub" "$priv" "$protected_start" 2>>"$diagnostics" \
   || die 90 snapshot "cannot capture starting repository/control state; diagnostics retained at ${diagnostics#$AI_PROJECT_ROOT/}"
@@ -426,9 +426,9 @@ elif [[ "${AI_FIRST_PASS:-0}" != 1 && "${AI_ALLOW_BASELINE_RECONCILIATION:-0}" !
   die 30 continuation "prior continuation state absent; explicitly mark a first pass or baseline reconciliation"
 fi
 
-AI_SKILL_STORE_PATH="${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills-store}"
-AI_SKILL_CATALOG_PATH="${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.private/.agents/skills}"
-AI_SKILLS_LOCK_PATH="${AI_SKILLS_LOCK_PATH:-$AI_PROJECT_ROOT/.private/skills-lock.json}"
+AI_SKILL_STORE_PATH="${AI_SKILL_STORE_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills-store}"
+AI_SKILL_CATALOG_PATH="${AI_SKILL_CATALOG_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/.agents/skills}"
+AI_SKILLS_LOCK_PATH="${AI_SKILLS_LOCK_PATH:-$AI_PROJECT_ROOT/.dwbskim-private/skills-lock.json}"
 AI_SKILL_ACTIVATION_EVIDENCE_PATH="${AI_SKILL_ACTIVATION_EVIDENCE_PATH:-${AI_RUNTIME_STATE_PATH:h}/skill-activation.json}"
 inside "$AI_SKILL_STORE_PATH" "$AI_PROJECT_ROOT"
 inside "$AI_SKILL_CATALOG_PATH" "$AI_PROJECT_ROOT"
