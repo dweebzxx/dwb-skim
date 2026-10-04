@@ -60,16 +60,18 @@ node_modules/
 # v2.4.1 Host Workflow private-control adapters (whole-directory scripts model)
 /AGENTS.md
 /CLAUDE.md
-/metadata-schema.json
 /skills-lock.json
 /.agents/
 /.agents
 /.codex/
+/.codex
 /.claude/
+/.claude
 /audit/
 /.dwbskim-private/
 /.antigravitycli/
 /tools/
+/tools
 /workflow-templates/
 /build-report-logs/launchers/
 /build-report-logs/logs/
