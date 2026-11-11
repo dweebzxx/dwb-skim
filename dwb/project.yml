@@ -61,12 +61,16 @@ targets:
       - path: dwb-skim/Player/MediaPlaybackPolicy.swift
       - path: dwb-skim/Player/VideoAudioNormalizationPolicy.swift
       - path: dwb-skim/Player/VolumeOverlayPresentation.swift
+      - path: dwb-skim/App/DWBTheme.swift
+      - path: dwb-skim/App/SkimTheme.swift
+      - path: dwb-skim/Player/DropZonePresentation.swift
+      - path: dwb-skim/Player/UndoToastPresentation.swift
       - path: dwb-skim/Player/QueueOrderPlanner.swift
       - path: dwb-skim/Player/QueueRenameReconciler.swift
       - path: dwb-skim/Player/QueueDisplayProjection.swift
       - path: dwb-skim/Player/SkimFileRenamer.swift
       - path: dwb-skim/Player/SkimReviewStatusDescriptor.swift
-      - path: dwb-skim/Player/SkimReviewState.swift
+      - path: dwb-skim/Player/SkimMarkerRenameUndo.swift
       - path: dwb-skim/App/DebugLogSanitizer.swift
       - path: dwb-skim/App/DebugLogRetentionBuffer.swift
       - path: dwb-skim/App/BookmarkStore.swift
@@ -74,7 +78,6 @@ targets:
       - path: dwb-skim/App/SkimSettingsStore.swift
       - path: dwb-skim/App/BackgroundAudioSettings.swift
       - path: dwb-skim/App/SettingsPresentation.swift
-      - path: dwb-skim/Player/SkimColors.swift
       - path: dwb-skim/Player/SkimPreviewPlaybackPlan.swift
       - path: dwb-skim/Player/SkimPreviewSessionScheduler.swift
       - path: dwb-skim/Player/SkimPlaybackStartIntent.swift
@@ -91,6 +94,15 @@ targets:
       - path: dwb-skim/Player/BackgroundAudioPlaybackController.swift
       - path: dwb-skim/Player/PlaybackBarPresentation.swift
       - path: dwb-skim/Player/QueueRemovalPlanner.swift
+      - path: dwb-skim/Player/QueueMarkerChipPresentation.swift
+      - path: dwb-skim/Player/QueueFooterPresentation.swift
+      - path: dwb-skim/Player/QueueSearchHighlight.swift
+      - path: dwb-skim/Player/QueueEmptyStatePresentation.swift
+      - path: dwb-skim/Player/RenameSheetPresentation.swift
+      - path: dwb-skim/App/ShortcutsPresentation.swift
+      - path: dwb-skim/App/DebugLevelPresentation.swift
+      - path: dwb-skim/Player/SkimStripLayoutPlan.swift
+      - path: dwb-skim/Player/SkimStripConfirmation.swift
     settings:
       base:
         GENERATE_INFOPLIST_FILE: "YES"

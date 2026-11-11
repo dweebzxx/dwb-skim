@@ -1,24 +1,71 @@
 import Cocoa
 
-/// Compact, persistent skim controls shared by every player window.
-final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
+/// Compact, persistent skim controls shared by every player window: an opaque `canvas` strip with a
+/// 1 pt `gridLine` bottom edge. The row never wraps or scrolls. The collapse chevron sits in a fixed
+/// trailing slot; groups that do not fit move, in order, into an overflow popover (`SkimStripLayoutPlan`).
+final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
+    private enum Metrics {
+        static let leadingInset = SkimStripLayoutPlan.Metrics.leadingInset
+        static let trailingInset = SkimStripLayoutPlan.Metrics.trailingInset
+        static let groupGap = SkimStripLayoutPlan.Metrics.groupGap
+        static let separatorInset: CGFloat = 10
+        static let labelToControl: CGFloat = 4
+        static let controlGap: CGFloat = 6
+        static let smallControl: CGFloat = 20
+        static let numberField: CGFloat = 44
+        static let numberFieldWithStepper: CGFloat = 58
+        static let popUp: CGFloat = 104
+        static let collapseButton = SkimStripLayoutPlan.Metrics.collapseControl
+        static let overflowButton = SkimStripLayoutPlan.Metrics.overflowControl
+        static let popoverInset: CGFloat = 14
+        static let popoverGroupGap: CGFloat = 14
+    }
+
+    /// One strip group, in row order. `divider` is the rule drawn before it when it starts a cluster.
+    private struct StripGroup {
+        let setting: SkimStripSetting
+        let view: NSView
+        let divider: NSView?
+    }
+
+    /// A control whose tooltip and accessibility help carry the saved value of its setting.
+    private struct DescribedControl {
+        let control: NSControl
+        let setting: SkimStripSetting
+        let hint: () -> String?
+    }
+
     var onCollapse: (() -> Void)?
+    /// Called after a commit made in this strip changed a stored setting. Never called for store
+    /// notifications that came from Settings or another window.
+    var onSettingCommitted: ((SkimStripConfirmation) -> Void)?
     private let store: SkimSettingsStore
     private let durationMode = NSSegmentedControl(labels: ["Fixed", "Random"], trackingMode: .selectOne, target: nil, action: nil)
-    private let fixedDuration = NSTextField()
-    private let randomMinimum = NSTextField()
-    private let randomMaximum = NSTextField()
+    private let fixedDuration = SkimNumberField()
+    private let randomMinimum = SkimNumberField()
+    private let randomMaximum = SkimNumberField()
     private let randomRangeSeparator = NSTextField(labelWithString: "-")
     private let startPosition = NSSegmentedControl(labels: ["Beginning", "Random"], trackingMode: .selectOne, target: nil, action: nil)
-    private let skipIntro = NSTextField()
-    private let imageDuration = NSTextField()
+    private let skipIntro = SkimNumberField()
+    private let imageDuration = SkimNumberField()
     private let imageDurationStepper = NSStepper()
-    private let gifLoops = NSTextField()
+    private let gifLoops = SkimNumberField()
     private let gifLoopsStepper = NSStepper()
     private let queueOrder = NSPopUpButton()
     private let loopQueue = NSSwitch()
     private let progressiveRandomSkim = NSSwitch()
     private let collapseButton = NSButton()
+    private let overflowButton = NSButton()
+    private let overflowPopover = NSPopover()
+    private let overflowStack = NSStackView()
+    private let rowStack = NSStackView()
+    private let bottomEdge = NSView()
+    private var groups: [StripGroup] = []
+    private var describedControls: [DescribedControl] = []
+    private var appliedPlan: SkimStripLayoutPlan?
+    private var groupLabels: [(setting: SkimStripSetting, label: NSTextField)] = []
+    private var imageSuffix: NSView?
+    private var activity = SkimStripActivity(skimEnabled: true, acceptsImages: true, acceptsGIFs: true)
     private var isSynchronizing = false
 
     init(store: SkimSettingsStore = .shared) {
@@ -26,9 +73,14 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         super.init(frame: .zero)
         configure()
         syncFromStore()
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
         for name in [Notification.Name.skimPreviewSettingsChanged,
                      .queueBehaviorSettingsChanged,
-                     .playbackSettingsChanged] {
+                     .playbackSettingsChanged,
+                     .acceptedMediaTypesChanged] {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(settingsDidChange),
                                                    name: name,
@@ -41,13 +93,12 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
     deinit { NotificationCenter.default.removeObserver(self) }
 
     private func configure() {
-        material = .headerView
-        blendingMode = .withinWindow
-        state = .active
         appearance = NSAppearance(named: .darkAqua)
         wantsLayer = true
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
-        layer?.borderWidth = 1
+        layer?.backgroundColor = DWBColor.canvas.cgColor
+        bottomEdge.wantsLayer = true
+        bottomEdge.layer?.backgroundColor = StripColor.line.cgColor
+        bottomEdge.translatesAutoresizingMaskIntoConstraints = false
 
         configureSegmented(durationMode, action: #selector(durationModeChanged(_:)))
         configureSegmented(startPosition, action: #selector(startPositionChanged(_:)))
@@ -57,26 +108,23 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         startPosition.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.startPositionIdentifier)
 
         [fixedDuration, randomMinimum, randomMaximum, skipIntro].forEach {
-            configureNumberField($0, allowsFloats: false, minimum: 0, width: 34)
+            configureNumberField($0, allowsFloats: false, minimum: 0, width: Metrics.numberField)
         }
         fixedDuration.setAccessibilityLabel("Fixed clip duration in seconds")
-        fixedDuration.toolTip = "Controls Progressive segment length in Fixed mode."
         randomMinimum.setAccessibilityLabel("Minimum random clip duration in seconds")
-        randomMinimum.toolTip = "Bounds Progressive segment length in Random mode."
         randomMaximum.setAccessibilityLabel("Maximum random clip duration in seconds")
-        randomMaximum.toolTip = "Bounds Progressive segment length in Random mode."
         skipIntro.setAccessibilityLabel("Skip intro in seconds")
         configureNumberField(imageDuration,
                              allowsFloats: true,
                              minimum: SettingsDefaultsRegistry.Defaults.imageDurationMinimumSeconds,
                              maximum: SettingsDefaultsRegistry.Defaults.imageDurationMaximumSeconds,
-                             width: 44)
+                             width: Metrics.numberField)
         imageDuration.setAccessibilityLabel("Image duration in seconds")
         configureNumberField(gifLoops,
                              allowsFloats: false,
                              minimum: 1,
                              maximum: Double(SettingsDefaultsRegistry.Defaults.gifLoopCountMaximum),
-                             width: 38)
+                             width: Metrics.numberField)
         gifLoops.setAccessibilityLabel("GIF loop count")
         configureStepper(imageDurationStepper,
                          minimum: SettingsDefaultsRegistry.Defaults.imageDurationMinimumSeconds,
@@ -96,6 +144,8 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
             queueOrder.lastItem?.representedObject = mode.rawValue
         }
         queueOrder.controlSize = .small
+        queueOrder.widthAnchor.constraint(equalToConstant: Metrics.popUp).isActive = true
+        queueOrder.heightAnchor.constraint(equalToConstant: Metrics.smallControl).isActive = true
         queueOrder.target = self
         queueOrder.action = #selector(queueOrderChanged(_:))
         queueOrder.setAccessibilityLabel("Queue Order")
@@ -104,27 +154,30 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         loopQueue.target = self
         loopQueue.action = #selector(loopQueueChanged(_:))
         loopQueue.setAccessibilityLabel("Loop Queue")
-        loopQueue.toolTip = "Loop queue"
 
         progressiveRandomSkim.controlSize = .small
         progressiveRandomSkim.target = self
         progressiveRandomSkim.action = #selector(progressiveRandomSkimChanged(_:))
         progressiveRandomSkim.setAccessibilityLabel("Progressive Random Skim")
-        progressiveRandomSkim.toolTip = "Progressive random skim"
 
         collapseButton.isBordered = false
         collapseButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Hide Skim controls")
         collapseButton.imageScaling = .scaleProportionallyDown
-        collapseButton.contentTintColor = .secondaryLabelColor
+        collapseButton.contentTintColor = StripColor.supportingText
         collapseButton.target = self
         collapseButton.action = #selector(collapseTapped(_:))
         collapseButton.toolTip = "Hide Skim controls"
         collapseButton.setAccessibilityLabel("Hide Skim controls")
-        collapseButton.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        collapseButton.image = collapseButton.image?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
+        collapseButton.widthAnchor.constraint(equalToConstant: Metrics.collapseButton).isActive = true
+        collapseButton.heightAnchor.constraint(equalToConstant: Metrics.collapseButton).isActive = true
 
         randomRangeSeparator.font = .systemFont(ofSize: 10)
-        randomRangeSeparator.textColor = .secondaryLabelColor
+        randomRangeSeparator.textColor = StripColor.supportingText
         randomRangeSeparator.setAccessibilityElement(false)
+
+        configureOverflowButton()
 
         let durationValues = horizontal(durationMode,
                                         fixedDuration,
@@ -132,34 +185,174 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
                                         randomRangeSeparator,
                                         randomMaximum,
                                         suffixLabel("s"))
-        let groups: [NSView] = [
-            group("Clip duration", durationValues),
-            group("Start position", startPosition),
-            group("Skip intro", horizontal(skipIntro, suffixLabel("s"))),
-            divider(),
-            group("Image duration", horizontal(imageDuration, imageDurationStepper, suffixLabel("s"))),
-            group("GIF loops", horizontal(gifLoops, gifLoopsStepper)),
-            divider(),
-            group("Queue order", queueOrder),
-            group("Loop queue", loopQueue),
-            group("Progressive skim", progressiveRandomSkim),
-            divider(),
-            group("", collapseButton),
+        let imageUnit = suffixLabel("s")
+        imageSuffix = imageUnit
+        groups = [
+            StripGroup(setting: .clipDuration, view: group("Clip duration", durationValues, setting: .clipDuration), divider: nil),
+            StripGroup(setting: .startPosition, view: group("Start position", startPosition, setting: .startPosition), divider: nil),
+            StripGroup(setting: .skipIntro, view: group("Skip intro", horizontal(skipIntro, suffixLabel("s")), setting: .skipIntro), divider: nil),
+            StripGroup(setting: .imageDuration,
+                       view: group("Image duration", horizontal(numberField(imageDuration, stepper: imageDurationStepper), imageUnit), setting: .imageDuration),
+                       divider: divider()),
+            StripGroup(setting: .gifLoops, view: group("GIF loops", numberField(gifLoops, stepper: gifLoopsStepper), setting: .gifLoops), divider: nil),
+            StripGroup(setting: .queueOrder, view: group("Queue order", queueOrder, setting: .queueOrder), divider: divider()),
+            StripGroup(setting: .loopQueue, view: group("Loop queue", loopQueue, setting: .loopQueue), divider: nil),
+            StripGroup(setting: .progressiveSkim, view: group("Progressive skim", progressiveRandomSkim, setting: .progressiveSkim), divider: nil),
         ]
-        let stack = NSStackView(views: groups)
-        stack.orientation = .horizontal
-        stack.alignment = .top
-        stack.distribution = .equalSpacing
-        stack.spacing = 10
-        stack.edgeInsets = NSEdgeInsets(top: 7, left: 14, bottom: 6, right: 14)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        describedControls = [
+            DescribedControl(control: durationMode, setting: .clipDuration) { [unowned self] in
+                self.activity.inactiveReason(.clipDuration) ?? "Choose fixed or random Skim clip duration."
+            },
+            DescribedControl(control: fixedDuration, setting: .clipDuration) { [unowned self] in
+                self.activity.inactiveReason(.clipDuration) ?? "Controls Progressive segment length in Fixed mode."
+            },
+            DescribedControl(control: randomMinimum, setting: .clipDuration) { [unowned self] in
+                self.activity.inactiveReason(.clipDuration) ?? "Bounds Progressive segment length in Random mode."
+            },
+            DescribedControl(control: randomMaximum, setting: .clipDuration) { [unowned self] in
+                self.activity.inactiveReason(.clipDuration) ?? "Bounds Progressive segment length in Random mode."
+            },
+            DescribedControl(control: startPosition, setting: .startPosition) { [unowned self] in
+                self.activity.inactiveReason(.startPosition) ?? "Choose the Skim playback start position."
+            },
+            DescribedControl(control: skipIntro, setting: .skipIntro) { nil },
+            DescribedControl(control: imageDuration, setting: .imageDuration) { [unowned self] in
+                self.activity.inactiveReason(.imageDuration)
+            },
+            DescribedControl(control: imageDurationStepper, setting: .imageDuration) { [unowned self] in
+                self.activity.inactiveReason(.imageDuration)
+            },
+            DescribedControl(control: gifLoops, setting: .gifLoops) { [unowned self] in
+                self.activity.inactiveReason(.gifLoops)
+            },
+            DescribedControl(control: gifLoopsStepper, setting: .gifLoops) { [unowned self] in
+                self.activity.inactiveReason(.gifLoops)
+            },
+            DescribedControl(control: queueOrder, setting: .queueOrder) { nil },
+            DescribedControl(control: loopQueue, setting: .loopQueue) { nil },
+            DescribedControl(control: progressiveRandomSkim, setting: .progressiveSkim) { nil },
+        ]
+
+        rowStack.orientation = .horizontal
+        rowStack.alignment = .centerY
+        rowStack.distribution = .fill
+        rowStack.spacing = Metrics.groupGap
+        rowStack.translatesAutoresizingMaskIntoConstraints = false
+        for (index, entry) in groups.enumerated() {
+            if let divider = entry.divider, index > 0 { rowStack.addArrangedSubview(divider) }
+            rowStack.addArrangedSubview(entry.view)
+        }
+
+        overflowStack.orientation = .vertical
+        overflowStack.alignment = .leading
+        overflowStack.spacing = Metrics.popoverGroupGap
+        overflowStack.edgeInsets = NSEdgeInsets(top: Metrics.popoverInset, left: Metrics.popoverInset,
+                                                bottom: Metrics.popoverInset, right: Metrics.popoverInset)
+        let overflowController = NSViewController()
+        overflowController.view = overflowStack
+        overflowPopover.contentViewController = overflowController
+        overflowPopover.behavior = .transient
+        overflowPopover.appearance = NSAppearance(named: .darkAqua)
+
+        // The chevron and, when needed, the overflow button live in a trailing slot outside the
+        // row, so no width the groups need can push them past the visible right edge.
+        let trailingSlot = NSStackView(views: [overflowButton, collapseButton])
+        trailingSlot.orientation = .horizontal
+        trailingSlot.alignment = .centerY
+        trailingSlot.spacing = SkimStripLayoutPlan.Metrics.trailingControlGap
+        trailingSlot.translatesAutoresizingMaskIntoConstraints = false
+        overflowButton.isHidden = true
+
+        addSubview(rowStack)
+        addSubview(trailingSlot)
+        addSubview(bottomEdge)
+        clipsToBounds = true
+        // `SkimStripLayoutPlan` keeps the row inside the room before the trailing slot; this
+        // constraint is only a backstop, so it never breaks the controls' fixed widths.
+        let rowLimit = rowStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingSlot.leadingAnchor,
+                                                          constant: -SkimStripLayoutPlan.Metrics.trailingGap)
+        rowLimit.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.leadingInset),
+            rowStack.topAnchor.constraint(equalTo: topAnchor),
+            rowStack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rowLimit,
+            trailingSlot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.trailingInset),
+            trailingSlot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            bottomEdge.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bottomEdge.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bottomEdge.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bottomEdge.heightAnchor.constraint(equalToConstant: 1),
         ])
+    }
+
+    private func configureOverflowButton() {
+        overflowButton.isBordered = false
+        overflowButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More Skim settings")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: DWBRailIcon.size(for: "ellipsis"),
+                                                                 weight: .medium))
+        overflowButton.imageScaling = .scaleProportionallyDown
+        overflowButton.contentTintColor = StripColor.supportingText
+        overflowButton.target = self
+        overflowButton.action = #selector(overflowTapped(_:))
+        overflowButton.setAccessibilityLabel("More Skim settings")
+        overflowButton.widthAnchor.constraint(equalToConstant: Metrics.overflowButton).isActive = true
+        overflowButton.heightAnchor.constraint(equalToConstant: Metrics.overflowButton).isActive = true
+    }
+
+    // MARK: - Responsive row
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateOverflowLayout()
+    }
+
+    /// Re-plans the row for the strip's current width. Only moves groups when the plan changes.
+    private func updateOverflowLayout() {
+        guard !groups.isEmpty, bounds.width > 0 else { return }
+        let advances = groups.enumerated().map { index, entry in
+            SkimStripLayoutPlan.advance(groupWidth: ceil(entry.view.fittingSize.width),
+                                        leadingDivider: entry.divider != nil,
+                                        isFirst: index == 0)
+        }
+        let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: bounds.width)
+        guard plan != appliedPlan else { return }
+        appliedPlan = plan
+        if overflowPopover.isShown { overflowPopover.close() }
+        for entry in groups {
+            entry.divider?.removeFromSuperview()
+            entry.view.removeFromSuperview()
+        }
+        for (index, entry) in groups.enumerated() {
+            if index < plan.visibleCount {
+                if let divider = entry.divider, index > 0 { rowStack.addArrangedSubview(divider) }
+                rowStack.addArrangedSubview(entry.view)
+            } else {
+                overflowStack.addArrangedSubview(entry.view)
+            }
+        }
+        overflowButton.isHidden = !plan.hasOverflow
+        let names = groups[plan.visibleCount...].map { $0.setting.name }.joined(separator: ", ")
+        overflowButton.toolTip = plan.hasOverflow ? "More Skim settings: \(names)" : nil
+        overflowButton.setAccessibilityHelp(plan.hasOverflow ? "Opens \(names)." : nil)
+    }
+
+    @objc private func overflowTapped(_ sender: NSButton) {
+        if overflowPopover.isShown {
+            overflowPopover.close()
+            return
+        }
+        overflowStack.layoutSubtreeIfNeeded()
+        overflowPopover.contentSize = overflowStack.fittingSize
+        overflowPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+    }
+
+    @objc private func accessibilityOptionsChanged() {
+        bottomEdge.layer?.backgroundColor = StripColor.line.cgColor
+        collapseButton.contentTintColor = StripColor.supportingText
+        overflowButton.contentTintColor = StripColor.supportingText
+        randomRangeSeparator.textColor = StripColor.supportingText
+        applyLabelColors()
     }
 
     private func configureSegmented(_ control: NSSegmentedControl, action: Selector) {
@@ -167,9 +360,10 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         control.action = action
         control.segmentStyle = .smallSquare
         control.controlSize = .small
+        control.heightAnchor.constraint(equalToConstant: Metrics.smallControl).isActive = true
     }
 
-    private func configureNumberField(_ field: NSTextField,
+    private func configureNumberField(_ field: SkimNumberField,
                                       allowsFloats: Bool,
                                       minimum: Double,
                                       maximum: Double? = nil,
@@ -179,6 +373,7 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         field.controlSize = .small
         field.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         field.widthAnchor.constraint(equalToConstant: width).isActive = true
+        field.heightAnchor.constraint(equalToConstant: Metrics.smallControl).isActive = true
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.allowsFloats = allowsFloats
@@ -203,41 +398,54 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         stepper.action = action
     }
 
-    private func group(_ title: String, _ control: NSView) -> NSView {
+    private func group(_ title: String, _ control: NSView, setting: SkimStripSetting) -> NSView {
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 10, weight: .medium)
-        label.textColor = .secondaryLabelColor
+        label.textColor = StripColor.supportingText
         label.setAccessibilityElement(false)
+        groupLabels.append((setting, label))
         let stack = NSStackView(views: [label, control])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 3
+        stack.spacing = Metrics.labelToControl
         return stack
     }
 
     private func horizontal(_ views: NSView...) -> NSView {
         let stack = NSStackView(views: views)
         stack.orientation = .horizontal
-        stack.alignment = .firstBaseline
-        stack.spacing = 3
+        stack.alignment = .centerY
+        stack.spacing = Metrics.controlGap
+        return stack
+    }
+
+    /// A number field with its stepper attached: 58 pt wide in all (44 pt field plus stepper).
+    private func numberField(_ field: SkimNumberField, stepper: NSStepper) -> NSView {
+        let stack = NSStackView(views: [field, stepper])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 0
+        stack.widthAnchor.constraint(equalToConstant: Metrics.numberFieldWithStepper).isActive = true
         return stack
     }
 
     private func suffixLabel(_ text: String) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 10)
-        label.textColor = .secondaryLabelColor
-        return label
+        // `DWBLabel` follows Increase Contrast live.
+        DWBLabel(text, size: 11, tone: .tertiary)
     }
 
     private func divider() -> NSView {
-        let box = NSBox()
-        box.boxType = .separator
-        box.setAccessibilityElement(false)
-        box.translatesAutoresizingMaskIntoConstraints = false
-        box.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        box.heightAnchor.constraint(equalToConstant: 24).isActive = true
-        return box
+        let separator = StripSeparator()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.widthAnchor.constraint(equalToConstant: SkimStripLayoutPlan.Metrics.dividerWidth).isActive = true
+        separator.heightAnchor.constraint(equalToConstant: DWBMetrics.skimStripHeight - 2 * Metrics.separatorInset).isActive = true
+        return separator
+    }
+
+    private func applyLabelColors() {
+        for entry in groupLabels {
+            entry.label.textColor = activity.isActive(entry.setting) ? StripColor.supportingText : DWBColor.textDisabled
+        }
     }
 
     @objc private func settingsDidChange() { syncFromStore() }
@@ -246,7 +454,9 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         isSynchronizing = true
         defer { isSynchronizing = false }
         let settings = store.snapshot()
-        applySkimEnabled(settings.skimEnabled)
+        applyActivity(SkimStripActivity(skimEnabled: settings.skimEnabled,
+                                        acceptsImages: SettingsWindowController.acceptsImageMedia(),
+                                        acceptsGIFs: SettingsWindowController.acceptsGIFMedia()))
         let random = settings.previewDurationMode == SettingsDefaultsRegistry.Defaults.previewDurationModeRandom
         durationMode.selectedSegment = random ? 1 : 0
         fixedDuration.stringValue = String(settings.fixedDurationSeconds)
@@ -265,61 +475,94 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
         queueOrder.selectItem(withTitle: settings.queueOrderMode.rawValue.capitalized)
         loopQueue.state = settings.loopQueueEnabled ? .on : .off
         progressiveRandomSkim.state = settings.progressiveRandomSkimEnabled ? .on : .off
+        applySavedDescriptions(settings)
+        updateOverflowLayout()
     }
 
-    private func applySkimEnabled(_ enabled: Bool) {
-        let durationControls: [NSControl] = [durationMode, fixedDuration, randomMinimum, randomMaximum]
-        durationControls.forEach { $0.isEnabled = enabled }
-        startPosition.isEnabled = enabled
-        durationControls.forEach { $0.alphaValue = enabled ? 1 : 0.42 }
-        startPosition.alphaValue = enabled ? 1 : 0.42
-        durationMode.setAccessibilityHelp(enabled
-            ? "Choose fixed or random Skim clip duration."
-            : "Unavailable while Skim is off.")
-        startPosition.setAccessibilityHelp(enabled
-            ? "Choose the Skim playback start position."
-            : "Unavailable while Skim is off.")
+    /// Tooltips and accessibility help carry the saved value, read from the same snapshot as the controls.
+    private func applySavedDescriptions(_ settings: SkimSettingsSnapshot) {
+        for entry in describedControls {
+            let lead = entry.hint() ?? entry.setting.name
+            let saved = entry.setting.savedDescription(in: settings)
+            let text = lead.hasSuffix(".") ? "\(lead) \(saved)" : "\(lead). \(saved)"
+            entry.control.toolTip = text
+            entry.control.setAccessibilityHelp(text)
+        }
+    }
+
+    /// Greys the groups that do not apply: Clip duration and Start position while Skim is off, Image
+    /// duration and GIF loops while Settings does not accept that media type. Greyed controls are
+    /// disabled at `disabledAlpha`, with the group label in `textDisabled`.
+    private func applyActivity(_ newActivity: SkimStripActivity) {
+        activity = newActivity
+        func apply(_ controls: [NSView], active: Bool) {
+            for control in controls {
+                (control as? NSControl)?.isEnabled = active
+                control.alphaValue = active ? 1 : DWBMetrics.disabledAlpha
+            }
+        }
+        apply([durationMode, fixedDuration, randomMinimum, randomMaximum, startPosition],
+              active: newActivity.skimEnabled)
+        apply([imageDuration, imageDurationStepper], active: newActivity.acceptsImages)
+        if let imageSuffix { apply([imageSuffix], active: newActivity.acceptsImages) }
+        apply([gifLoops, gifLoopsStepper], active: newActivity.acceptsGIFs)
+        applyLabelColors()
+    }
+
+    /// Runs a store write for this strip's own edit and reports what persisted. `before` is read first
+    /// because the store's notification re-syncs the controls (and the snapshot they read) at once.
+    private func commit(_ setting: SkimStripSetting, _ edit: () -> Void) {
+        let before = store.snapshot()
+        edit()
+        let after = store.snapshot()
+        if let confirmation = SkimStripConfirmation.make(for: setting, before: before, after: after) {
+            onSettingCommitted?(confirmation)
+        }
     }
 
     @objc private func durationModeChanged(_ sender: NSSegmentedControl) {
         guard !isSynchronizing else { return }
-        store.setPreviewDurationMode(sender.selectedSegment == 0
-            ? SettingsDefaultsRegistry.Defaults.previewDurationModeFixed
-            : SettingsDefaultsRegistry.Defaults.previewDurationModeRandom)
+        commit(.clipDuration) {
+            store.setPreviewDurationMode(sender.selectedSegment == 0
+                ? SettingsDefaultsRegistry.Defaults.previewDurationModeFixed
+                : SettingsDefaultsRegistry.Defaults.previewDurationModeRandom)
+        }
     }
 
     @objc private func startPositionChanged(_ sender: NSSegmentedControl) {
         guard !isSynchronizing else { return }
-        store.setStartPositionMode(sender.selectedSegment == 0
-            ? SettingsDefaultsRegistry.Defaults.startPositionModeBeginning
-            : SettingsDefaultsRegistry.Defaults.startPositionModeRandom)
+        commit(.startPosition) {
+            store.setStartPositionMode(sender.selectedSegment == 0
+                ? SettingsDefaultsRegistry.Defaults.startPositionModeBeginning
+                : SettingsDefaultsRegistry.Defaults.startPositionModeRandom)
+        }
     }
 
     @objc private func imageDurationStepperChanged(_ sender: NSStepper) {
         guard !isSynchronizing else { return }
-        store.setImageDurationSeconds(sender.doubleValue)
+        commit(.imageDuration) { store.setImageDurationSeconds(sender.doubleValue) }
     }
 
     @objc private func gifLoopsStepperChanged(_ sender: NSStepper) {
         guard !isSynchronizing else { return }
-        store.setGIFLoopCount(sender.integerValue)
+        commit(.gifLoops) { store.setGIFLoopCount(sender.integerValue) }
     }
 
     @objc private func queueOrderChanged(_ sender: NSPopUpButton) {
         guard !isSynchronizing,
               let raw = sender.selectedItem?.representedObject as? String,
               let mode = QueueOrderMode(rawValue: raw) else { return }
-        store.setQueueOrderMode(mode)
+        commit(.queueOrder) { store.setQueueOrderMode(mode) }
     }
 
     @objc private func loopQueueChanged(_ sender: NSSwitch) {
         guard !isSynchronizing else { return }
-        store.setLoopQueueEnabled(sender.state == .on)
+        commit(.loopQueue) { store.setLoopQueueEnabled(sender.state == .on) }
     }
 
     @objc private func progressiveRandomSkimChanged(_ sender: NSSwitch) {
         guard !isSynchronizing else { return }
-        store.setProgressiveRandomSkimEnabled(sender.state == .on)
+        commit(.progressiveSkim) { store.setProgressiveRandomSkimEnabled(sender.state == .on) }
     }
 
     @objc private func collapseTapped(_ sender: NSButton) { onCollapse?() }
@@ -327,14 +570,95 @@ final class SkimSettingsStripView: NSVisualEffectView, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         guard !isSynchronizing, let field = notification.object as? NSTextField else { return }
         switch field {
-        case fixedDuration: store.setFixedDurationSeconds(field.integerValue)
-        case randomMinimum: store.setRandomMinimumSeconds(field.integerValue)
-        case randomMaximum: store.setRandomMaximumSeconds(field.integerValue)
-        case skipIntro: store.setSkipIntroSeconds(field.integerValue)
-        case imageDuration: store.setImageDurationSeconds(field.doubleValue)
-        case gifLoops: store.setGIFLoopCount(field.integerValue)
+        case fixedDuration: commit(.clipDuration) { store.setFixedDurationSeconds(field.integerValue) }
+        case randomMinimum: commit(.clipDuration) { store.setRandomMinimumSeconds(field.integerValue) }
+        case randomMaximum: commit(.clipDuration) { store.setRandomMaximumSeconds(field.integerValue) }
+        case skipIntro: commit(.skipIntro) { store.setSkipIntroSeconds(field.integerValue) }
+        case imageDuration: commit(.imageDuration) { store.setImageDurationSeconds(field.doubleValue) }
+        case gifLoops: commit(.gifLoops) { store.setGIFLoopCount(field.integerValue) }
         default: return
         }
         syncFromStore()
+    }
+}
+
+/// Semantic roles for the strip's quiet chrome: `gridLine` ("faint rules") and `textTertiary`
+/// (supporting labels). Increase Contrast uses the stronger `border` and the `textSecondary` step.
+private enum StripColor {
+    static var line: NSColor { DWBAccessibility.increaseContrast ? DWBAccessibility.border : DWBColor.gridLine }
+    static var supportingText: NSColor { DWBAccessibility.textTertiary }
+}
+
+/// The 1 pt rule between strip groups. It follows Increase Contrast live.
+private final class StripSeparator: NSView {
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        setAccessibilityElement(false)
+        applyColor()
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func accessibilityOptionsChanged() { applyColor() }
+
+    private func applyColor() {
+        layer?.backgroundColor = StripColor.line.cgColor
+    }
+}
+
+/// A number field in the design system's style: `surfaceSunken` ground, 1 pt `borderStrong` edge,
+/// radius 5, 7 pt side padding.
+final class SkimNumberField: NSTextField {
+    override class var cellClass: AnyClass? {
+        get { SkimNumberFieldCell.self }
+        set {}
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isBezeled = false
+        isBordered = false
+        drawsBackground = false
+        textColor = DWBColor.textPrimary
+        wantsLayer = true
+        layer?.backgroundColor = DWBColor.surfaceSunken.cgColor
+        layer?.borderColor = DWBColor.borderStrong.cgColor
+        layer?.borderWidth = 1
+        layer?.cornerRadius = DWBMetrics.radiusBanner
+    }
+
+    convenience init() { self.init(frame: .zero) }
+
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
+}
+
+private final class SkimNumberFieldCell: NSTextFieldCell {
+    private static let sidePadding: CGFloat = 7
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        var inner = super.drawingRect(forBounds: rect).insetBy(dx: Self.sidePadding, dy: 0)
+        let lineHeight = ceil((font?.ascender ?? 11) - (font?.descender ?? -3) + (font?.leading ?? 0))
+        inner.origin.y = rect.minY + (rect.height - lineHeight) / 2
+        inner.size.height = lineHeight
+        return inner
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText,
+                       delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: drawingRect(forBounds: rect), in: controlView, editor: textObj,
+                   delegate: delegate, event: event)
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText,
+                         delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(withFrame: drawingRect(forBounds: rect), in: controlView, editor: textObj,
+                     delegate: delegate, start: selStart, length: selLength)
     }
 }

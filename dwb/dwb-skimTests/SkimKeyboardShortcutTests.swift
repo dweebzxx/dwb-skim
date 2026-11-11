@@ -118,13 +118,28 @@ final class SkimKeyboardShortcutTests: XCTestCase {
         XCTAssertNil(SkimKeyboardShortcut(unmodifiedKey: "]"))
     }
 
+    func testKeepDeleteAndPlainUndoKeysAreNoLongerBound() {
+        // SD-023: N and M are the only marker keys; undo is Command-Z in the Edit menu.
+        XCTAssertNil(SkimKeyboardShortcut(unmodifiedKey: "k"))
+        XCTAssertNil(SkimKeyboardShortcut(unmodifiedKey: "d"))
+        XCTAssertNil(SkimKeyboardShortcut(unmodifiedKey: "z"))
+    }
+
+    // MARK: - P46 bookmark
+
+    func testBMapsToToggleBookmark() {
+        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "b"), .toggleBookmark)
+    }
+
+    func testBookmarkKeyIgnoresKeyRepeat() {
+        XCTAssertFalse(SkimKeyboardShortcut.toggleBookmark.handlesKeyRepeat(isSkimEnabled: false))
+        XCTAssertFalse(SkimKeyboardShortcut.toggleBookmark.handlesKeyRepeat(isSkimEnabled: true))
+    }
+
     // MARK: - Unaffected bindings preserved
 
     func testUnaffectedBindingsPreserved() {
-        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "k"), .reviewKeep)
-        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "d"), .reviewDelete)
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "r"), .renameSheet)
-        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "z"), .reviewUndo)
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "q"), .toggleQueuePanel)
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: " "), .togglePlayPause)
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "f"), .toggleFullScreen)

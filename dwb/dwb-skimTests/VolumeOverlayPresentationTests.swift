@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 final class VolumeOverlayPresentationTests: XCTestCase {
@@ -6,9 +7,11 @@ final class VolumeOverlayPresentationTests: XCTestCase {
         assertPresentation(volume: 75, regularLevel: 0.75, overdriveLevel: 0)
         assertPresentation(volume: 99, regularLevel: 0.99, overdriveLevel: 0)
         assertPresentation(volume: 100, regularLevel: 1, overdriveLevel: 0)
-        assertPresentation(volume: 101, regularLevel: 1, overdriveLevel: 0.02)
-        assertPresentation(volume: 125, regularLevel: 1, overdriveLevel: 0.5)
-        assertPresentation(volume: 150, regularLevel: 1, overdriveLevel: 1)
+        assertPresentation(volume: 101, regularLevel: 1, overdriveLevel: 0.01)
+        assertPresentation(volume: 125, regularLevel: 1, overdriveLevel: 0.25)
+        assertPresentation(volume: 150, regularLevel: 1, overdriveLevel: 0.5)
+        assertPresentation(volume: 175, regularLevel: 1, overdriveLevel: 0.75)
+        assertPresentation(volume: 200, regularLevel: 1, overdriveLevel: 1)
     }
 
     func testPresentationClampsValuesWithoutBlendingOverdriveIntoRegularMeter() {
@@ -18,11 +21,11 @@ final class VolumeOverlayPresentationTests: XCTestCase {
         XCTAssertEqual(belowMinimum.overdriveLevel, 0)
         XCTAssertEqual(belowMinimum.percentageText, "0%")
 
-        let aboveMaximum = VideoVolumeMeterPresentation(volume: 200, muted: false)
-        XCTAssertEqual(aboveMaximum.volume, 150)
+        let aboveMaximum = VideoVolumeMeterPresentation(volume: 201, muted: false)
+        XCTAssertEqual(aboveMaximum.volume, 200)
         XCTAssertEqual(aboveMaximum.regularLevel, 1)
         XCTAssertEqual(aboveMaximum.overdriveLevel, 1)
-        XCTAssertEqual(aboveMaximum.percentageText, "150%")
+        XCTAssertEqual(aboveMaximum.percentageText, "200%")
     }
 
     func testMutePresentationPreservesExistingSpeakerSemantics() {
@@ -47,10 +50,77 @@ final class VolumeOverlayPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.percentageText, "\(volume)%", file: file, line: line)
     }
 
+    func testSegmentsLightAtTheirPercentThresholds() {
+        func lit(_ volume: Int, muted: Bool = false) -> (regular: Int, boost: Int) {
+            let presentation = VideoVolumeMeterPresentation(volume: volume, muted: muted)
+            return (presentation.litRegularSegments, presentation.litBoostSegments)
+        }
+        XCTAssertEqual(VideoVolumeMeterPresentation.regularSegmentCount, 7)
+        XCTAssertEqual(VideoVolumeMeterPresentation.boostSegmentCount, 4)
+        XCTAssertTrue(lit(0) == (0, 0))
+        XCTAssertTrue(lit(14) == (0, 0))
+        XCTAssertTrue(lit(15) == (1, 0))
+        XCTAssertTrue(lit(50) == (3, 0))
+        XCTAssertTrue(lit(99) == (6, 0))
+        XCTAssertTrue(lit(100) == (7, 0))
+        XCTAssertTrue(lit(124) == (7, 0))
+        XCTAssertTrue(lit(125) == (7, 1))
+        XCTAssertTrue(lit(150) == (7, 2))
+        XCTAssertTrue(lit(175) == (7, 3))
+        XCTAssertTrue(lit(200) == (7, 4))
+        XCTAssertTrue(lit(150, muted: true) == (0, 0))
+    }
+
+    func testHeatStartsAt150AndReachesFullStrengthAt200() {
+        func heat(_ volume: Int, muted: Bool = false) -> Double {
+            VideoVolumeMeterPresentation(volume: volume, muted: muted).heatFraction
+        }
+        XCTAssertEqual(heat(100), 0, accuracy: 1e-9)
+        XCTAssertEqual(heat(150), 0, accuracy: 1e-9)
+        XCTAssertEqual(heat(160), 0.2, accuracy: 1e-9)
+        XCTAssertEqual(heat(175), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(heat(200), 1, accuracy: 1e-9)
+        XCTAssertEqual(heat(250), 1, accuracy: 1e-9)
+        XCTAssertEqual(heat(175, muted: true), 0, accuracy: 1e-9)
+    }
+
+    func testHeatedColorBlendsTowardErrorFill() {
+        func components(_ color: NSColor) -> [CGFloat] {
+            let srgb = color.usingColorSpace(.sRGB)!
+            return [srgb.redComponent, srgb.greenComponent, srgb.blueComponent]
+        }
+        let base = DWBColor.periOnDark
+        XCTAssertEqual(components(VideoVolumeMeterPresentation.heatedColor(base, heatFraction: 0)), components(base))
+        XCTAssertEqual(components(VideoVolumeMeterPresentation.heatedColor(base, heatFraction: 1)),
+                       components(DWBColor.errorFill), accuracy: 0.002)
+        // `blended(withFraction:of:)` is not a plain sRGB average, so check what must hold: every
+        // channel lies between the two colors, and each step moves closer to `errorFill`.
+        let start = components(base), end = components(DWBColor.errorFill)
+        var previousDistance = CGFloat.greatestFiniteMagnitude
+        for fraction in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let blended = components(VideoVolumeMeterPresentation.heatedColor(base, heatFraction: fraction))
+            for channel in 0..<3 {
+                XCTAssertGreaterThanOrEqual(blended[channel], min(start[channel], end[channel]) - 0.002)
+                XCTAssertLessThanOrEqual(blended[channel], max(start[channel], end[channel]) + 0.002)
+            }
+            let distance = zip(blended, end).map { abs($0 - $1) }.reduce(0, +)
+            XCTAssertLessThan(distance, previousDistance)
+            previousDistance = distance
+        }
+    }
+
     func testOverlayTimingIsTransient() {
         XCTAssertGreaterThan(VolumeOverlayTiming.dismissalDelay, 0)
         XCTAssertLessThan(VolumeOverlayTiming.dismissalDelay, 3)
         XCTAssertGreaterThan(VolumeOverlayTiming.fadeDuration, 0)
         XCTAssertLessThan(VolumeOverlayTiming.fadeDuration, VolumeOverlayTiming.dismissalDelay)
+    }
+}
+
+private func XCTAssertEqual(_ lhs: [CGFloat], _ rhs: [CGFloat], accuracy: CGFloat,
+                            file: StaticString = #filePath, line: UInt = #line) {
+    XCTAssertEqual(lhs.count, rhs.count, file: file, line: line)
+    for (a, b) in zip(lhs, rhs) {
+        XCTAssertEqual(a, b, accuracy: accuracy, file: file, line: line)
     }
 }

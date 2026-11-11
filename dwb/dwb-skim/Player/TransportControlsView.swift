@@ -1,12 +1,14 @@
 import Cocoa
 import VLCKitSPM
 
-/// Thin translucent playback overlay used in both windowed and fullscreen modes.
+/// Playback overlay used in both windowed and fullscreen modes: a `backingChrome` rail with a
+/// top hairline, opaque under Increase Contrast.
 final class TransportControlsView: NSView {
     weak var player: VLCMediaPlayer? { didSet { bottomRail.player = player } }
     weak var controller: PlayerWindowController? { didSet { bottomRail.controller = controller } }
 
-    private let effectView = NSVisualEffectView()
+    private let backingView = NSView()
+    private let hairlineView = NSView()
     private let bottomRail = BottomRailView()
     private var hideWorkItem: DispatchWorkItem?
     private(set) var isFullscreenStyle = false
@@ -28,14 +30,11 @@ final class TransportControlsView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
-        effectView.material = .hudWindow
-        effectView.blendingMode = .withinWindow
-        effectView.state = .active
-        effectView.alphaValue = 0.46
-        effectView.wantsLayer = true
-        effectView.layer?.cornerRadius = 6
-        effectView.layer?.masksToBounds = true
-        addSubview(effectView)
+        backingView.wantsLayer = true
+        addSubview(backingView)
+        hairlineView.wantsLayer = true
+        addSubview(hairlineView)
+        applyBackingColors()
 
         bottomRail.scrubDidBegin = { [weak self] in
             self?.hideWorkItem?.cancel()
@@ -44,6 +43,10 @@ final class TransportControlsView: NSView {
         bottomRail.scrubDidEnd = { [weak self] in self?.scheduleChromeHideFromHost() }
         addSubview(bottomRail)
 
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(visibilitySettingsChanged),
                                                name: .transportVisibilityChanged,
@@ -63,9 +66,17 @@ final class TransportControlsView: NSView {
 
     override func layout() {
         super.layout()
-        effectView.frame = bounds
+        backingView.frame = bounds
+        hairlineView.frame = NSRect(x: 0, y: max(0, bounds.height - 1), width: bounds.width, height: 1)
         bottomRail.frame = bounds
     }
+
+    private func applyBackingColors() {
+        backingView.layer?.backgroundColor = DWBAccessibility.backingChrome.cgColor
+        hairlineView.layer?.backgroundColor = DWBColor.hairline.cgColor
+    }
+
+    @objc private func accessibilityOptionsChanged() { applyBackingColors() }
 
     func update() {
         bottomRail.player = player
@@ -82,10 +93,7 @@ final class TransportControlsView: NSView {
 
     func setFullscreenStyle(_ fullscreen: Bool) {
         isFullscreenStyle = fullscreen
-        effectView.alphaValue = fullscreen ? 0.38 : 0.46
     }
-
-    func setBackdropActive(_ active: Bool) { effectView.state = active ? .active : .inactive }
 
     /// Takes the faded-out overlay out of hit-testing, the key view loop, and the
     /// accessibility tree. Fading `alphaValue` alone leaves fully invisible
@@ -93,7 +101,6 @@ final class TransportControlsView: NSView {
     private func retireChrome() {
         chromeVisibilityState.completeHide()
         isHidden = true
-        setBackdropActive(false)
         chromeVisibilityDidChange?(chromeVisibilityState, false)
     }
 
@@ -117,12 +124,11 @@ final class TransportControlsView: NSView {
         hideWorkItem?.cancel()
         chromeVisibilityState.reveal()
         isHidden = false
-        setBackdropActive(true)
-        let shouldAnimate = animated && !UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey)
+        let shouldAnimate = animated && !DWBAccessibility.reduceMotion
         chromeVisibilityDidChange?(chromeVisibilityState, shouldAnimate)
         if shouldAnimate {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
+                context.duration = DWBAccessibility.duration(DWBMotion.rail)
                 animator().alphaValue = 1
             }
         } else {
@@ -143,12 +149,12 @@ final class TransportControlsView: NSView {
             }
             if self.isImageMode, !self.imageModeIsPlaying { return }
             if self.player?.isPlaying == false, !self.isImageMode { return }
-            let reduceMotion = UserDefaults.standard.bool(forKey: SettingsWindowController.chromeReducedMotionKey)
+            let reduceMotion = DWBAccessibility.reduceMotion
             self.chromeVisibilityState.requestHide(reduceMotion: reduceMotion)
             self.chromeVisibilityDidChange?(self.chromeVisibilityState, !reduceMotion)
             if !reduceMotion {
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.16
+                    context.duration = DWBAccessibility.duration(DWBMotion.rail)
                     self.animator().alphaValue = 0
                 } completionHandler: {
                     // A re-show during the fade resets alpha to 1; only retire the

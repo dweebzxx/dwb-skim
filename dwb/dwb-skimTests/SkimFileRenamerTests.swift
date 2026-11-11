@@ -62,21 +62,6 @@ final class SkimFileRenamerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: existing), "existing")
     }
 
-    func testRenameDoesNotGenerateRenamePrefix() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let original = tmp.appendingPathComponent("Original.mov")
-        try writeEmptyFile(original)
-
-        let renamed = try SkimFileRenamer.rename(sourceURL: original,
-                                                 toCompleteFilename: "Better.mov")
-
-        XCTAssertEqual(renamed.lastPathComponent, "Better.mov")
-        XCTAssertFalse(renamed.lastPathComponent.hasPrefix("rename_"))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.appendingPathComponent("rename_Better.mov").path))
-    }
-
     // MARK: - Extension preservation (P08.2)
 
     func testRenameWithBareStemAppendsOriginalExtension() throws {
@@ -152,104 +137,6 @@ final class SkimFileRenamerTests: XCTestCase {
         let renamed = try SkimFileRenamer.rename(sourceURL: original, toCompleteFilename: "Better Clip Name")
 
         XCTAssertEqual(renamed.lastPathComponent, "Better Clip Name")
-    }
-
-    // MARK: - keep_/delete_ immediate prefix rename (P08.2)
-
-    func testApplyKeepPrefixImmediatelyRenamesFile() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let original = tmp.appendingPathComponent("clip.mov")
-        try writeEmptyFile(original)
-
-        let renamed = try SkimFileRenamer.applyReviewPrefix(.keep, to: original)
-
-        XCTAssertEqual(renamed.lastPathComponent, "keep_clip.mov")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
-    }
-
-    func testApplyDeletePrefixImmediatelyRenamesFile() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let original = tmp.appendingPathComponent("clip.mov")
-        try writeEmptyFile(original)
-
-        let renamed = try SkimFileRenamer.applyReviewPrefix(.delete, to: original)
-
-        XCTAssertEqual(renamed.lastPathComponent, "delete_clip.mov")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
-    }
-
-    func testSwitchingDeleteToKeepDoesNotStackPrefixes() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let deleteNamed = tmp.appendingPathComponent("delete_clip.mov")
-        try writeEmptyFile(deleteNamed)
-
-        let renamed = try SkimFileRenamer.applyReviewPrefix(.keep, to: deleteNamed)
-
-        XCTAssertEqual(renamed.lastPathComponent, "keep_clip.mov")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: deleteNamed.path))
-    }
-
-    func testSwitchingKeepToDeleteDoesNotStackPrefixes() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let keepNamed = tmp.appendingPathComponent("keep_clip.mov")
-        try writeEmptyFile(keepNamed)
-
-        let renamed = try SkimFileRenamer.applyReviewPrefix(.delete, to: keepNamed)
-
-        XCTAssertEqual(renamed.lastPathComponent, "delete_clip.mov")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: keepNamed.path))
-    }
-
-    func testReapplyingSamePrefixIsHarmlessNoOp() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let keepNamed = tmp.appendingPathComponent("keep_clip.mov")
-        try writeEmptyFile(keepNamed)
-
-        let result = try SkimFileRenamer.applyReviewPrefix(.keep, to: keepNamed)
-
-        XCTAssertEqual(result, keepNamed)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: keepNamed.path))
-    }
-
-    func testApplyKeepPrefixStripsLegacyRenamePrefix() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let legacyNamed = tmp.appendingPathComponent("rename_clip.mov")
-        try writeEmptyFile(legacyNamed)
-
-        let renamed = try SkimFileRenamer.applyReviewPrefix(.keep, to: legacyNamed)
-
-        XCTAssertEqual(renamed.lastPathComponent, "keep_clip.mov")
-        XCTAssertFalse(renamed.lastPathComponent.contains("rename_"))
-    }
-
-    func testApplyReviewPrefixRejectsTargetCollisionWithoutOverwrite() throws {
-        let tmp = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: tmp) }
-
-        let original = tmp.appendingPathComponent("clip.mov")
-        let existingTarget = tmp.appendingPathComponent("keep_clip.mov")
-        try Data("original".utf8).write(to: original)
-        try Data("existing".utf8).write(to: existingTarget)
-
-        XCTAssertThrowsError(try SkimFileRenamer.applyReviewPrefix(.keep, to: original)) { error in
-            XCTAssertEqual(error as? SkimFileRenameError, .targetExists("keep_clip.mov"))
-        }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
-        XCTAssertEqual(try String(contentsOf: existingTarget), "existing")
     }
 
     func testQueueURLUpdateByURLReplacesRegardlessOfDisplayOrder() {

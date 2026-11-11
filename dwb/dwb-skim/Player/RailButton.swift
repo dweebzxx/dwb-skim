@@ -1,55 +1,7 @@
 import Cocoa
 
-enum PlayerBrandColors {
-    // Periwinkle (#4C62A8): keep/bookmark categorical accent (see SkimColors).
-    static let periwinkle = SkimColors.periwinkle
-
-    // Burnt Orange (#8F4218): delete/destructive status color (see SkimColors).
-    static let crimson = SkimColors.burntOrange
-}
-
-enum PrefixBrandColors {
-    // The two custom prefixes are visually distinct: primary is periwinkle,
-    // secondary is burnt (dark) orange — matching the keep_/delete_ accents.
-    static let primaryCustomPrefixColor = SkimColors.periwinkle
-
-    static let secondaryCustomPrefixColor = SkimColors.burntOrange
-}
-
-/// Compact keyboard-shortcut tag rendered beside a control (e.g. "Q" next to the
-/// custom prefix rename buttons). Decorative only: it never intercepts clicks and is hidden
-/// from accessibility — the shortcut is announced through the control's own
-/// help/tooltip text instead. Dark-theme styling matches the rail/footer chrome.
-final class ShortcutKeyBadge: NSTextField {
-    static let badgeWidth: CGFloat  = 15
-    static let badgeHeight: CGFloat = 13
-
-    init(key: String) {
-        super.init(frame: .zero)
-        stringValue = key
-        isEditable = false
-        isSelectable = false
-        isBordered = false
-        isBezeled = false
-        drawsBackground = false
-        alignment = .center
-        usesSingleLineMode = true
-        lineBreakMode = .byClipping
-        font = .monospacedSystemFont(ofSize: 8, weight: .semibold)
-        textColor = NSColor.white.withAlphaComponent(0.60)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
-        layer?.borderWidth = 1.0
-        layer?.cornerRadius = 3
-        setAccessibilityElement(false)
-    }
-
-    required init?(coder: NSCoder) { fatalError("programmatic only") }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
+/// A circular rail control with the design system's single state treatment (D9):
+/// idle, hover, pressed, toggled, disabled, and focus, with Increase Contrast variants.
 final class RailButton: NSButton {
     enum Style {
         case normal
@@ -72,7 +24,9 @@ final class RailButton: NSButton {
     }
 
     private var isHovering = false
+    private var isFocused = false
     private var tracking: NSTrackingArea?
+    private let focusRingLayer = CALayer()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -81,6 +35,10 @@ final class RailButton: NSButton {
 
     required init?(coder: NSCoder) {
         fatalError("programmatic only")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     override func updateTrackingAreas() {
@@ -110,15 +68,44 @@ final class RailButton: NSButton {
         didSet { updateAppearance() }
     }
 
+    override var isHighlighted: Bool {
+        didSet { updateAppearance() }
+    }
+
     override var title: String {
         didSet { updateAppearance() }
     }
 
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted {
+            isFocused = true
+            updateAppearance()
+        }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned {
+            isFocused = false
+            updateAppearance()
+        }
+        return resigned
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+        updateFocusRingFrame()
+    }
+
+    /// Sets the symbol at the rail's optical size for its role (D16, weight medium).
     func configureSymbol(_ symbolName: String,
-                         pointSize: CGFloat,
                          accessibilityLabel: String,
                          help: String,
                          fallbackNames: [String] = []) {
+        let pointSize = DWBRailIcon.size(for: symbolName, primary: railStyle == .emphasized)
         let cfg = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
         for candidate in [symbolName] + fallbackNames {
             if let image = NSImage(systemSymbolName: candidate,
@@ -136,70 +123,91 @@ final class RailButton: NSButton {
         isBordered = false
         bezelStyle = .regularSquare
         imageScaling = .scaleProportionallyDown
+        focusRingType = .none
         wantsLayer = true
         layer?.borderWidth = 1
-        contentTintColor = NSColor.white.withAlphaComponent(0.88)
+
+        focusRingLayer.isHidden = true
+        focusRingLayer.backgroundColor = NSColor.clear.cgColor
+        layer?.addSublayer(focusRingLayer)
+
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
         updateAppearance()
     }
 
-    private func updateAppearance() {
-        let enabledAlpha: CGFloat = isEnabled ? 1.0 : 0.34
-        alphaValue = enabledAlpha
+    @objc private func accessibilityOptionsChanged() { updateAppearance() }
 
-        // Hover-only circle outline: at rest the button shows only its icon/text on the
-        // transparent rail; the circular fill + border appear only while the cursor is
-        // over the button. Toggled state is communicated by the symbol/tint, not by a
-        // permanent outline.
-        let hoverFill:   CGFloat
-        let hoverBorder: CGFloat
-        let tint: NSColor
+    private var glyphColor: NSColor {
         switch railStyle {
-        case .normal:
-            hoverFill   = 0.14
-            hoverBorder = 0.18
-            tint = .white
-        case .emphasized:
-            hoverFill   = 0.22
-            hoverBorder = 0.20
-            tint = .white
-        case .utility:
-            hoverFill   = 0.16
-            hoverBorder = 0.20
-            tint = NSColor(calibratedRed: 0.78, green: 0.88, blue: 1.0, alpha: 1.0)
-        case .skimActive:
-            hoverFill = 0.18
-            hoverBorder = 0.22
-            tint = SkimColors.darkTeal
+        case .normal, .emphasized, .utility:
+            return isToggled ? theme.accentText : DWBColor.textPrimary
+        case .skimActive, .bookmark:
+            return theme.accentText
         case .skimInactive:
-            hoverFill = 0.12
-            hoverBorder = 0.16
-            tint = NSColor.white.withAlphaComponent(0.54)
+            return DWBAccessibility.textSecondary
         case .prefixPrimary:
-            hoverFill   = 0.16
-            hoverBorder = 0.20
-            tint = PrefixBrandColors.primaryCustomPrefixColor
+            return theme.markerPrimary
         case .prefixSecondary:
-            hoverFill   = 0.16
-            hoverBorder = 0.20
-            tint = PrefixBrandColors.secondaryCustomPrefixColor
-        case .bookmark:
-            hoverFill   = 0.16
-            hoverBorder = 0.20
-            tint = PlayerBrandColors.periwinkle
+            return theme.markerSecondary
         case .warning:
-            hoverFill   = 0.18
-            hoverBorder = 0.22
-            tint = NSColor(calibratedRed: 1.0, green: 0.75, blue: 0.34, alpha: 1.0)
+            return DWBColor.cautionText
+        }
+    }
+
+    private func updateAppearance() {
+        alphaValue = isEnabled ? 1.0 : DWBMetrics.disabledAlpha
+
+        let interactive = isEnabled
+        let pressed = interactive && isHighlighted
+        let hovered = interactive && isHovering
+        let hasRestFill = isToggled || railStyle == .emphasized
+
+        var fill = NSColor.clear
+        if isToggled {
+            fill = theme.accentTintStrong
+        } else if railStyle == .emphasized {
+            fill = DWBColor.overlaySelected
+        }
+        if pressed || (hovered && hasRestFill) {
+            fill = DWBColor.overlayPressed
+        } else if hovered {
+            fill = DWBColor.overlayHover
         }
 
-        let hoverActive = isHovering && isEnabled
-        let fillAlpha:   CGFloat = hoverActive ? (hoverFill   + (isToggled ? 0.06 : 0)) : 0
-        let borderAlpha: CGFloat = hoverActive ? (hoverBorder + (isToggled ? 0.06 : 0)) : 0
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(fillAlpha).cgColor
-        layer?.borderColor     = NSColor.white.withAlphaComponent(borderAlpha).cgColor
-        let effectiveTint = tint.withAlphaComponent(isEnabled ? (isToggled ? 1.0 : 0.82) : 0.46)
-        contentTintColor = effectiveTint
-        applyTitleTint(effectiveTint)
+        let ring: NSColor
+        if isToggled {
+            ring = theme.accentFill
+        } else if DWBAccessibility.increaseContrast {
+            ring = DWBColor.borderStrong
+        } else {
+            ring = .clear
+        }
+
+        layer?.backgroundColor = fill.cgColor
+        layer?.borderColor = ring.cgColor
+
+        let tint = glyphColor
+        contentTintColor = tint
+        applyTitleTint(tint)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        focusRingLayer.isHidden = !(isFocused && isEnabled)
+        focusRingLayer.borderColor = DWBAccessibility.focusRing.cgColor
+        focusRingLayer.borderWidth = DWBAccessibility.focusWidth
+        updateFocusRingFrame()
+        CATransaction.commit()
+    }
+
+    /// A ring of the focus width, offset 2 pt outside the circle.
+    private func updateFocusRingFrame() {
+        let width = DWBAccessibility.focusWidth
+        let outset = 2 + width
+        focusRingLayer.frame = bounds.insetBy(dx: -outset, dy: -outset)
+        focusRingLayer.cornerRadius = min(bounds.width, bounds.height) / 2 + outset
     }
 
     private func applyTitleTint(_ tint: NSColor) {

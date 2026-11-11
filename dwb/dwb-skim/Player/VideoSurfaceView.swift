@@ -18,6 +18,25 @@ private enum MediaDropRouting {
         }
     }
 
+    /// How many dragged items the drop zone says will be added: the supported media files and
+    /// folders. A folder among them makes the count "items" rather than "files".
+    static func dropSummary(from sender: NSDraggingInfo) -> DropZonePresentation {
+        let urls = readDroppedURLs(from: sender) ?? []
+        var count = 0
+        var containsFolder = false
+        for url in urls {
+            var isDir: ObjCBool = false
+            FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            if isDir.boolValue {
+                containsFolder = true
+                count += 1
+            } else if MediaFileSupport.isSupported(url) {
+                count += 1
+            }
+        }
+        return DropZonePresentation(itemCount: max(1, count), containsFolder: containsFolder)
+    }
+
     static func performDrop(_ sender: NSDraggingInfo, in window: NSWindow?) -> Bool {
         guard let urls = readDroppedURLs(from: sender),
               let wc = window?.windowController as? PlayerWindowController else { return false }
@@ -27,7 +46,7 @@ private enum MediaDropRouting {
 }
 
 /// The NSView into which VLCMediaPlayer renders its video output.
-/// Background is black. Scroll wheel adjusts volume (0–150), clamped.
+/// Background is black. Scroll wheel adjusts volume (0–200), clamped.
 /// Double-click toggles fullscreen. Accepts file/folder drops (single or multi).
 /// Player-window shortcuts are routed centrally so they also work from the queue table.
 class VideoSurfaceView: NSView {
@@ -81,18 +100,23 @@ class VideoSurfaceView: NSView {
 
     // MARK: - Drag highlight
 
-    private func setDragHighlight(_ on: Bool) {
+    /// Shows or hides the player window's drop zone over the stage.
+    private func setDragHighlight(_ on: Bool, for sender: NSDraggingInfo? = nil) {
         guard isDragHighlighted != on else { return }
         isDragHighlighted = on
-        layer?.borderWidth = on ? 3 : 0
-        layer?.borderColor = NSColor.systemBlue.cgColor
+        let controller = window?.windowController as? PlayerWindowController
+        if on, let sender {
+            controller?.showDropZone(MediaDropRouting.dropSummary(from: sender))
+        } else {
+            controller?.hideDropZone()
+        }
     }
 
     // MARK: - NSDraggingDestination
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard isValidDrop(sender) else { return [] }
-        setDragHighlight(true)
+        setDragHighlight(true, for: sender)
         return .copy
     }
 
@@ -143,16 +167,21 @@ final class ImageSurfaceView: NSImageView {
         super.mouseDown(with: event)
     }
 
-    private func setDragHighlight(_ on: Bool) {
+    /// Shows or hides the player window's drop zone over the stage.
+    private func setDragHighlight(_ on: Bool, for sender: NSDraggingInfo? = nil) {
         guard isDragHighlighted != on else { return }
         isDragHighlighted = on
-        layer?.borderWidth = on ? 3 : 0
-        layer?.borderColor = NSColor.systemBlue.cgColor
+        let controller = window?.windowController as? PlayerWindowController
+        if on, let sender {
+            controller?.showDropZone(MediaDropRouting.dropSummary(from: sender))
+        } else {
+            controller?.hideDropZone()
+        }
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard MediaDropRouting.isValidDrop(sender) else { return [] }
-        setDragHighlight(true)
+        setDragHighlight(true, for: sender)
         return .copy
     }
 

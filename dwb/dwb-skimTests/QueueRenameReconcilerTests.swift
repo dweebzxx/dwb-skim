@@ -127,18 +127,20 @@ final class QueueRenameReconcilerTests: XCTestCase {
     }
 
     func testReviewPrefixVisibleNameAndStylingStillFollowUpdatedURL() {
-        let keep = SkimReviewStatusDescriptor.describe(
-            displayName: "keep_b.mp4",
-            explicitIntent: .unmarked
+        let primary = SkimReviewStatusDescriptor.describe(
+            displayName: "select_b.mp4",
+            primaryPrefix: "select_",
+            secondaryPrefix: "later_"
         )
-        let delete = SkimReviewStatusDescriptor.describe(
-            displayName: "delete_b.mp4",
-            explicitIntent: .unmarked
+        let secondary = SkimReviewStatusDescriptor.describe(
+            displayName: "later_b.mp4",
+            primaryPrefix: "select_",
+            secondaryPrefix: "later_"
         )
-        XCTAssertEqual(keep.status, .keep)
-        XCTAssertEqual(delete.status, .delete)
-        XCTAssertEqual(keep.visibleFilename, "b.mp4")
-        XCTAssertEqual(delete.visibleFilename, "b.mp4")
+        XCTAssertEqual(primary.status, .primary)
+        XCTAssertEqual(secondary.status, .secondary)
+        XCTAssertEqual(primary.visibleFilename, "b.mp4")
+        XCTAssertEqual(secondary.visibleFilename, "b.mp4")
     }
 
     private func assertRenamePreserves(order: [Int], renamedSetIndex: Int,

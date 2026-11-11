@@ -1,6 +1,6 @@
 import Cocoa
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
 
     private let maxPlayerWindowCount = 5
 
@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
+        DWBAccessibility.install()
         SettingsWindowController.registerDefaults()
         _ = DebugConsoleController.shared   // eagerly init so it observes settings from launch
         buildMainMenu()
@@ -253,6 +254,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         DebugConsoleController.log(level: .warning,
                                    category: "window",
                                    message: "windowCapDenied: context=\(context) cap=\(maxPlayerWindowCount) current=\(windowControllers.count)")
+        // A non-modal status HUD on the key player window. The alert remains only for
+        // the case where no player window is visible to show it on.
+        let hudWindow = (NSApp.keyWindow?.windowController as? PlayerWindowController)
+            ?? orderedPlayerWindowControllers().first(where: { $0.window?.isVisible == true })
+        if let hudWindow, hudWindow.window?.isVisible == true {
+            hudWindow.showWindowLimitHUD(maxPlayerWindows: maxPlayerWindowCount)
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "Window limit reached"
         alert.informativeText = "dwb skim supports up to \(maxPlayerWindowCount) player windows."
@@ -562,6 +571,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         newWindowItem.target = self
         fileMenu.addItem(newWindowItem)
 
+        // ── Edit menu ───────────────────────────────────────────────────────
+        // Only the standard Undo item. `undo:` travels the responder chain:
+        // a player window turns it into "Undo Prefix Change" (or text-field
+        // typing undo while a field is being edited); other windows keep
+        // their standard undo.
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.delegate = self
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo",
+                         action: Selector(("undo:")),
+                         keyEquivalent: "z")
+
         // ── Playback menu ───────────────────────────────────────────────────
         let playbackItem = NSMenuItem()
         mainMenu.addItem(playbackItem)
@@ -690,6 +713,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.windowsMenu = windowMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    /// Resets the Undo title before validation, so a window that does not
+    /// handle `undo:` never shows a stale "Undo Prefix Change".
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        for item in menu.items where item.action == Selector(("undo:")) {
+            item.title = "Undo"
+        }
     }
 
     @objc func toggleKeepAtTop(_ sender: Any) {

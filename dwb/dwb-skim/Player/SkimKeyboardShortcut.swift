@@ -5,7 +5,7 @@ import AppKit
 /// AppKit event plumbing; `PlayerWindowController.handleSkimShortcut` is the
 /// only production caller and owns modifier rejection and text-entry guards.
 ///
-/// P38 mapping (unmodified keys):
+/// P46 mapping (unmodified keys):
 ///
 /// | Key | Action                        |
 /// | --- | ----------------------------- |
@@ -13,10 +13,8 @@ import AppKit
 /// | `.` | Next Video                     |
 /// | `n` | Primary Prefix Rename         |
 /// | `m` | Secondary Prefix Rename       |
-/// | `k` | Review keep_                  |
-/// | `d` | Review delete_                |
 /// | `r` | Rename sheet                  |
-/// | `z` | Review undo                   |
+/// | `b` | Toggle bookmark               |
 /// | `q` | Toggle queue panel            |
 /// | ` ` | Play / Pause                  |
 /// | `f` | Toggle fullscreen             |
@@ -24,13 +22,12 @@ import AppKit
 /// | `→` | Seek forward 10 seconds when Skim is off; advance Progressive Random Skim when it owns the key |
 ///
 /// P36 removed the pre-P36 bindings `[` (Previous Video), `]` (Next Video), and
-/// `m` (Mute). Those keys are intentionally absent from this table so they no
-/// longer trigger any action.
+/// `m` (Mute). P46 removed `k` (keep_), `d` (delete_), and `z` (undo); marker
+/// rename undo is Command-Z in the Edit menu. Those keys are intentionally
+/// absent from this table so they no longer trigger any action.
 enum SkimKeyboardShortcut: Equatable, CaseIterable {
-    case reviewKeep
-    case reviewDelete
     case renameSheet
-    case reviewUndo
+    case toggleBookmark
     case previousVideo
     case nextVideo
     case primaryPrefixRename
@@ -94,10 +91,8 @@ enum SkimKeyboardShortcut: Equatable, CaseIterable {
     /// when the key is not bound.
     init?(unmodifiedKey key: String) {
         switch key {
-        case "k": self = .reviewKeep
-        case "d": self = .reviewDelete
         case "r": self = .renameSheet
-        case "z": self = .reviewUndo
+        case "b": self = .toggleBookmark
         case ",": self = .previousVideo
         case ".": self = .nextVideo
         case "n": self = .primaryPrefixRename

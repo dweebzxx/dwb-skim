@@ -21,51 +21,75 @@ final class SkimReviewStatusDescriptorTests: XCTestCase {
         XCTAssertEqual(actualComponents.b, expectedComponents.b, accuracy: 0.001, file: file, line: line)
     }
 
-    func testKeepPrefixDescriptor() {
-        let descriptor = SkimReviewStatusDescriptor.describe(displayName: "keep_DSCF1234.MP4")
+    private func describe(_ name: String,
+                          primary: String = "select_",
+                          secondary: String = "later_") -> SkimReviewStatusDescriptor {
+        SkimReviewStatusDescriptor.describe(displayName: name, primaryPrefix: primary, secondaryPrefix: secondary)
+    }
 
-        XCTAssertEqual(descriptor.status, .keep)
-        XCTAssertEqual(descriptor.prefixToken, "keep_")
+    func testConfiguredPrimaryPrefixIsPrimaryMarker() {
+        let descriptor = describe("select_DSCF1234.MP4")
+
+        XCTAssertEqual(descriptor.status, .primary)
+        XCTAssertEqual(descriptor.prefixToken, "select_")
         XCTAssertEqual(descriptor.visibleFilename, "DSCF1234.MP4")
-        XCTAssertEqual(descriptor.statusLabel, "keep")
-        assertColor(descriptor.statusColor, matches: SkimColors.periwinkle)
+        assertColor(descriptor.statusColor, matches: theme.markerPrimary)
     }
 
-    func testDeletePrefixDescriptor() {
-        let descriptor = SkimReviewStatusDescriptor.describe(displayName: "delete_clip_0002.mov")
+    func testConfiguredSecondaryPrefixIsSecondaryMarker() {
+        let descriptor = describe("later_DSCF1234.MP4")
 
-        XCTAssertEqual(descriptor.status, .delete)
-        XCTAssertEqual(descriptor.prefixToken, "delete_")
-        XCTAssertEqual(descriptor.visibleFilename, "clip_0002.mov")
-        XCTAssertEqual(descriptor.statusLabel, "delete")
-        assertColor(descriptor.statusColor, matches: SkimColors.burntOrange)
+        XCTAssertEqual(descriptor.status, .secondary)
+        XCTAssertEqual(descriptor.prefixToken, "later_")
+        XCTAssertEqual(descriptor.visibleFilename, "DSCF1234.MP4")
+        assertColor(descriptor.statusColor, matches: theme.markerSecondary)
     }
 
-    func testRenamePrefixDescriptor() {
-        let descriptor = SkimReviewStatusDescriptor.describe(displayName: "rename_nature_still_01.jpg")
-
-        XCTAssertEqual(descriptor.status, .rename)
-        XCTAssertEqual(descriptor.prefixToken, "rename_")
-        XCTAssertEqual(descriptor.visibleFilename, "nature_still_01.jpg")
-        XCTAssertEqual(descriptor.statusLabel, "rename")
-        assertColor(descriptor.statusColor, matches: SkimColors.rename)
+    func testLiteralKeepAndDeletePrefixesAreNotMarkersWhenNotConfigured() {
+        for name in ["keep_DSCF1234.MP4", "delete_DSCF1234.MP4"] {
+            let descriptor = describe(name)
+            XCTAssertEqual(descriptor.status, .unmarked, name)
+            XCTAssertNil(descriptor.prefixToken, name)
+            XCTAssertEqual(descriptor.visibleFilename, name)
+            XCTAssertNil(descriptor.statusColor, name)
+        }
     }
 
-    func testUnmarkedDescriptor() {
-        let descriptor = SkimReviewStatusDescriptor.describe(displayName: "IMG_8921.HEIC")
+    func testKeepPrefixIsAMarkerOnlyWhenConfigured() {
+        let descriptor = describe("keep_DSCF1234.MP4", primary: "keep_")
+
+        XCTAssertEqual(descriptor.status, .primary)
+        XCTAssertEqual(descriptor.prefixToken, "keep_")
+    }
+
+    func testBlankPrefixesRecognizeNothing() {
+        let descriptor = describe("select_DSCF1234.MP4", primary: "", secondary: "")
 
         XCTAssertEqual(descriptor.status, .unmarked)
         XCTAssertNil(descriptor.prefixToken)
-        XCTAssertEqual(descriptor.visibleFilename, "IMG_8921.HEIC")
         XCTAssertNil(descriptor.statusColor)
-        XCTAssertNil(descriptor.statusLabel)
+    }
+
+    func testOverlappingConfiguredPrefixesUseLongestMatch() {
+        XCTAssertEqual(describe("a_b_clip.mov", primary: "a_", secondary: "a_b_").status, .secondary)
+        XCTAssertEqual(describe("a_b_clip.mov", primary: "a_b_", secondary: "a_").status, .primary)
+        XCTAssertEqual(describe("a_clip.mov", primary: "a_b_", secondary: "a_").status, .secondary)
+    }
+
+    func testUnmarkedDescriptor() {
+        let descriptor = describe("DSCF1234.MP4")
+
+        XCTAssertEqual(descriptor.status, .unmarked)
+        XCTAssertNil(descriptor.prefixToken)
+        XCTAssertEqual(descriptor.visibleFilename, "DSCF1234.MP4")
+        XCTAssertNil(descriptor.statusColor)
     }
 
     func testURLDescriptorUsesBasenameOnly() {
-        let url = URL(fileURLWithPath: "/tmp/delete_clip_0002.mov")
-        let descriptor = SkimReviewStatusDescriptor.describe(url: url)
+        let url = URL(fileURLWithPath: "/tmp/select_folder/DSCF1234.MP4")
+        let descriptor = SkimReviewStatusDescriptor.describe(url: url, primaryPrefix: "select_", secondaryPrefix: "later_")
 
-        XCTAssertEqual(descriptor.status, .delete)
-        XCTAssertEqual(descriptor.visibleFilename, "clip_0002.mov")
+        XCTAssertEqual(descriptor.status, .unmarked)
+        XCTAssertEqual(descriptor.visibleFilename, "DSCF1234.MP4")
     }
 }

@@ -1,138 +1,102 @@
 import Cocoa
 
-/// Focused, non-interactive video-volume HUD. It owns only transient presentation;
+/// Focused, non-interactive video-volume HUD (0–200%). It owns only transient presentation;
 /// the player controller remains the source of video volume and mute state.
-final class VolumeOverlayView: NSVisualEffectView {
-    private let iconView = NSImageView()
-    private let percentageLabel = NSTextField(labelWithString: "100%")
-    private let levelView = VolumeLevelView()
-    private var dismissalWorkItem: DispatchWorkItem?
+final class VolumeOverlayView: HUDSurfaceView {
+    private enum Metrics {
+        static let height: CGFloat = 56
+        static let sidePadding: CGFloat = 22
+        static let gap: CGFloat = 18
+        static let icon: CGFloat = 18
+        static let valueWidth: CGFloat = 62
+    }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        material = .hudWindow
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = 6
-        layer?.masksToBounds = true
-        appearance = NSAppearance(named: .darkAqua)
-        alphaValue = 0
-        isHidden = true
+    static var size: NSSize {
+        NSSize(width: Metrics.sidePadding * 2 + Metrics.icon + Metrics.gap + VolumeSegmentsView.width
+                    + Metrics.gap + Metrics.valueWidth,
+               height: Metrics.height)
+    }
 
-        iconView.imageScaling = .scaleProportionallyDown
-        iconView.contentTintColor = .white
+    private let iconView = HUDText.symbol("speaker.wave.2.fill", size: 18, tint: DWBColor.textPrimary)
+    private let valueLabel = NSTextField(labelWithString: "100%")
+    private let segmentsView = VolumeSegmentsView()
+
+    init() {
+        super.init(backing: { DWBAccessibility.backingHUD }, edge: { DWBColor.hairline }, hasShadow: true)
         addSubview(iconView)
 
-        percentageLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        percentageLabel.textColor = .white
-        percentageLabel.alignment = .right
-        addSubview(percentageLabel)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+        valueLabel.textColor = DWBColor.textPrimary
+        valueLabel.alignment = .right
+        valueLabel.setAccessibilityElement(false)
+        addSubview(valueLabel)
 
-        addSubview(levelView)
+        addSubview(segmentsView)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
 
-    deinit { dismissalWorkItem?.cancel() }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
     override func layout() {
         super.layout()
-        iconView.frame = NSRect(x: 12, y: 13, width: 18, height: 18)
-        levelView.frame = NSRect(x: 40, y: 13, width: max(40, bounds.width - 98), height: 18)
-        percentageLabel.frame = NSRect(x: bounds.width - 54, y: 13, width: 44, height: 18)
+        let midY = bounds.height / 2
+        var x = Metrics.sidePadding
+        iconView.frame = NSRect(x: x, y: midY - Metrics.icon / 2, width: Metrics.icon, height: Metrics.icon)
+        x += Metrics.icon + Metrics.gap
+        segmentsView.frame = NSRect(x: x, y: midY - VolumeSegmentsView.segment / 2,
+                                    width: VolumeSegmentsView.width, height: VolumeSegmentsView.segment)
+        x += VolumeSegmentsView.width + Metrics.gap
+        valueLabel.frame = NSRect(x: x, y: midY - 14, width: Metrics.valueWidth, height: 28)
     }
 
     func show(_ presentation: VideoVolumeMeterPresentation) {
-        dismissalWorkItem?.cancel()
-        iconView.image = NSImage(systemSymbolName: presentation.symbolName,
-                                 accessibilityDescription: presentation.isMuted ? "Muted" : "Video volume")
-        percentageLabel.stringValue = presentation.percentageText
-        levelView.regularLevel = presentation.regularLevel
-        levelView.overdriveLevel = presentation.overdriveLevel
-        levelView.isMuted = presentation.isMuted
+        iconView.image = NSImage(systemSymbolName: presentation.symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 18, weight: .regular))
+        valueLabel.stringValue = presentation.percentageText
+        segmentsView.presentation = presentation
         setAccessibilityLabel(presentation.isMuted ? "Video volume muted" : "Video volume")
         setAccessibilityValue(presentation.percentageText)
-        isHidden = false
-        alphaValue = 1
-
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            if reduceMotion {
-                self.alphaValue = 0
-                self.isHidden = true
-            } else {
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = VolumeOverlayTiming.fadeDuration
-                    self.animator().alphaValue = 0
-                } completionHandler: {
-                    if self.alphaValue == 0 { self.isHidden = true }
-                }
-            }
-        }
-        dismissalWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + VolumeOverlayTiming.dismissalDelay,
-                                      execute: work)
+        present(hold: VolumeOverlayTiming.dismissalDelay)
     }
 }
 
-private final class VolumeLevelView: NSView {
-    var regularLevel = 0.0 { didSet { needsDisplay = true } }
-    var overdriveLevel = 0.0 { didSet { needsDisplay = true } }
-    var isMuted = false { didSet { needsDisplay = true } }
+/// The 7 + 4 volume segments: 11 pt squares, radius 2.5, gap 4, 12 pt between the groups.
+/// Unlit segments are the same color at 24%; from 150% every segment blends toward `errorFill`.
+private final class VolumeSegmentsView: NSView {
+    static let segment: CGFloat = 11
+    static let radius: CGFloat = 2.5
+    static let gap: CGFloat = 4
+    static let groupGap: CGFloat = 12
+    static let unlitAlpha: CGFloat = 0.24
+    static let width: CGFloat = {
+        let regular = CGFloat(VideoVolumeMeterPresentation.regularSegmentCount)
+        let boost = CGFloat(VideoVolumeMeterPresentation.boostSegmentCount)
+        return (regular + boost) * segment + (regular - 1 + boost - 1) * gap + groupGap
+    }()
+
+    var presentation = VideoVolumeMeterPresentation(volume: 100, muted: false) {
+        didSet { needsDisplay = true }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let regularSegments = 8
-        let overdriveSegments = 4
-        let gap: CGFloat = 2
-        let sectionGap: CGFloat = 7
-        let totalGaps = CGFloat(regularSegments + overdriveSegments - 2) * gap + sectionGap
-        let width = max(1, (bounds.width - totalGaps) / CGFloat(regularSegments + overdriveSegments))
-        let regularActiveCount = activeSegmentCount(for: regularLevel, segments: regularSegments)
-        let overdriveActiveCount = activeSegmentCount(for: overdriveLevel, segments: overdriveSegments)
-
-        drawSegments(count: regularSegments,
-                     activeCount: regularActiveCount,
-                     startX: 0,
-                     width: width,
-                     gap: gap,
-                     activeColor: SkimColors.darkTeal)
-
-        let overdriveStartX = CGFloat(regularSegments) * (width + gap) - gap + sectionGap
-        drawSegments(count: overdriveSegments,
-                     activeCount: overdriveActiveCount,
-                     startX: overdriveStartX,
-                     width: width,
-                     gap: gap,
-                     activeColor: SkimColors.burntOrange)
+        let heat = presentation.heatFraction
+        let primary = VideoVolumeMeterPresentation.heatedColor(theme.markerPrimary, heatFraction: heat)
+        let secondary = VideoVolumeMeterPresentation.heatedColor(theme.markerSecondary, heatFraction: heat)
+        var x: CGFloat = 0
+        drawGroup(count: VideoVolumeMeterPresentation.regularSegmentCount,
+                  lit: presentation.litRegularSegments, color: primary, x: &x)
+        x += Self.groupGap - Self.gap
+        drawGroup(count: VideoVolumeMeterPresentation.boostSegmentCount,
+                  lit: presentation.litBoostSegments, color: secondary, x: &x)
     }
 
-    private func activeSegmentCount(for level: Double, segments: Int) -> Int {
-        Int((min(1, max(0, level)) * Double(segments)).rounded(.up))
-    }
-
-    private func drawSegments(count: Int,
-                              activeCount: Int,
-                              startX: CGFloat,
-                              width: CGFloat,
-                              gap: CGFloat,
-                              activeColor: NSColor) {
+    private func drawGroup(count: Int, lit: Int, color: NSColor, x: inout CGFloat) {
         for index in 0..<count {
-            let rect = NSRect(x: startX + CGFloat(index) * (width + gap),
-                              y: 5,
-                              width: width,
-                              height: 8)
-            let color = index < activeCount
-                ? (isMuted ? NSColor.white.withAlphaComponent(0.28) : activeColor.withAlphaComponent(0.95))
-                : NSColor.white.withAlphaComponent(0.13)
-            color.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 1.5, yRadius: 1.5).fill()
+            let rect = NSRect(x: x, y: (bounds.height - Self.segment) / 2, width: Self.segment, height: Self.segment)
+            (index < lit ? color : color.withAlphaComponent(Self.unlitAlpha)).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: Self.radius, yRadius: Self.radius).fill()
+            x += Self.segment + Self.gap
         }
     }
 }

@@ -2,6 +2,8 @@ import Cocoa
 import VLCKitSPM
 
 private final class SkimPlayerWindow: NSWindow {
+    static let markerRenameUndoTitle = "Undo Prefix Change"
+
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
            let controller = windowController as? PlayerWindowController,
@@ -9,6 +11,31 @@ private final class SkimPlayerWindow: NSWindow {
             return
         }
         super.sendEvent(event)
+    }
+
+    /// Edit > Undo (Command-Z). While a text field in this window is being
+    /// edited, it undoes typing through the window's undo manager, as NSWindow
+    /// does by default. Otherwise it undoes this window's last marker rename.
+    @objc func undo(_ sender: Any?) {
+        guard let controller = windowController as? PlayerWindowController else { return }
+        if controller.isTextEntryFocused {
+            undoManager?.undo()
+        } else {
+            controller.performMarkerRenameUndo(source: "editMenu")
+        }
+    }
+
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(undo(_:)),
+              let controller = windowController as? PlayerWindowController else {
+            return super.validateMenuItem(menuItem)
+        }
+        if controller.isTextEntryFocused {
+            menuItem.title = undoManager?.undoMenuItemTitle ?? "Undo"
+            return undoManager?.canUndo ?? false
+        }
+        menuItem.title = controller.canUndoMarkerRename ? Self.markerRenameUndoTitle : "Undo"
+        return controller.canUndoMarkerRename
     }
 }
 
@@ -85,11 +112,16 @@ class PlayerWindowController: NSWindowController {
     private var videoSurface: VideoSurfaceView!
     private var transport: TransportControlsView!
     private var skimSettingsStrip: SkimSettingsStripView!
-    private let skimControlsRestoreButton = NSButton()
+    private let skimControlsRestoreButton = SkimRestoreHandleButton()
     private var skimControlsVisibility = SkimControlsVisibilityState()
     private var queuePage: QueuePageView!
-    private let queueSeparator = NSBox()
-    private let volumeOverlay = VolumeOverlayView(frame: .zero)
+    // The 1 pt `border` rule between the stage and the queue panel (design system `QueuePanel`).
+    private let queueSeparator = DWBRuleView(kind: .border, vertical: true)
+    private let volumeOverlay = VolumeOverlayView()
+    private let statusHUD = StatusHUDView()
+    private let undoToast = UndoToastView()
+    private let failureMessage = FailureMessageView()
+    private let dropZoneView = DropZoneView()
     private let backgroundAudioPlayback = BackgroundAudioPlaybackController()
     private let videoAudioNormalizer = VideoAudioNormalizer()
     private let centeredTitleLabel = NSTextField(labelWithString: PlayerWindowController.defaultWindowTitle)
@@ -155,12 +187,10 @@ class PlayerWindowController: NSWindowController {
     // Generation tokens prevent stale fade-out completion handlers from re-hiding
     // a view that has already been shown again.
     private var hudShowGeneration          = 0
-    private var titleOverlayShowGeneration = 0
 
     // MARK: - Video title overlay
 
-    private let videoTitleOverlay    = NSTextField(labelWithString: "")
-    private var titleOverlayHideWork: DispatchWorkItem?
+    private let videoTitleOverlay    = TitleOverlayView()
 
     // MARK: - Keep-at-top
 
@@ -395,23 +425,10 @@ class PlayerWindowController: NSWindowController {
     private var currentDurationIsProvisional = false
     private var queueSortMode: QueueSortMode = .manual
 
-    /// P08 explicit in-memory review state for this window's queue (keep/delete).
-    /// Session-only, per-window, never persisted or written to disk. As of
-    /// P08.2, keep_/delete_ are immediate filesystem renames, so this store is
-    /// no longer populated by those actions — the real filename now carries
-    /// that state and is read back via the P07 legacy prefix display. It
-    /// remains available so any explicitly-set intent still migrates across a
-    /// review Rename.
-    private let reviewStateStore = SkimReviewStateStore()
-
-    /// The most recent successful review filesystem rename (keep_/delete_/
-    /// rename), tracked for the queue's Undo control. Single-slot by design —
-    /// undo reverts one step, not a full history. Session-only, per-window.
-    private struct SkimReviewFileOperation {
-        let originalURL: URL
-        let renamedURL: URL
-    }
-    private var lastReviewFileOperation: SkimReviewFileOperation?
+    /// The window's single Command-Z undo step: its most recent `N`/`M`
+    /// marker rename (SD-023). Session-only, per-window; manual renames never
+    /// create a step, and closing the window discards it.
+    private var markerRenameUndo = SkimMarkerRenameUndoSlot()
 
     var isShowingProvisionalDuration: Bool { currentDurationIsProvisional }
 
@@ -501,18 +518,20 @@ class PlayerWindowController: NSWindowController {
     private var activePreviewConfiguredDuration: TimeInterval?
     var isSkimEnabled: Bool { configuredSkimEnabled }
 
-    /// Part 4: scrub-bar marker positions for the current Progressive Random Skim plan, in playback
-    /// seconds. Always reads straight from `context.progressiveRandomSkimSegments` — the same array
+    /// Part 4: the current Progressive Random Skim plan for the scrub bar — every planned segment
+    /// (start and duration in playback seconds) and the index of the segment now playing. Always
+    /// reads straight from `context.progressiveRandomSkimSegments` — the same array
     /// `applySkimPreviewReadiness` and `advanceToNextProgressiveRandomSkimSegment` read from to drive
     /// actual playback — so segment 0's marker can never drift from the mode-derived position segment
-    /// 0 would have used pre-Progressive-Random-Skim. Empty whenever there is no live plan to mark:
-    /// the feature is off, no session is active, or the plan hasn't been computed yet.
-    var progressiveRandomSkimSegmentStartSeconds: [TimeInterval] {
+    /// 0 would have used pre-Progressive-Random-Skim. Segments before the active index are the ones
+    /// already played. Nil whenever there is no live plan to mark: the feature is off, no session is
+    /// active, or the plan hasn't been computed yet.
+    var progressiveRandomSkimSegmentPlan: (segments: [ProgressiveRandomSkimSegment], activeIndex: Int)? {
         guard configuredProgressiveRandomSkimEnabled,
               let context = skimPreviewPlanContext,
               context.sessionID == currentPlaybackSessionID,
-              !context.progressiveRandomSkimSegments.isEmpty else { return [] }
-        return context.progressiveRandomSkimSegments.map { $0.startOffsetSeconds }
+              !context.progressiveRandomSkimSegments.isEmpty else { return nil }
+        return (context.progressiveRandomSkimSegments, context.progressiveRandomSkimSegmentIndex)
     }
 
     /// Part 4: whether `manuallyAdvanceProgressiveRandomSkimSegment()` would do anything right now —
@@ -628,18 +647,15 @@ class PlayerWindowController: NSWindowController {
 
         skimSettingsStrip = SkimSettingsStripView()
         skimSettingsStrip.onCollapse = { [weak self] in self?.setSkimControlsVisible(false) }
+        skimSettingsStrip.onSettingCommitted = { [weak self] confirmation in
+            self?.showSkimSettingConfirmationHUD(confirmation)
+        }
         cv.addSubview(skimSettingsStrip)
 
-        skimControlsRestoreButton.isBordered = false
-        skimControlsRestoreButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Show Skim controls")
-        skimControlsRestoreButton.contentTintColor = .secondaryLabelColor
         skimControlsRestoreButton.target = self
         skimControlsRestoreButton.action = #selector(restoreSkimControls(_:))
         skimControlsRestoreButton.toolTip = "Show Skim controls"
         skimControlsRestoreButton.setAccessibilityLabel("Show Skim controls")
-        skimControlsRestoreButton.wantsLayer = true
-        skimControlsRestoreButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
-        skimControlsRestoreButton.layer?.cornerRadius = 8
         cv.addSubview(skimControlsRestoreButton)
 
         queuePage = QueuePageView(frame: .zero)
@@ -647,22 +663,17 @@ class PlayerWindowController: NSWindowController {
         queuePage.isHidden = true
         cv.addSubview(queuePage)
 
-        queueSeparator.boxType = .separator
         queueSeparator.isHidden = true
         cv.addSubview(queueSeparator)
 
+        cv.addSubview(dropZoneView)
         cv.addSubview(volumeOverlay)
+        cv.addSubview(statusHUD)
+        undoToast.onUndo = { [weak self] in self?.performMarkerRenameUndo(source: "undoToast") }
+        cv.addSubview(undoToast)
+        cv.addSubview(failureMessage)
 
         // Video title overlay — topmost subview so it appears above the transport HUD.
-        videoTitleOverlay.isEditable      = false
-        videoTitleOverlay.isBordered      = false
-        videoTitleOverlay.drawsBackground = false
-        videoTitleOverlay.isSelectable    = false
-        videoTitleOverlay.alignment       = .center
-        videoTitleOverlay.lineBreakMode   = .byTruncatingMiddle
-        videoTitleOverlay.alphaValue      = 0
-        videoTitleOverlay.isHidden        = true
-        videoTitleOverlay.wantsLayer      = true
         cv.addSubview(videoTitleOverlay)
 
         self.window = win
@@ -682,7 +693,7 @@ class PlayerWindowController: NSWindowController {
         win.titleVisibility = .hidden
 
         centeredTitleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        centeredTitleLabel.textColor = .labelColor
+        centeredTitleLabel.textColor = DWBColor.textPrimary
         centeredTitleLabel.alignment = .center
         centeredTitleLabel.lineBreakMode = .byTruncatingMiddle
         centeredTitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -855,14 +866,12 @@ class PlayerWindowController: NSWindowController {
         }
 
         switch shortcut {
-        case .reviewKeep: performReviewKeepCurrentItem(); return true
-        case .reviewDelete: performReviewDeletePrefixCurrentItem(); return true
         case .renameSheet: showRenameSheet(); return true
-        case .reviewUndo: performReviewUndo(); return true
+        case .toggleBookmark: toggleBookmark(); return true
         case .previousVideo: playPrevious(); return true
         case .nextVideo: playNext(); return true
-        case .primaryPrefixRename: performCustomPrefixRenameCurrentItem(); return true
-        case .secondaryPrefixRename: performSecondaryCustomPrefixRenameCurrentItem(); return true
+        case .primaryPrefixRename: applyPrefixShortcut(.primary); return true
+        case .secondaryPrefixRename: applyPrefixShortcut(.secondary); return true
         case .toggleQueuePanel: toggleQueuePage(); return true
         case .togglePlayPause: togglePlayPause(); return true
         case .toggleFullScreen: window?.toggleFullScreen(nil); return true
@@ -908,7 +917,6 @@ class PlayerWindowController: NSWindowController {
         } else {
             hideHUDTimer?.invalidate()
             transport.isHidden = false
-            transport.setBackdropActive(true)
             transport.alphaValue = 1.0
         }
     }
@@ -1055,6 +1063,7 @@ class PlayerWindowController: NSWindowController {
 
     @objc private func titleOverlaySettingDidChange() {
         configuredShowTitleOverlay = SettingsWindowController.isShowTitleOverlayEnabled()
+        failureMessage.place(in: videoSurface?.frame ?? .zero, topOffset: failureMessageTopOffset)
         DebugConsoleController.log("settings", "titleOverlay=\(configuredShowTitleOverlay)")
     }
 
@@ -1103,46 +1112,87 @@ class PlayerWindowController: NSWindowController {
         needsTransportUpdate = true
     }
 
-    // MARK: - Custom prefix rename (video-page)
+    // MARK: - Prefix keys (N, M)
 
-    func performCustomPrefixRenameCurrentItem(source: String = "videoPage") {
-        applyCustomPrefixToggleToCurrentItem(action: .primary, tag: "customPrefix", source: source)
-    }
-
-    func performSecondaryCustomPrefixRenameCurrentItem(source: String = "videoPage") {
-        applyCustomPrefixToggleToCurrentItem(action: .secondary, tag: "customPrefixSecondary", source: source)
-    }
-
-    /// Shared video-page implementation for the toggle/replace prefix actions.
-    /// Primary and Secondary are mutually exclusive: applying one strips the
-    /// other, and re-applying the active one removes it. The remainder of the
-    /// filename (including the extension) is preserved by
-    /// `SkimFileRenamer.customPrefixToggleTargetFilename`, and `renameFile`
-    /// keeps the existing collision / error handling and queue synchronization.
-    private func applyCustomPrefixToggleToCurrentItem(action: CustomPrefixAction,
-                                                     tag: String,
-                                                     source: String) {
-        guard canRenameCurrentMedia else { return }
-        guard currentSetIndex >= 0, currentSetIndex < playbackSet.count else { return }
-        let primary = SettingsWindowController.customPrefixValue()
-        let secondary = SettingsWindowController.customPrefixSecondaryValue()
-        let requested = action == .primary ? primary : secondary
-        guard !requested.isEmpty else {
-            DebugConsoleController.log("rename", "\(tag): noop (empty prefix) source=\(source)")
+    /// `N` / `M`. With the queue panel showing, this is the same call the footer chips make, so the
+    /// keys act on the selected rows, or the current item when nothing is selected. With the panel
+    /// hidden its selection is stale, so the keys act on the current item through the same delegate
+    /// methods the chips reach. Both end in `performQueuePagePrefixRename`.
+    private func applyPrefixShortcut(_ kind: QueueMarkerChip.Kind) {
+        if !queuePage.isHidden {
+            queuePage.applyPrefix(kind)
             return
         }
-        let url = playbackSet[currentSetIndex]
-        guard let newName = SkimFileRenamer.customPrefixToggleTargetFilename(
-                for: url.lastPathComponent,
-                primaryPrefix: primary,
-                secondaryPrefix: secondary,
-                action: action),
-              newName != url.lastPathComponent else {
-            DebugConsoleController.log("rename", "\(tag): noop (no filename change) file=\(url.lastPathComponent) source=\(source)")
+        guard currentDisplayIndex >= 0, currentDisplayIndex < displayOrder.count else { return }
+        switch kind {
+        case .primary:
+            queuePage(queuePage, didRequestCustomPrefixRenameAt: [currentDisplayIndex])
+        case .secondary:
+            queuePage(queuePage, didRequestSecondaryCustomPrefixRenameAt: [currentDisplayIndex])
+        }
+    }
+
+    // MARK: - Marker rename undo (Command-Z, SD-023)
+
+    /// True while this window holds an undo step for its last marker rename.
+    var canUndoMarkerRename: Bool { markerRenameUndo.canUndo }
+
+    /// Records the files a marker rename moved as this window's one undo step,
+    /// replacing any earlier step. Moves that changed nothing are ignored.
+    private func recordMarkerRename(_ moves: [SkimMarkerRenameMove]) {
+        markerRenameUndo.record(moves)
+        queuePage.isMarkerRenameUndoAvailable = markerRenameUndo.canUndo
+        if let step = markerRenameUndo.step, moves.contains(where: { !$0.isNoOp }) {
+            showUndoToast(for: step)
+        }
+    }
+
+    private func clearMarkerRenameUndo() {
+        markerRenameUndo.clear()
+        queuePage.isMarkerRenameUndoAvailable = false
+        undoToast.dismissImmediately()
+    }
+
+    /// Renames every file of the undo step from its new name back to its old
+    /// name. Every file is checked first; if any check fails, nothing is
+    /// renamed, the step is cleared, and the existing "Cannot Undo" alert is
+    /// shown. A successful undo clears the step and updates the queue the same
+    /// way a forward rename does, without re-applying the active sort.
+    func performMarkerRenameUndo(source: String) {
+        guard let step = markerRenameUndo.step else {
+            DebugConsoleController.log("rename", "markerUndo: noop (nothing to undo) source=\(source)")
             return
         }
-        DebugConsoleController.log("rename", "\(tag): \(url.lastPathComponent) → \(newName) source=\(source)")
-        renameFile(at: currentSetIndex, to: newName)
+        guard let win = window else { return }
+
+        switch SkimMarkerRenameUndoPlanner.inversePlan(for: step) {
+        case .failure(let refusal):
+            clearMarkerRenameUndo()
+            DebugConsoleController.log(level: .warning, category: "rename",
+                                       message: "markerUndo: refused — \(refusal.message) source=\(source)")
+            presentRenameAlert(title: "Cannot Undo", message: refusal.message, window: win)
+
+        case .success(let plan):
+            let result = SkimMarkerRenameUndoPlanner.perform(plan)
+            clearMarkerRenameUndo()
+            for move in result.completed {
+                let cachedDuration = durationCache[move.source]
+                let cachedSeconds = durationSecondsCache[move.source]
+                if applyReviewURLReplacement(from: move.source, to: move.destination) {
+                    if let cachedDuration { durationCache[move.destination] = cachedDuration }
+                    if let cachedSeconds { durationSecondsCache[move.destination] = cachedSeconds }
+                    DebugConsoleController.log("rename", "markerUndo: \(move.source.lastPathComponent) → \(move.destination.lastPathComponent) source=\(source)")
+                } else {
+                    DebugConsoleController.log("rename", "markerUndo: file restored but queue item is no longer tracked file=\(move.destination.lastPathComponent) source=\(source)")
+                }
+            }
+            refreshQueueDisplays()
+            if let error = result.error {
+                DebugConsoleController.log(level: .error, category: "rename",
+                                           message: "markerUndo: failed after \(result.completed.count) of \(plan.count) — \(error.localizedDescription)")
+                presentRenameAlert(title: "Undo Failed", message: error.localizedDescription, window: win)
+            }
+        }
     }
 
     // MARK: - Layout
@@ -1185,7 +1235,7 @@ class PlayerWindowController: NSWindowController {
             // fullscreen frames, no screen bounds, no prior transport frames.
             skimSettingsStrip.isHidden = !skimControlsVisibility.isVisible
             skimSettingsStrip.frame = NSRect(x: 0, y: max(0, b.height - skimSettingsStripHeight), width: b.width, height: skimSettingsStripHeight)
-            skimControlsRestoreButton.frame = NSRect(x: max(8, (b.width - 30) / 2), y: max(0, b.height - 24), width: 30, height: 20)
+            skimControlsRestoreButton.frame = SkimRestoreHandleGeometry.frame(in: b)
             let contentHeight = max(0, b.height - (skimControlsVisibility.isVisible ? skimSettingsStripHeight : 0))
             let queueW: CGFloat = isQueuePageOpen
                 ? min(360, max(280, b.width * 0.31))
@@ -1219,14 +1269,18 @@ class PlayerWindowController: NSWindowController {
 
         // Image display view always matches videoSurface — covers both fullscreen and windowed.
         imageDisplayView?.frame = videoSurface.frame
-        let meterWidth: CGFloat = 180
-        volumeOverlay.frame = NSRect(x: videoSurface.frame.minX + max(12, (videoSurface.frame.width - meterWidth) / 2),
-                                     y: videoSurface.frame.minY + transportHeight + 14,
-                                     width: meterWidth,
-                                     height: 44)
+        let stage = videoSurface.frame
+        volumeOverlay.frame = NSRect(x: stage.minX + (stage.width - VolumeOverlayView.size.width) / 2,
+                                     y: stage.minY + DWBMetrics.hudBottomOffset,
+                                     width: VolumeOverlayView.size.width,
+                                     height: VolumeOverlayView.size.height)
+        statusHUD.place(in: stage)
+        undoToast.place(in: stage, bottomOffset: undoToastBottomOffset)
+        failureMessage.place(in: stage, topOffset: failureMessageTopOffset)
+        if !dropZoneView.isHidden { dropZoneView.frame = stage }
 
         applyScaleMode()
-        positionVideoTitleOverlay()
+        videoTitleOverlay.place(in: stage)
         applyPlaybackChromeVisibility(transport.chromeVisibilityState, animated: false)
         updatePlaybackChromeTrackingAreas()
     }
@@ -1260,7 +1314,7 @@ class PlayerWindowController: NSWindowController {
             skimControlsRestoreButton.setAccessibilityElement(true)
             if animated {
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.12
+                    context.duration = DWBAccessibility.duration(DWBMotion.rail)
                     self.skimControlsRestoreButton.animator().alphaValue = 1
                 }
             } else {
@@ -1272,7 +1326,7 @@ class PlayerWindowController: NSWindowController {
             skimControlsRestoreButton.setAccessibilityElement(true)
             if animated {
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.16
+                    context.duration = DWBAccessibility.duration(DWBMotion.rail)
                     self.skimControlsRestoreButton.animator().alphaValue = 0
                 }
             } else {
@@ -1288,58 +1342,90 @@ class PlayerWindowController: NSWindowController {
 
     // MARK: - Video title overlay
 
-    // L6: cache font and attribute dictionary — rebuilt only once, not on every title show.
-    private lazy var titleOverlayFont: NSFont = {
-        NSFont(name: "Arial", size: 32) ?? NSFont.systemFont(ofSize: 32, weight: .medium)
-    }()
-    private lazy var titleOverlayAttrs: [NSAttributedString.Key: Any] = {
-        [.font:            titleOverlayFont,
-         .foregroundColor: NSColor.white,
-         .strokeColor:     NSColor.black,
-         .strokeWidth:     CGFloat(-2.0)]
-    }()
-
     /// Show the video title at the top-center of the player area for 5 seconds.
     /// Cancels and restarts any existing overlay timer so rapid track changes
     /// don't stack multiple hide timers.
     func showVideoTitleOverlay(title: String) {
-        titleOverlayHideWork?.cancel()
-        titleOverlayHideWork = nil
-        titleOverlayShowGeneration += 1
-        let gen = titleOverlayShowGeneration
-
-        videoTitleOverlay.attributedStringValue = NSAttributedString(string: title,
-                                                                      attributes: titleOverlayAttrs)
-        positionVideoTitleOverlay()
-        videoTitleOverlay.isHidden = false
-        videoTitleOverlay.alphaValue = 1.0
-
-        let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.5
-                self.videoTitleOverlay.animator().alphaValue = 0
-            } completionHandler: { [weak self] in
-                guard let self = self, self.titleOverlayShowGeneration == gen else { return }
-                self.videoTitleOverlay.isHidden = true
-            }
-        }
-        titleOverlayHideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: work)
+        videoTitleOverlay.show(title: title, in: videoSurface?.frame ?? .zero, hold: 5.0)
     }
 
-    private func positionVideoTitleOverlay() {
-        guard videoTitleOverlay.superview != nil else { return }
-        let videoFrame = videoSurface?.frame ?? .zero
-        guard videoFrame.width > 0, videoFrame.height > 0 else { return }
-        let overlayH: CGFloat = 54
-        let overlayW: CGFloat = min(videoFrame.width - 40, 800)
-        videoTitleOverlay.frame = NSRect(
-            x: videoFrame.minX + (videoFrame.width - overlayW) / 2,
-            y: videoFrame.maxY - 18 - overlayH,
-            width: overlayW,
-            height: overlayH
-        )
+    // MARK: - Failure message
+
+    /// Where the failure message sits below the stage top: 20 pt, or below the title overlay's slot
+    /// when that overlay is enabled so the next item's title never covers it.
+    private var failureMessageTopOffset: CGFloat {
+        configuredShowTitleOverlay ? 20 + 42 + 8 : 20
+    }
+
+    private func showPlaybackFailureMessage(filename: String) {
+        failureMessage.show(filename: filename, in: videoSurface?.frame ?? .zero, topOffset: failureMessageTopOffset)
+    }
+
+    // MARK: - Undo toast
+
+    /// The toast's bottom edge: just above the rail, and below the HUD slot.
+    private var undoToastBottomOffset: CGFloat { transportHeight + 12 }
+
+    private func showUndoToast(for step: SkimMarkerRenameUndoStep) {
+        undoToast.show(UndoToastPresentation(step: step),
+                       in: videoSurface?.frame ?? .zero,
+                       bottomOffset: undoToastBottomOffset)
+    }
+
+    // MARK: - Status HUD
+
+    /// The status HUD and the volume HUD share one slot and replace each other.
+    private func showStatusHUD(symbol: String, tint: NSColor, title: String, detail: String?, hold: TimeInterval) {
+        volumeOverlay.dismissImmediately()
+        statusHUD.show(symbol: symbol, tint: tint, title: title, detail: detail, hold: hold,
+                       in: videoSurface?.frame ?? .zero)
+    }
+
+    /// "Window limit reached" on this window, in place of a modal alert.
+    func showWindowLimitHUD(maxPlayerWindows: Int) {
+        showStatusHUD(symbol: "macwindow",
+                      tint: DWBColor.cautionText,
+                      title: "Window limit reached",
+                      detail: "dwb skim supports up to \(maxPlayerWindows) player windows.",
+                      hold: DWBMotion.windowLimitHold)
+    }
+
+    /// Confirms a top-strip edit made in this window: the setting and the value the store kept as the
+    /// title, and the whole Skim rule now in force as the detail. A repeat edit replaces the HUD; the
+    /// stage is the video area, so the queue panel can be open or closed.
+    private func showSkimSettingConfirmationHUD(_ confirmation: SkimStripConfirmation) {
+        volumeOverlay.dismissImmediately()
+        statusHUD.show(symbol: "slider.horizontal.3",
+                       tint: DWBColor.textPrimary,
+                       title: confirmation.text,
+                       detail: confirmation.rule,
+                       hold: DWBMotion.syncHold,
+                       in: videoSurface?.frame ?? .zero,
+                       spoken: confirmation.spoken)
+    }
+
+    private func showScaleHUD(for mode: ScaleMode) {
+        let symbol: String, name: String, shortcut: String
+        switch mode {
+        case .fit:
+            (symbol, name, shortcut) = ("rectangle.arrowtriangle.2.inward", "Fit", "⌘1")
+        case .fill:
+            (symbol, name, shortcut) = ("rectangle.arrowtriangle.2.outward", "Fill", "⌘2")
+        case .stretch:
+            (symbol, name, shortcut) = ("arrow.left.and.arrow.right", "Stretch", "⌘3")
+        }
+        showStatusHUD(symbol: symbol, tint: DWBColor.textPrimary, title: name, detail: shortcut,
+                      hold: DWBMotion.scaleHUDHold)
+    }
+
+    // MARK: - Drop zone
+
+    func showDropZone(_ presentation: DropZonePresentation) {
+        dropZoneView.show(presentation, over: videoSurface?.frame ?? .zero)
+    }
+
+    func hideDropZone() {
+        dropZoneView.hide()
     }
 
     // MARK: - Keep-at-top
@@ -1532,6 +1618,7 @@ class PlayerWindowController: NSWindowController {
         let idx = currentSetIndex
         guard idx >= 0, idx < queueItemIDs.count else { return }
         skimFailedItemTracker.clearFailed(queueItemIDs[idx])
+        if isQueuePageOpen { refreshQueuePage() }
     }
 
     // MARK: - Bookmarks
@@ -1705,6 +1792,7 @@ class PlayerWindowController: NSWindowController {
               reason, currentPlaybackSessionID, failedItemID, filename, firstFailureThisSession ? 1 : 0)
         DebugConsoleController.log(level: .warning, category: "playback",
                                    message: "playbackFailure: file=\(filename) reason=\(reason)")
+        if isQueuePageOpen { refreshQueuePage() }
 
         // Invalidate every piece of scheduling state this failed assignment owns — skim session,
         // scheduled deadline/readiness work items, playback-start handshake, pending replacement
@@ -1713,7 +1801,7 @@ class PlayerWindowController: NSWindowController {
         resetPlaybackCompletionSignals(reason: "playback-failure-\(reason)")
         releasePlaybackSleepAssertion()
 
-        showVideoTitleOverlay(title: "Unable to play \"\(filename)\" — skipped")
+        showPlaybackFailureMessage(filename: filename)
 
         _ = advanceToNextItemSkippingFailedItems(reason: "playback-failure-\(reason)")
     }
@@ -1964,10 +2052,11 @@ class PlayerWindowController: NSWindowController {
                 duration: dur,
                 fileSize: size,
                 isBookmarked: BookmarkStore.shared.isBookmarked(url: url),
-                reviewIntent: reviewStateStore.intent(for: url)
+                isFailed: skimFailedItemTracker.isFailed(queueItemIDs[setIndex])
             ))
         }
 
+        queuePage.isMarkerRenameUndoAvailable = markerRenameUndo.canUndo
         queuePage.update(items: qItems,
                          currentIndex: currentDisplayIndex,
                          sortMode: queueSortMode,
@@ -2008,30 +2097,16 @@ class PlayerWindowController: NSWindowController {
         guard pbIdx >= 0, pbIdx < playbackSet.count, let win = window else { return }
 
         let url  = playbackSet[pbIdx]
-        let ext  = url.pathExtension
-        let stem = url.deletingPathExtension().lastPathComponent
 
-        let alert = NSAlert()
-        alert.messageText     = "Rename File"
-        alert.informativeText = "New name for \"\(url.lastPathComponent)\":"
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        field.stringValue       = stem
-        field.placeholderString = ext.isEmpty ? "filename" : "filename.\(ext)"
-        alert.accessoryView     = field
-
-        alert.beginSheetModal(for: win) { [weak self, weak field] response in
-            guard response == .alertFirstButtonReturn,
-                  let self = self,
-                  let field = field else { return }
-            let newStem = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let newName = ext.isEmpty ? newStem : "\(newStem).\(ext)"
-            self.renameFile(at: pbIdx, to: newName)
-        }
-
-        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+        let directory = url.deletingLastPathComponent()
+        let sheet = RenameSheetController(
+            filename: url.lastPathComponent,
+            caption: "New name for \"\(url.lastPathComponent)\":",
+            nameExists: { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) },
+            onRename: { [weak self] newName in
+                self?.renameFile(at: pbIdx, to: newName)
+            })
+        sheet.present(on: win)
     }
 
     func removeCurrentQueueItem() {
@@ -2142,9 +2217,11 @@ class PlayerWindowController: NSWindowController {
     }
 
     /// Core rename logic: moves the file on disk and updates all in-memory references.
-    private func renameFile(at playbackSetIndex: Int, to newName: String) {
+    /// Returns the renamed URL, or `nil` when nothing was renamed.
+    @discardableResult
+    private func renameFile(at playbackSetIndex: Int, to newName: String) -> URL? {
         guard playbackSetIndex >= 0, playbackSetIndex < playbackSet.count,
-              let win = window else { return }
+              let win = window else { return nil }
 
         let url    = playbackSet[playbackSetIndex]
         let dir    = url.deletingLastPathComponent()
@@ -2153,7 +2230,7 @@ class PlayerWindowController: NSWindowController {
             presentRenameAlert(title: "Cannot Rename",
                                message: "Enter a valid filename. The extension is preserved automatically, and filenames cannot contain path separators.",
                                window: win)
-            return
+            return nil
         }
         let newURL = dir.appendingPathComponent(validatedName, isDirectory: false)
 
@@ -2162,12 +2239,12 @@ class PlayerWindowController: NSWindowController {
             presentRenameAlert(title: "Cannot Rename",
                                message: "The original file could not be found.",
                                window: win)
-            return
+            return nil
         }
 
         guard newURL.path != url.path else {
             DebugConsoleController.log("rename", "noop: unchanged file=\(url.lastPathComponent)")
-            return
+            return nil
         }
 
         if FileManager.default.fileExists(atPath: newURL.path) {
@@ -2175,7 +2252,7 @@ class PlayerWindowController: NSWindowController {
             presentRenameAlert(title: "Cannot Rename",
                                message: "A file named \"\(validatedName)\" already exists in this folder.",
                                window: win)
-            return
+            return nil
         }
 
         do {
@@ -2185,17 +2262,17 @@ class PlayerWindowController: NSWindowController {
             presentRenameAlert(title: "Rename Failed",
                                message: error.localizedDescription,
                                window: win)
-            return
+            return nil
         }
 
         DebugConsoleController.log("rename", "success: \(url.lastPathComponent) → \(validatedName)")
         _ = applyQueueURLReplacement(at: playbackSetIndex,
                                      from: url,
-                                     to: newURL,
-                                     migrateReviewIntent: false)
+                                     to: newURL)
         refreshQueueDisplays()
         // Note: VLC continues playing from the already-open file descriptor;
         // the new path takes effect the next time playCurrentItem() is called.
+        return newURL
     }
 
     private func validatedRenameFilename(_ filename: String, originalURL: URL) -> String? {
@@ -4616,13 +4693,14 @@ class PlayerWindowController: NSWindowController {
         let videoOutputIsSuppressed = lastAppliedAudioState?.muted ?? windowMuted
         let presentation = VideoVolumeMeterPresentation(volume: Int(windowVolume),
                                                         muted: windowMuted || videoOutputIsSuppressed)
+        statusHUD.dismissImmediately()
         volumeOverlay.show(presentation)
     }
 
     private static func defaultPersistedVolume() -> Int32 {
         let key = SettingsWindowController.persistedVolumeKey
         guard UserDefaults.standard.object(forKey: key) != nil else { return 100 }
-        return Int32(max(0, min(150, UserDefaults.standard.integer(forKey: key))))
+        return Int32(max(0, min(VideoVolumeMeterPresentation.maximumVolume, UserDefaults.standard.integer(forKey: key))))
     }
 
     private var audioStateDescription: String {
@@ -4630,12 +4708,12 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func persistVolume(_ volume: Int32) {
-        UserDefaults.standard.set(Int(max(0, min(150, volume))), forKey: SettingsWindowController.persistedVolumeKey)
+        UserDefaults.standard.set(Int(max(0, min(Int32(VideoVolumeMeterPresentation.maximumVolume), volume))), forKey: SettingsWindowController.persistedVolumeKey)
     }
 
     @discardableResult
     private func applyWindowAudioState(reason: String, force: Bool = false) -> (volume: Int32, muted: Bool) {
-        let clampedVolume = Int32(max(0, min(150, Int(windowVolume))))
+        let clampedVolume = Int32(max(0, min(VideoVolumeMeterPresentation.maximumVolume, Int(windowVolume))))
         if clampedVolume != windowVolume {
             windowVolume = clampedVolume
         }
@@ -4667,7 +4745,7 @@ class PlayerWindowController: NSWindowController {
     func adjustVolume(by delta: Int) {
         let oldVol = windowVolume
         let wasMuted = windowMuted
-        let newVol = Int32(max(0, min(150, Int(windowVolume) + delta)))
+        let newVol = Int32(max(0, min(VideoVolumeMeterPresentation.maximumVolume, Int(windowVolume) + delta)))
         windowVolume = newVol
         if newVol > 0 { windowMuted = false }
         DebugConsoleController.log("audio", "volumeChange: window=\(debugIdentity) old=\(oldVol) new=\(newVol) wasMuted=\(wasMuted) muted=\(windowMuted)")
@@ -4719,6 +4797,7 @@ class PlayerWindowController: NSWindowController {
     func setScaleMode(_ mode: ScaleMode) {
         scaleMode = mode
         applyScaleMode()
+        showScaleHUD(for: mode)
     }
 
     private func applyScaleMode() {
@@ -4832,9 +4911,8 @@ class PlayerWindowController: NSWindowController {
         }
         hudShowGeneration += 1
         transport.isHidden = false
-        transport.setBackdropActive(true)
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
+            ctx.duration = DWBAccessibility.duration(0.15)
             transport.animator().alphaValue = 1.0
         }
     }
@@ -4845,12 +4923,11 @@ class PlayerWindowController: NSWindowController {
         }
         let gen = hudShowGeneration
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.3
+            ctx.duration = DWBAccessibility.duration(0.3)
             transport.animator().alphaValue = 0.0
         } completionHandler: { [weak self] in
             guard let self = self, self.hudShowGeneration == gen else { return }
             self.transport.isHidden = true
-            self.transport.setBackdropActive(false)
         }
     }
 
@@ -4886,7 +4963,7 @@ class PlayerWindowController: NSWindowController {
         DebugConsoleController.log("window", "titlebar: show")
         window?.titlebarAppearsTransparent = false
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
+            ctx.duration = DWBAccessibility.duration(0.15)
             tbv.animator().alphaValue = 1.0
         }
     }
@@ -4899,7 +4976,7 @@ class PlayerWindowController: NSWindowController {
         titlebarIsHidden = true
         DebugConsoleController.log("window", "titlebar: hide")
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.3
+            ctx.duration = DWBAccessibility.duration(0.3)
             tbv.animator().alphaValue = 0.0
         } completionHandler: { [weak self] in
             // Only apply transparent background once the fade is complete, to prevent
@@ -5045,20 +5122,6 @@ class PlayerWindowController: NSWindowController {
 
     // MARK: - Window close
 
-    func performReviewKeepCurrentItem() {
-        guard currentDisplayIndex >= 0 else { return }
-        queuePage(queuePage, didRequestReviewKeepAt: currentDisplayIndex)
-    }
-
-    func performReviewDeletePrefixCurrentItem() {
-        guard currentDisplayIndex >= 0 else { return }
-        queuePage(queuePage, didRequestReviewDeleteAt: currentDisplayIndex)
-    }
-
-    func performReviewUndo() {
-        queuePageDidRequestReviewUndo(queuePage)
-    }
-
     override func close() {
         cancelPendingFolderScan()
         isPreviewWindowClosing = true
@@ -5079,6 +5142,7 @@ class PlayerWindowController: NSWindowController {
 extension PlayerWindowController: NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
+        markerRenameUndo.clear()
         cancelPendingFolderScan()
         isPreviewWindowClosing = true
         resetPlaybackCompletionSignals(reason: "window-will-close")
@@ -5562,85 +5626,16 @@ extension PlayerWindowController: QueuePageViewDelegate {
         showRenameSheet(forDisplayIndex: index)
     }
 
-    /// P08.2: immediately renames the selected file on disk, applying the
-    /// `keep_` prefix in place of any existing recognized review prefix
-    /// (never stacking). This is a same-directory rename only — never a
-    /// delete/trash/move. See SkimFileRenamer.applyReviewPrefix.
-    func queuePage(_ view: QueuePageView, didRequestReviewKeepAt index: Int) {
-        performReviewPrefixAction(.keep, displayIndex: index)
+    /// Queue Page footer undo: runs the same marker rename undo as Command-Z.
+    func queuePageDidRequestMarkerRenameUndo(_ view: QueuePageView) {
+        performMarkerRenameUndo(source: "queuePage")
     }
 
-    /// P08.2: immediately renames the selected file on disk, applying the
-    /// `delete_` prefix in place of any existing recognized review prefix
-    /// (never stacking). `delete_` is a filename prefix only — it never
-    /// deletes, trashes, or moves the file out of its directory.
-    func queuePage(_ view: QueuePageView, didRequestReviewDeleteAt index: Int) {
-        performReviewPrefixAction(.delete, displayIndex: index)
-    }
-
-    /// P08.1/P08.2: prompts for a target filename and immediately renames the
-    /// selected file in its current directory, preserving its original
-    /// extension automatically and rejecting any attempt to change it.
-    func queuePage(_ view: QueuePageView, didRequestReviewRenameAt index: Int) {
-        showReviewRenameSheet(forDisplayIndex: index)
-    }
-
-    /// P08.2: reverts the most recent successful review filesystem rename
-    /// (keep_/delete_/rename) by moving the file back to its prior path, if
-    /// the renamed file still exists and the original path is free. This is a
-    /// real filesystem operation, not an in-memory-only revert.
-    func queuePageDidRequestReviewUndo(_ view: QueuePageView) {
-        guard let win = window else { return }
-        guard let op = lastReviewFileOperation else {
-            DebugConsoleController.log("review", "undo: noop (nothing to undo) source=queuePage")
-            return
-        }
-
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: op.renamedURL.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else {
-            presentRenameAlert(title: "Cannot Undo",
-                               message: "The renamed file could not be found.",
-                               window: win)
-            return
-        }
-        guard !FileManager.default.fileExists(atPath: op.originalURL.path) else {
-            presentRenameAlert(title: "Cannot Undo",
-                               message: "A file named \"\(op.originalURL.lastPathComponent)\" already exists at the original location.",
-                               window: win)
-            return
-        }
-
-        do {
-            try FileManager.default.moveItem(at: op.renamedURL, to: op.originalURL)
-        } catch {
-            presentRenameAlert(title: "Undo Failed", message: error.localizedDescription, window: win)
-            return
-        }
-
-        guard !FileManager.default.fileExists(atPath: op.renamedURL.path),
-              FileManager.default.fileExists(atPath: op.originalURL.path) else {
-            presentRenameAlert(title: "Undo Failed",
-                               message: "The file could not be verified after undo.",
-                               window: win)
-            return
-        }
-
-        lastReviewFileOperation = nil
-        if !applyReviewURLReplacement(from: op.renamedURL, to: op.originalURL) {
-            DebugConsoleController.log("review", "undo: file restored but queue item is no longer tracked source=queuePage")
-        } else {
-            DebugConsoleController.log("review", "undo: \(op.renamedURL.lastPathComponent) → \(op.originalURL.lastPathComponent) source=queuePage")
-        }
-        refreshQueueDisplays()
-    }
-
-    /// Applies a successful keep_/delete_/rename filesystem operation's
-    /// result to in-memory queue state: updates the tracked URL, migrates any
-    /// explicit review intent, clears stale duration caches, and refreshes
-    /// the current item/window title if the renamed file was current.
-    /// Records the operation for Undo. Returns `false` (queue state
-    /// unchanged) if the original URL is no longer present in the queue.
+    /// Applies a successful filesystem rename's result to in-memory queue
+    /// state: updates the tracked URL, clears stale duration caches, and
+    /// refreshes the current item/window title if the renamed file was
+    /// current. Returns `false` (queue state unchanged) if the original URL is
+    /// no longer present in the queue.
     @discardableResult
     private func applyReviewURLReplacement(from oldURL: URL, to newURL: URL) -> Bool {
         guard let index = playbackSet.firstIndex(where: {
@@ -5648,15 +5643,13 @@ extension PlayerWindowController: QueuePageViewDelegate {
         }) else { return false }
         return applyQueueURLReplacement(at: index,
                                         from: oldURL,
-                                        to: newURL,
-                                        migrateReviewIntent: true)
+                                        to: newURL)
     }
 
     @discardableResult
     private func applyQueueURLReplacement(at index: Int,
                                           from oldURL: URL,
-                                          to newURL: URL,
-                                          migrateReviewIntent: Bool) -> Bool {
+                                          to newURL: URL) -> Bool {
         guard playbackSet.indices.contains(index),
               queueItemIDs.indices.contains(index),
               queueFileIdentities.indices.contains(index),
@@ -5666,9 +5659,6 @@ extension PlayerWindowController: QueuePageViewDelegate {
         playbackSet[index] = newURL
         queueFileIdentities[index] = SkimFileIdentityResolver.identity(for: newURL)
             ?? queueFileIdentities[index]
-        if migrateReviewIntent {
-            reviewStateStore.migrateIntent(from: oldURL, to: newURL)
-        }
         durationCache.removeValue(forKey: oldURL)
         durationSecondsCache.removeValue(forKey: oldURL)
         if index == currentSetIndex
@@ -5678,119 +5668,6 @@ extension PlayerWindowController: QueuePageViewDelegate {
             updateWindowTitle(newURL.lastPathComponent)
         }
         return true
-    }
-
-    /// Immediately applies a keep_/delete_ prefix to the selected file on
-    /// disk and, on success, updates queue state and the Undo slot.
-    private func performReviewPrefixAction(_ kind: SkimReviewPrefixKind, displayIndex: Int) {
-        guard let originalURL = urlForDisplayIndex(displayIndex), let win = window else { return }
-
-        let resultURL: URL
-        do {
-            resultURL = try SkimFileRenamer.applyReviewPrefix(kind, to: originalURL)
-        } catch SkimFileRenameError.targetExists(let filename) {
-            presentRenameAlert(title: "Cannot Mark File",
-                               message: SkimFileRenameError.targetExists(filename).localizedDescription,
-                               window: win)
-            return
-        } catch SkimFileRenameError.sourceMissing {
-            presentRenameAlert(title: "Cannot Mark File",
-                               message: SkimFileRenameError.sourceMissing.localizedDescription,
-                               window: win)
-            return
-        } catch {
-            presentRenameAlert(title: "Operation Failed", message: error.localizedDescription, window: win)
-            return
-        }
-
-        guard resultURL.standardizedFileURL.path != originalURL.standardizedFileURL.path else {
-            DebugConsoleController.log("review", "\(kind.rawValue): noop unchanged file=\(originalURL.lastPathComponent) source=queuePage")
-            return
-        }
-
-        applyReviewURLReplacement(from: originalURL, to: resultURL)
-        lastReviewFileOperation = SkimReviewFileOperation(originalURL: originalURL, renamedURL: resultURL)
-        DebugConsoleController.log("review", "\(kind.rawValue): \(originalURL.lastPathComponent) → \(resultURL.lastPathComponent) source=queuePage")
-        refreshQueueDisplays()
-    }
-
-    /// Shows a lightweight prompt for a target filename and performs one
-    /// guarded same-directory filesystem rename after the user accepts. The
-    /// original extension is preserved automatically; typing a different
-    /// extension is rejected.
-    private func showReviewRenameSheet(forDisplayIndex displayIndex: Int) {
-        guard let url = urlForDisplayIndex(displayIndex), let win = window else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Rename File"
-        alert.informativeText = "Enter the new filename for \"\(url.lastPathComponent)\". The extension is preserved automatically."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        field.stringValue = url.lastPathComponent
-        alert.accessoryView = field
-
-        alert.beginSheetModal(for: win) { [weak self, weak field] response in
-            guard response == .alertFirstButtonReturn, let self = self, let field = field else { return }
-            self.performReviewRename(displayIndex: displayIndex,
-                                     originalURL: url,
-                                     targetFilename: field.stringValue,
-                                     window: win)
-        }
-
-        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
-    }
-
-    private func performReviewRename(displayIndex: Int,
-                                     originalURL: URL,
-                                     targetFilename: String,
-                                     window: NSWindow) {
-        guard playbackSet.contains(where: { $0.standardizedFileURL.path == originalURL.standardizedFileURL.path }) else {
-            presentRenameAlert(title: "Cannot Rename",
-                               message: "The selected queue item is no longer available.",
-                               window: window)
-            return
-        }
-
-        let targetURL: URL
-        do {
-            targetURL = try SkimFileRenamer.rename(sourceURL: originalURL,
-                                                   toCompleteFilename: targetFilename)
-        } catch SkimFileRenameError.unchanged {
-            DebugConsoleController.log("review", "rename: noop unchanged file=\(originalURL.lastPathComponent) source=queuePage")
-            return
-        } catch SkimFileRenameError.invalidName {
-            presentRenameAlert(title: "Cannot Rename",
-                               message: SkimFileRenameError.invalidName.localizedDescription,
-                               window: window)
-            return
-        } catch SkimFileRenameError.extensionChange {
-            presentRenameAlert(title: "Cannot Rename",
-                               message: SkimFileRenameError.extensionChange.localizedDescription,
-                               window: window)
-            return
-        } catch SkimFileRenameError.sourceMissing {
-            presentRenameAlert(title: "Cannot Rename",
-                               message: SkimFileRenameError.sourceMissing.localizedDescription,
-                               window: window)
-            return
-        } catch SkimFileRenameError.targetExists(let filename) {
-            presentRenameAlert(title: "Cannot Rename",
-                               message: SkimFileRenameError.targetExists(filename).localizedDescription,
-                               window: window)
-            return
-        } catch {
-            presentRenameAlert(title: "Rename Failed",
-                               message: error.localizedDescription,
-                               window: window)
-            return
-        }
-
-        applyReviewURLReplacement(from: originalURL, to: targetURL)
-        lastReviewFileOperation = SkimReviewFileOperation(originalURL: originalURL, renamedURL: targetURL)
-        DebugConsoleController.log("review", "rename: \(originalURL.lastPathComponent) → \(targetURL.lastPathComponent) source=queuePage")
-        refreshQueueDisplays()
     }
 
     /// One-click custom prefix rename. Preflights all targets before renaming any (multi-select safe).
@@ -5876,27 +5753,35 @@ extension PlayerWindowController: QueuePageViewDelegate {
             if plannedRenames.count == 1 {
                 // Single-file fast path: no confirmation required.
                 let r = plannedRenames[0]
+                let sourceURL = playbackSet[r.pbIdx]
                 DebugConsoleController.log("rename",
-                    "\(tag): \(playbackSet[r.pbIdx].lastPathComponent) → \(r.newName) source=queuePage")
-                renameFile(at: r.pbIdx, to: r.newName)
+                    "\(tag): \(sourceURL.lastPathComponent) → \(r.newName) source=queuePage")
+                if let renamedURL = renameFile(at: r.pbIdx, to: r.newName) {
+                    recordMarkerRename([SkimMarkerRenameMove(source: sourceURL, destination: renamedURL)])
+                }
             } else {
                 // Multi-file: show confirmation before any filesystem mutation.
-                let count = plannedRenames.count
-                let alert = NSAlert()
-                alert.messageText = "Rename \(count) Files?"
-                alert.informativeText = "Applying prefix \"\(prefix)\" will rename \(count) files on disk. This cannot be undone from within the app."
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Rename \(count) Files")
-                alert.addButton(withTitle: "Cancel")
-                alert.beginSheetModal(for: win) { [weak self] response in
-                    guard response == .alertFirstButtonReturn, let self = self else { return }
+                let preview = BatchRenamePreview(moves: plannedRenames.map { rename in
+                    (oldName: self.playbackSet[rename.pbIdx].lastPathComponent, newName: rename.newName)
+                })
+                let prefixColor = action == .primary ? theme.markerPrimary : theme.markerSecondary
+                let sheet = BatchRenameSheetController(preview: preview,
+                                                       prefix: prefix,
+                                                       prefixColor: prefixColor) { [weak self] in
+                    guard let self = self else { return }
+                    var moves: [SkimMarkerRenameMove] = []
                     for r in plannedRenames {
                         guard r.pbIdx < self.playbackSet.count else { continue }
+                        let sourceURL = self.playbackSet[r.pbIdx]
                         DebugConsoleController.log("rename",
-                            "\(tag): \(self.playbackSet[r.pbIdx].lastPathComponent) → \(r.newName) source=queuePage confirmed")
-                        self.renameFile(at: r.pbIdx, to: r.newName)
+                            "\(tag): \(sourceURL.lastPathComponent) → \(r.newName) source=queuePage confirmed")
+                        if let renamedURL = self.renameFile(at: r.pbIdx, to: r.newName) {
+                            moves.append(SkimMarkerRenameMove(source: sourceURL, destination: renamedURL))
+                        }
                     }
+                    self.recordMarkerRename(moves)
                 }
+                sheet.present(on: win)
             }
         }
     }
@@ -5905,45 +5790,6 @@ extension PlayerWindowController: QueuePageViewDelegate {
     func queuePage(_ view: QueuePageView, didRequestDeleteRows indices: [Int]) {
         for index in indices.sorted(by: >) {
             removeQueueItem(displayIndex: index)
-        }
-    }
-
-    /// Legacy trash action retained for interface compatibility; P40 removed all callers in favor of queue removal.
-    func queuePage(_ view: QueuePageView, didRequestTrashRows indices: [Int]) {
-        let rows = Array(Set(indices)).sorted(by: >)
-        let targets = rows.compactMap { index -> (Int, URL)? in
-            guard let url = urlForDisplayIndex(index) else { return nil }
-            return (index, url)
-        }
-        guard !targets.isEmpty, let window else { return }
-
-        let alert = NSAlert()
-        alert.messageText = targets.count == 1 ? "Move Selected File to Trash?" : "Move \(targets.count) Selected Files to Trash?"
-        alert.informativeText = "This deletes the selected media from disk. The delete_ action only renames a filename and is not affected."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Move to Trash")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let self else { return }
-            var removedRows: [Int] = []
-            var failures: [String] = []
-            for (row, url) in targets {
-                do {
-                    var resultingURL: NSURL?
-                    try FileManager.default.trashItem(at: url, resultingItemURL: &resultingURL)
-                    removedRows.append(row)
-                } catch {
-                    failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
-                }
-            }
-            removedRows.sorted(by: >).forEach { self.removeQueueItem(displayIndex: $0) }
-            guard !failures.isEmpty else { return }
-            let failureAlert = NSAlert()
-            failureAlert.messageText = "Some Files Could Not Be Deleted"
-            failureAlert.informativeText = failures.joined(separator: "\n")
-            failureAlert.alertStyle = .warning
-            failureAlert.addButton(withTitle: "OK")
-            failureAlert.beginSheetModal(for: window)
         }
     }
 
@@ -6082,7 +5928,6 @@ extension PlayerWindowController: QueuePageViewDelegate {
         let oldByID = Dictionary(uniqueKeysWithValues: oldItems.map { ($0.id, $0) })
         for item in result.items where result.renamedItemIDs.contains(item.id) {
             guard let old = oldByID[item.id] else { continue }
-            reviewStateStore.migrateIntent(from: old.url, to: item.url)
             durationCache.removeValue(forKey: old.url)
             durationSecondsCache.removeValue(forKey: old.url)
             if item.id == playingItemID {

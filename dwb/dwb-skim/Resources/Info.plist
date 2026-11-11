@@ -81,6 +81,8 @@
 	<string>dwb skim</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<key>NSAccentColorName</key>
+	<string>AccentColor</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

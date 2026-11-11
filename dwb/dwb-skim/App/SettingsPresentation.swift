@@ -15,9 +15,12 @@ enum SettingsPresentation {
         case shortcutKeyline
     }
 
-    enum BrandToken: Equatable {
-        case darkTeal
-        case darkTeal500
+    /// The design-system token a role resolves to (`DWBColor.border`, or the theme's accent tokens).
+    enum DesignToken: Equatable {
+        case border
+        case accentText
+        case accentTintStrong
+        case accentFill
     }
     struct Pane: Equatable {
         let identifier: String
@@ -34,19 +37,64 @@ enum SettingsPresentation {
     static let selectedPaneDefaultsKey = "dwb.settings.selectedPane"
     static let windowTitle = "Settings"
 
-    static let panes = [
-        Pane(identifier: "playback", title: "Playback"),
-        Pane(identifier: "skimPreview", title: "Skim Preview"),
-        Pane(identifier: "skimPlus", title: "Skim+"),
-        Pane(identifier: "controls", title: "Controls"),
-        Pane(identifier: "queueFiles", title: "Queue & Files"),
-        Pane(identifier: "shortcuts", title: "Shortcuts"),
-        Pane(identifier: "advanced", title: "Advanced"),
-        Pane(identifier: "about", title: "About"),
+    /// A labeled run of sidebar pages. The standard is one sidebar order in every dwb app:
+    /// General, then the app's own group (accent-labelled), then System.
+    struct SidebarGroup: Equatable {
+        let label: String
+        /// The label is drawn in `accentText` instead of `textTertiary`.
+        let isAccented: Bool
+        let paneIdentifiers: [String]
+    }
+
+    private static let paneTitles: [String: String] = [
+        "playback": "Playback",
+        "controls": "Controls",
+        "queueFiles": "Queue & Files",
+        "shortcuts": "Shortcuts",
+        "skimPreview": "Skim Preview",
+        "skimPlus": "dwb+",
+        "advanced": "Advanced",
+        "about": "About",
     ]
+
+    static let sidebarGroups: [SidebarGroup] = [
+        SidebarGroup(label: "General", isAccented: false,
+                     paneIdentifiers: ["playback", "controls", "queueFiles", "shortcuts"]),
+        SidebarGroup(label: "dwb skim", isAccented: true,
+                     paneIdentifiers: ["skimPreview", "skimPlus"]),
+        SidebarGroup(label: "System", isAccented: false,
+                     paneIdentifiers: ["advanced", "about"]),
+    ]
+
+    /// The pages in sidebar order. Arrow-key and Tab order follow this list.
+    static let panes: [Pane] = sidebarGroups
+        .flatMap(\.paneIdentifiers)
+        .map { Pane(identifier: $0, title: paneTitles[$0] ?? $0) }
+
+    /// The one-sentence page description under the page title (`KIT_DESC`). Empty for About,
+    /// which has no page header.
+    static let pageDescriptions: [String: String] = [
+        "playback": "How files play, and which media types the queue accepts.",
+        "controls": "The playback overlay and the player window.",
+        "queueFiles": "File-marker prefixes and how the queue behaves.",
+        "shortcuts": "Every keyboard shortcut, grouped by task. Hover a row to see its keys on the map.",
+        "skimPreview": "How long each preview runs and where it starts.",
+        "skimPlus": "Background audio under silent clips and images.",
+        "advanced": "Diagnostics and resets.",
+        "about": "",
+    ]
+
+    static func pageDescription(for identifier: String) -> String {
+        pageDescriptions[validatedPaneIdentifier(identifier)] ?? ""
+    }
+
+    /// Every page except About starts with a title, its description, and a hairline.
+    static func showsPageHeader(for identifier: String) -> Bool {
+        validatedPaneIdentifier(identifier) != "about"
+    }
+
     static let paneIdentifiers = panes.map(\.identifier)
     static let sidebarUsesSymbols = false
-    static let usesPlayerPeriwinkleAsPrimaryAccent = false
 
     static let minimumWindowSize = CGSize(width: 760, height: 500)
     static let defaultWindowSize = CGSize(width: 820, height: 550)
@@ -64,14 +112,19 @@ enum SettingsPresentation {
     static let helperMaximumWidth: CGFloat = 390
     static let sliderWidth: CGFloat = 190
 
-    /// dwb skim owns dark teal; periwinkle remains a dwb player identity color.
-    static func brandToken(for accentRole: AccentRole) -> BrandToken {
+    /// Emphasis, section headers, and links are `accentText`; the selected sidebar row is
+    /// `accentTintStrong`; focus and shortcut keylines are `accentFill`; the structural
+    /// separator is the neutral `border`.
+    static func designToken(for accentRole: AccentRole) -> DesignToken {
         switch accentRole {
         case .structuralSeparator:
-            return .darkTeal
-        case .primaryEmphasis, .selectedSidebarFill, .focusKeyline,
-             .informationalLink, .shortcutKeyline:
-            return .darkTeal500
+            return .border
+        case .primaryEmphasis, .informationalLink:
+            return .accentText
+        case .selectedSidebarFill:
+            return .accentTintStrong
+        case .focusKeyline, .shortcutKeyline:
+            return .accentFill
         }
     }
 

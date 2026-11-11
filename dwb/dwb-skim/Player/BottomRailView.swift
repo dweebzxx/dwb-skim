@@ -21,6 +21,7 @@ final class BottomRailView: NSView {
     private let nextButton = RailButton()
     private let volumeButton = RailButton()
     private let fullscreenButton = RailButton()
+    private let bookmarkButton = RailButton()
     private let settingsButton = RailButton()
     private let manualAdvanceButton = RailButton()
     private let durationLabel = NSTextField(labelWithString: "")
@@ -28,15 +29,30 @@ final class BottomRailView: NSView {
     private var pendingSeekPosition: Float?
     private var pendingSeekDate: Date?
     private var isScrubbing = false
+    private var bookmarkButtonState: (enabled: Bool, bookmarked: Bool)?
+
+    static let bookmarkIdentifier = "skim.rail.bookmark"
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         setupViews()
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// Increase Contrast changed: re-resolve the label colors that depend on it.
+    @objc private func accessibilityOptionsChanged() {
+        durationLabel.textColor = DWBAccessibility.textSecondary
+        updateMarkers(isHidden: !durationLabel.isHidden)
+    }
 
     private func setupViews() {
         scrubber.minValue = 0
@@ -61,12 +77,13 @@ final class BottomRailView: NSView {
         addSubview(scrubber)
 
         configure(queueButton, symbol: "rectangle.righthalf.inset.filled", label: "Queue", help: "Toggle queue panel (Q)", action: #selector(queueTapped))
-        configure(previousButton, symbol: "backward.end.fill", label: "Previous", help: "Previous item ([)", action: #selector(previousTapped))
+        configure(previousButton, symbol: "backward.end.fill", label: "Previous", help: "Previous item (,)", action: #selector(previousTapped))
         configure(skimButton, symbol: "bolt.fill", label: "Skim", help: "Skim is on. Double-tap Option to toggle Skim.", action: #selector(skimTapped))
         configure(playPauseButton, symbol: "play.fill", label: "Play or Pause", help: "Play or Pause (Space)", action: #selector(playPauseTapped), emphasized: true)
-        configure(nextButton, symbol: "forward.end.fill", label: "Next", help: "Next item (])", action: #selector(nextTapped))
-        configure(volumeButton, symbol: "speaker.wave.2.fill", label: "Mute or Unmute", help: "Mute or Unmute (M)", action: #selector(volumeTapped))
+        configure(nextButton, symbol: "forward.end.fill", label: "Next", help: "Next item (.)", action: #selector(nextTapped))
+        configure(volumeButton, symbol: "speaker.wave.2.fill", label: "Mute or Unmute", help: "Mute or Unmute", action: #selector(volumeTapped))
         configure(fullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", label: "Fullscreen", help: "Toggle Fullscreen (F)", action: #selector(fullscreenTapped))
+        configure(bookmarkButton, symbol: "bookmark", label: "Bookmark", help: "Bookmark (B)", action: #selector(bookmarkTapped))
         configure(settingsButton, symbol: "gearshape", label: "Settings", help: "Open Settings", action: #selector(settingsTapped))
         configure(manualAdvanceButton, symbol: "forward.frame.fill", label: "Advance Segment",
                  help: "Manually advance to the next Progressive Random Skim segment (active only when Progressive Random Skim is on)",
@@ -74,6 +91,8 @@ final class BottomRailView: NSView {
         previousButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.previousIdentifier)
         skimButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.toggleIdentifier)
         queueButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.queueIdentifier)
+        bookmarkButton.identifier = NSUserInterfaceItemIdentifier(Self.bookmarkIdentifier)
+        bookmarkButton.railStyle = .bookmark
         queueButton.nextKeyView = manualAdvanceButton
         manualAdvanceButton.nextKeyView = skimButton
         skimButton.nextKeyView = previousButton
@@ -81,11 +100,12 @@ final class BottomRailView: NSView {
         playPauseButton.nextKeyView = nextButton
         nextButton.nextKeyView = volumeButton
         volumeButton.nextKeyView = fullscreenButton
-        fullscreenButton.nextKeyView = settingsButton
+        fullscreenButton.nextKeyView = bookmarkButton
+        bookmarkButton.nextKeyView = settingsButton
 
-        durationLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        durationLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
         durationLabel.alignment = .center
-        durationLabel.textColor = .secondaryLabelColor
+        durationLabel.textColor = DWBAccessibility.textSecondary
         durationLabel.maximumNumberOfLines = 1
         durationLabel.isHidden = true
         durationLabel.setAccessibilityElement(true)
@@ -114,8 +134,7 @@ final class BottomRailView: NSView {
         button.target = self
         button.action = action
         button.railStyle = emphasized ? .emphasized : .normal
-        button.configureSymbol(symbol, pointSize: emphasized ? 15 : 12,
-                               accessibilityLabel: label, help: help)
+        button.configureSymbol(symbol, accessibilityLabel: label, help: help)
         addSubview(button)
     }
 
@@ -124,32 +143,31 @@ final class BottomRailView: NSView {
         let width = bounds.width
         let geometry = PlaybackBarPresentation.layout(width: width)
         let side = geometry.edgeInset
-        let button: CGFloat = 30
-        let play: CGFloat = 36
+        let button = DWBMetrics.railButton
+        let play = DWBMetrics.railButtonPrimary
         let gap = geometry.gap
         var x = (width - geometry.centeredWidth) / 2
         let y: CGFloat = 3
         queueButton.frame = NSRect(x: side, y: y + 3, width: button, height: button)
-        queueButton.layer?.cornerRadius = button / 2
         manualAdvanceButton.frame = NSRect(x: side + button + gap, y: y + 3, width: button, height: button)
-        manualAdvanceButton.layer?.cornerRadius = button / 2
         fullscreenButton.frame = NSRect(x: max(side, width - side - button), y: y + 3, width: button, height: button)
-        fullscreenButton.layer?.cornerRadius = button / 2
         settingsButton.frame = NSRect(x: max(side, fullscreenButton.frame.minX - gap - button), y: y + 3, width: button, height: button)
-        settingsButton.layer?.cornerRadius = button / 2
         for control in [skimButton, previousButton] {
             control.frame = NSRect(x: x, y: y + 3, width: button, height: button)
-            control.layer?.cornerRadius = button / 2
             x += button + gap
         }
         playPauseButton.frame = NSRect(x: x, y: y, width: play, height: play)
-        playPauseButton.layer?.cornerRadius = play / 2
         x += play + gap
         for control in [nextButton, volumeButton] {
             control.frame = NSRect(x: x, y: y + 3, width: button, height: button)
-            control.layer?.cornerRadius = button / 2
             x += button + gap
         }
+        // Bookmark sits immediately before Settings. It is the first rail
+        // button to hide: when the rail is too narrow, it would overlap the
+        // centered transport group, so it is hidden instead.
+        let bookmarkX = settingsButton.frame.minX - gap - button
+        bookmarkButton.frame = NSRect(x: bookmarkX, y: y + 3, width: button, height: button)
+        bookmarkButton.isHidden = bookmarkX < x
 
         for (label, cell) in zip(markerLabels, geometry.markerCells) {
             label.frame = cell
@@ -175,6 +193,7 @@ final class BottomRailView: NSView {
         nextButton.isEnabled = controller?.hasNext ?? false
         manualAdvanceButton.isEnabled = controller?.canManuallyAdvanceProgressiveRandomSkimSegment ?? false
         updateSkimButton()
+        updateBookmarkButton()
         let isShowingDuration = updateDurationLabel()
         updateMarkers(isHidden: isShowingDuration)
         updateSegmentMarkers()
@@ -214,18 +233,22 @@ final class BottomRailView: NSView {
         if position.isFinite { scrubber.doubleValue = Double(max(0, min(1, position))) }
     }
 
-    /// Part 4: normalizes `controller.progressiveRandomSkimSegmentStartSeconds` (playback seconds,
+    /// Part 4: normalizes `controller.progressiveRandomSkimSegmentPlan` (playback seconds,
     /// always sourced from the live plan — see that property's doc) against the current media
-    /// duration for the scrub bar's segment tick marks. Empty markers when there's no known duration
-    /// yet, mirroring how `activeRange` position itself only renders once duration is known.
+    /// duration for the scrub bar's segment ticks and bars. No segments when there's no known
+    /// duration yet, mirroring how `activeRange` position itself only renders once duration is known.
     private func updateSegmentMarkers() {
         let totalDuration = Double(player?.media?.length.intValue ?? 0) / 1000
         guard !isImageMode, totalDuration.isFinite, totalDuration > 0,
-              let starts = controller?.progressiveRandomSkimSegmentStartSeconds, !starts.isEmpty else {
-            scrubber.segmentStarts = []
+              let plan = controller?.progressiveRandomSkimSegmentPlan else {
+            scrubber.setSegments([], activeIndex: nil)
             return
         }
-        scrubber.segmentStarts = starts.map { CGFloat(max(0, min(1, $0 / totalDuration))) }
+        let segments = plan.segments.map { segment in
+            ScrubberSegment(start: CGFloat(max(0, min(1, segment.startOffsetSeconds / totalDuration))),
+                            end: CGFloat(max(0, min(1, (segment.startOffsetSeconds + segment.durationSeconds) / totalDuration))))
+        }
+        scrubber.setSegments(segments, activeIndex: plan.activeIndex)
     }
 
     private func updateMarkers(isHidden: Bool) {
@@ -237,8 +260,7 @@ final class BottomRailView: NSView {
             label.toolTip = marker.fullText
             label.setAccessibilityLabel(marker.fullText.components(separatedBy: " ").prefix(2).joined(separator: " "))
             label.setAccessibilityValue(marker.accessibilityValue)
-            label.textColor = marker.isActive ? .secondaryLabelColor : .tertiaryLabelColor
-            label.alphaValue = marker.isActive ? 0.9 : 0.48
+            label.textColor = marker.isActive ? DWBAccessibility.textSecondary : DWBColor.textDisabled
         }
     }
 
@@ -257,17 +279,32 @@ final class BottomRailView: NSView {
 
     private func setPlaySymbol(isPlaying: Bool) {
         playPauseButton.configureSymbol(isPlaying ? "pause.fill" : "play.fill",
-                                        pointSize: 15,
                                         accessibilityLabel: isPlaying ? "Pause" : "Play",
                                         help: "Play or Pause (Space)")
     }
 
     private func setVolumeSymbol() {
-        let muted = (player?.audio?.volume ?? 0) == 0
+        let volume = player?.audio?.volume ?? 0
+        let muted = volume == 0
+        volumeButton.railStyle = volume > Int32(VideoVolumeMeterPresentation.regularVolumeMaximum) ? .warning : .normal
         volumeButton.configureSymbol(muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                                     pointSize: 12,
                                      accessibilityLabel: muted ? "Unmute" : "Mute",
-                                     help: "Mute or Unmute (M)")
+                                     help: "Mute or Unmute")
+    }
+
+    private func updateBookmarkButton() {
+        let url = controller?.currentMediaURL
+        let state = (enabled: url != nil,
+                     bookmarked: url.map { BookmarkStore.shared.isBookmarked(url: $0) } ?? false)
+        guard bookmarkButtonState?.enabled != state.enabled
+                || bookmarkButtonState?.bookmarked != state.bookmarked else { return }
+        bookmarkButtonState = state
+        bookmarkButton.isEnabled = state.enabled
+        bookmarkButton.isToggled = state.bookmarked
+        bookmarkButton.configureSymbol(state.bookmarked ? "bookmark.fill" : "bookmark",
+                                       accessibilityLabel: state.bookmarked ? "Remove Bookmark" : "Bookmark",
+                                       help: "Bookmark (B)")
+        bookmarkButton.setAccessibilityValue(state.bookmarked ? "bookmarked" : "not bookmarked")
     }
 
     private func updateSkimButton() {
@@ -277,7 +314,6 @@ final class BottomRailView: NSView {
         skimButton.railStyle = presentation.isEnabled ? .skimActive : .skimInactive
         skimButton.configureSymbol(
             presentation.isEnabled ? "bolt.fill" : "bolt.slash",
-            pointSize: 12,
             accessibilityLabel: "Skim",
             help: presentation.toggleHelp,
             fallbackNames: presentation.isEnabled ? ["play.fill"] : ["nosign"]
@@ -305,8 +341,15 @@ final class BottomRailView: NSView {
     @objc private func nextTapped() { controller?.playNext() }
     @objc private func volumeTapped() { controller?.toggleMuteFromTransport() }
     @objc private func fullscreenTapped() { window?.toggleFullScreen(nil) }
+    @objc private func bookmarkTapped() { controller?.toggleBookmark() }
     @objc private func settingsTapped() { SettingsWindowController.shared.openSettings() }
     @objc private func manualAdvanceTapped() { controller?.manuallyAdvanceProgressiveRandomSkimSegment() }
+}
+
+/// One planned Progressive Random Skim segment on the scrub bar, as fractions (0...1) of the media.
+struct ScrubberSegment: Equatable {
+    let start: CGFloat
+    let end: CGFloat
 }
 
 final class PreviewRangeSlider: NSSlider {
@@ -319,23 +362,55 @@ final class PreviewRangeSlider: NSSlider {
         }
     }
 
-    /// Part 4: normalized (0...1) Progressive Random Skim segment start positions, rendered as small
-    /// tick marks distinct from the active-range highlight. Position-only — no "segment X of Y" text.
-    var segmentStarts: [CGFloat] = [] {
-        didSet {
-            guard segmentStarts != oldValue else { return }
-            (cell as? PreviewRangeSliderCell)?.segmentStarts = segmentStarts
-            needsDisplay = true
-        }
+    private var scrubberTracking: NSTrackingArea?
+
+    /// Part 4: sets the Progressive Random Skim segments, rendered as ticks plus bars for the segment
+    /// now playing and the segments already played. `activeIndex` is the segment now playing;
+    /// segments before it are visited. Position-only — no "segment X of Y" text.
+    func setSegments(_ segments: [ScrubberSegment], activeIndex: Int?) {
+        guard let sliderCell = cell as? PreviewRangeSliderCell,
+              sliderCell.segments != segments || sliderCell.activeSegment != activeIndex else { return }
+        sliderCell.segments = segments
+        sliderCell.activeSegment = activeIndex
+        needsDisplay = true
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         cell = PreviewRangeSliderCell()
         focusRingType = .default
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityOptionsChanged),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    @objc private func accessibilityOptionsChanged() { needsDisplay = true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let scrubberTracking { removeTrackingArea(scrubberTracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self,
+                                  userInfo: nil)
+        addTrackingArea(area)
+        scrubberTracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        (cell as? PreviewRangeSliderCell)?.isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        (cell as? PreviewRangeSliderCell)?.isHovering = false
+        needsDisplay = true
+    }
 
     override func mouseDown(with event: NSEvent) {
         scrubDidBegin?()
@@ -351,52 +426,92 @@ final class PreviewRangeSlider: NSSlider {
 private final class PreviewRangeSliderCell: NSSliderCell {
     var activeRange: ActivePreviewRange?
     var emphasizesThumb = false
-    var segmentStarts: [CGFloat] = []
+    var isHovering = false
+    var segments: [ScrubberSegment] = []
+    var activeSegment: Int?
 
     override func drawBar(inside rect: NSRect, flipped: Bool) {
-        let bar = NSRect(x: rect.minX, y: rect.midY - 1, width: rect.width, height: 2)
-        NSColor.white.withAlphaComponent(0.18).setFill()
+        let bar = NSRect(x: rect.minX, y: rect.midY - DWBMetrics.scrubberTrack / 2,
+                         width: rect.width, height: DWBMetrics.scrubberTrack)
+        DWBAccessibility.track.setFill()
         NSBezierPath(roundedRect: bar, xRadius: 1, yRadius: 1).fill()
-        drawSegmentMarkers(bar: bar)
+
+        if segments.isEmpty {
+            drawPreviewRange(bar: bar)
+        } else {
+            drawSegments(bar: bar)
+        }
+
+        let knobX = min(bar.maxX, max(bar.minX, knobRect(flipped: flipped).midX))
+        let played = NSRect(x: bar.minX, y: bar.minY, width: knobX - bar.minX, height: bar.height)
+        theme.accentText.setFill()
+        NSBezierPath(roundedRect: played, xRadius: 1, yRadius: 1).fill()
+    }
+
+    /// The 4 pt preview range bar, when a range is active and Progressive Random Skim has no plan.
+    private func drawPreviewRange(bar: NSRect) {
         guard let range = activeRange, range.totalDurationSeconds > 0 else { return }
         let start = CGFloat(range.normalizedStart)
         let end = CGFloat(range.normalizedEnd)
-        let active = NSRect(x: bar.minX + bar.width * start,
-                            y: bar.minY - 1,
-                            width: max(1, bar.width * (end - start)),
-                            height: 4)
-        SkimColors.darkTeal.withAlphaComponent(0.95).setFill()
-        NSBezierPath(roundedRect: active, xRadius: 2, yRadius: 2).fill()
-
-        let progress = CGFloat(max(range.normalizedStart,
-                                   min(range.normalizedEnd, doubleValue)))
-        let progressed = NSRect(x: active.minX,
-                                y: active.minY,
-                                width: max(0, bar.width * progress - active.minX + bar.minX),
-                                height: active.height)
-        SkimColors.periwinkle.setFill()
-        NSBezierPath(roundedRect: progressed, xRadius: 2, yRadius: 2).fill()
+        let rangeBar = NSRect(x: bar.minX + bar.width * start,
+                              y: bar.midY - DWBMetrics.scrubberRange / 2,
+                              width: max(1, bar.width * (end - start)),
+                              height: DWBMetrics.scrubberRange)
+        theme.accentRange.setFill()
+        NSBezierPath(roundedRect: rangeBar, xRadius: 2, yRadius: 2).fill()
     }
 
-    /// Small vertical ticks marking each planned Progressive Random Skim segment's start position.
-    /// Position indicators only — no label text, per the Part 4 spec.
-    private func drawSegmentMarkers(bar: NSRect) {
-        guard !segmentStarts.isEmpty else { return }
-        NSColor.white.withAlphaComponent(0.55).setFill()
-        for start in segmentStarts {
-            let x = bar.minX + bar.width * max(0, min(1, start))
-            let tick = NSRect(x: x - 0.75, y: bar.midY - 4, width: 1.5, height: 8)
+    /// Progressive scrubber (9.8): unvisited segments get a tick; visited ones a `textSecondary`
+    /// tick plus a 4 pt `accentRange` bar; the active one a 4 pt `accentFill` bar with a 1 pt
+    /// `accentText` edge and a taller `accentText` tick.
+    private func drawSegments(bar: NSRect) {
+        for (index, segment) in segments.enumerated() {
+            let isActive = index == activeSegment
+            let isVisited = activeSegment.map { index < $0 } ?? false
+            let startX = bar.minX + bar.width * max(0, min(1, segment.start))
+            let endX = bar.minX + bar.width * max(0, min(1, segment.end))
+            guard isActive || isVisited else { continue }
+            let segmentBar = NSRect(x: startX,
+                                    y: bar.midY - DWBMetrics.scrubberRange / 2,
+                                    width: max(3, endX - startX),
+                                    height: DWBMetrics.scrubberRange)
+            let path = NSBezierPath(roundedRect: segmentBar, xRadius: 2, yRadius: 2)
+            (isActive ? theme.accentFill : theme.accentRange).setFill()
+            path.fill()
+            if isActive {
+                theme.accentText.setStroke()
+                let edge = NSBezierPath(roundedRect: segmentBar.insetBy(dx: -0.5, dy: -0.5), xRadius: 2.5, yRadius: 2.5)
+                edge.lineWidth = 1
+                edge.stroke()
+            }
+        }
+        for (index, segment) in segments.enumerated() {
+            let isActive = index == activeSegment
+            let isVisited = activeSegment.map { index < $0 } ?? false
+            let x = bar.minX + bar.width * max(0, min(1, segment.start))
+            let height: CGFloat = isActive ? 10 : 8
+            let tick = NSRect(x: x - 0.75, y: bar.midY - height / 2, width: 1.5, height: height)
+            let color: NSColor
+            if isActive {
+                color = theme.accentText
+            } else if isVisited {
+                color = DWBAccessibility.textSecondary
+            } else {
+                color = DWBAccessibility.tick
+            }
+            color.setFill()
             NSBezierPath(roundedRect: tick, xRadius: 0.75, yRadius: 0.75).fill()
         }
     }
 
     override func drawKnob(_ knobRect: NSRect) {
-        let size: CGFloat = emphasizesThumb ? 8 : 5
+        let grows = (emphasizesThumb || isHovering) && !DWBAccessibility.reduceMotion
+        let size = grows ? DWBMetrics.knobEmphasized : DWBMetrics.knob
         let rect = NSRect(x: knobRect.midX - size / 2,
                           y: knobRect.midY - size / 2,
                           width: size,
                           height: size)
-        NSColor.white.withAlphaComponent(emphasizesThumb ? 0.95 : 0.64).setFill()
+        DWBColor.textPrimary.setFill()
         NSBezierPath(ovalIn: rect).fill()
     }
 }

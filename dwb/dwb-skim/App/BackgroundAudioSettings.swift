@@ -209,7 +209,7 @@ enum VideoAudioPolicy {
                                 muted: Bool,
                                 mixMode: BackgroundAudioMixMode,
                                 backgroundAudioIsActive: Bool) -> Int32 {
-        let clamped = Int32(max(0, min(150, Int(storedVolume))))
+        let clamped = Int32(max(0, min(VideoVolumeMeterPresentation.maximumVolume, Int(storedVolume))))
         if muted { return 0 }
         if mixMode == .uploadedOnly && backgroundAudioIsActive { return 0 }
         return clamped

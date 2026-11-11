@@ -1,37 +1,18 @@
 import Cocoa
 
-/// Display-only review status derived from a filename prefix.
+/// Display-only marker status derived from a filename and the two configured
+/// marker prefixes (primary on `N`, secondary on `M`).
 ///
 /// This type does not own queue state and does not imply any filesystem action.
 enum SkimReviewStatus: Equatable {
-    case keep
-    case delete
-    case rename
+    case primary
+    case secondary
     case unmarked
-
-    var prefixToken: String? {
-        switch self {
-        case .keep: return "keep_"
-        case .delete: return "delete_"
-        case .rename: return "rename_"
-        case .unmarked: return nil
-        }
-    }
 
     var color: NSColor? {
         switch self {
-        case .keep: return SkimColors.periwinkle
-        case .delete: return SkimColors.burntOrange
-        case .rename: return SkimColors.rename
-        case .unmarked: return nil
-        }
-    }
-
-    var accessibilityLabel: String? {
-        switch self {
-        case .keep: return "keep"
-        case .delete: return "delete"
-        case .rename: return "rename"
+        case .primary: return theme.markerPrimary
+        case .secondary: return theme.markerSecondary
         case .unmarked: return nil
         }
     }
@@ -42,32 +23,43 @@ struct SkimReviewStatusDescriptor {
     let prefixToken: String?
     let visibleFilename: String
     let statusColor: NSColor?
-    let statusLabel: String?
 
-    static func describe(displayName: String) -> SkimReviewStatusDescriptor {
-        let status = statusForDisplayName(displayName)
-        let prefixToken = status.prefixToken
-        let visibleFilename: String
-        if let prefixToken, displayName.hasPrefix(prefixToken) {
-            visibleFilename = String(displayName.dropFirst(prefixToken.count))
+    /// A filename that starts with the primary prefix is the primary marker,
+    /// and one that starts with the secondary prefix is the secondary marker.
+    /// A blank prefix recognizes nothing. When both prefixes match, the longer
+    /// one is the prefix actually present, as in
+    /// `SkimFileRenamer.customPrefixToggleTargetFilename`.
+    static func describe(displayName: String,
+                         primaryPrefix: String,
+                         secondaryPrefix: String) -> SkimReviewStatusDescriptor {
+        let hasPrimary = !primaryPrefix.isEmpty && displayName.hasPrefix(primaryPrefix)
+        let hasSecondary = !secondaryPrefix.isEmpty && displayName.hasPrefix(secondaryPrefix)
+
+        let status: SkimReviewStatus
+        let prefixToken: String?
+        if hasPrimary && (!hasSecondary || primaryPrefix.count >= secondaryPrefix.count) {
+            status = .primary
+            prefixToken = primaryPrefix
+        } else if hasSecondary {
+            status = .secondary
+            prefixToken = secondaryPrefix
         } else {
-            visibleFilename = displayName
+            status = .unmarked
+            prefixToken = nil
         }
+
+        let visibleFilename = prefixToken.map { String(displayName.dropFirst($0.count)) } ?? displayName
         return SkimReviewStatusDescriptor(status: status,
                                           prefixToken: prefixToken,
                                           visibleFilename: visibleFilename,
-                                          statusColor: status.color,
-                                          statusLabel: status.accessibilityLabel)
+                                          statusColor: status.color)
     }
 
-    static func describe(url: URL) -> SkimReviewStatusDescriptor {
-        describe(displayName: url.lastPathComponent)
-    }
-
-    private static func statusForDisplayName(_ displayName: String) -> SkimReviewStatus {
-        if displayName.hasPrefix("keep_") { return .keep }
-        if displayName.hasPrefix("delete_") { return .delete }
-        if displayName.hasPrefix("rename_") { return .rename }
-        return .unmarked
+    static func describe(url: URL,
+                         primaryPrefix: String,
+                         secondaryPrefix: String) -> SkimReviewStatusDescriptor {
+        describe(displayName: url.lastPathComponent,
+                 primaryPrefix: primaryPrefix,
+                 secondaryPrefix: secondaryPrefix)
     }
 }

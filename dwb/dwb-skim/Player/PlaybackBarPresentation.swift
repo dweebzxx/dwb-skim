@@ -56,7 +56,7 @@ enum PlaybackBarPresentation {
     }
 
     static func layout(width: CGFloat, buttonSize: CGFloat = 30, playSize: CGFloat = 36) -> PlaybackBarLayout {
-        let edgeInset = max(8, min(18, width * 0.025))
+        let edgeInset: CGFloat = 16
         let minimumGap: CGFloat = 2
         let preferredGap: CGFloat = 8
         let middleWidth = buttonSize * 4 + playSize

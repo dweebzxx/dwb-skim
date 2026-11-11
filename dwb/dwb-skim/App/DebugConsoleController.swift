@@ -1,15 +1,5 @@
 import Cocoa
 
-// MARK: - Debug level
-
-enum DebugLevel: Int, Comparable {
-    case info = 0, warning, error
-
-    static func < (lhs: DebugLevel, rhs: DebugLevel) -> Bool {
-        lhs.rawValue < rhs.rawValue
-    }
-}
-
 // MARK: - Log entry
 
 struct DebugLogEntry {
@@ -60,10 +50,11 @@ final class DebugConsoleController: NSWindowController {
     private let textView          = NSTextView()
     private let scrollView        = NSScrollView()
     private let searchField       = NSSearchField()
-    private let categoryPopup     = NSPopUpButton()
-    private let levelSegment      = NSSegmentedControl()
-    private let pauseButton       = NSButton()
-    private let statusLabel       = NSTextField(labelWithString: "")
+    private let filterPill        = DWBPillChromeView(cornerRadius: DWBMetrics.radiusPill)
+    private let categoryPopup     = DWBPopUpButton()
+    private let levelSegment      = DWBSegmentedControl(size: .small)
+    private let pauseButton       = DWBButton(title: "Pause", style: .neutral, size: .small)
+    private let statusLabel       = DWBLabel("", size: 10, tone: .tertiary, monospaced: true)
 
     private let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -71,19 +62,12 @@ final class DebugConsoleController: NSWindowController {
         return f
     }()
 
-    // Text attributes by level
-    private lazy var infoAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-        .foregroundColor: NSColor.white
-    ]
-    private lazy var warnAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-        .foregroundColor: NSColor(red: 1.0, green: 0.85, blue: 0.3, alpha: 1.0)
-    ]
-    private lazy var errorAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
-        .foregroundColor: NSColor(red: 1.0, green: 0.45, blue: 0.45, alpha: 1.0)
-    ]
+    private static let logFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    private static let levelFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+    /// Tab stops for the log columns: time, level (glyph and word), category, message.
+    private static let levelTabStop: CGFloat = 88
+    private static let categoryTabStop: CGFloat = 146
+    private static let messageTabStop: CGFloat = 262
 
     // MARK: - Log entry points (main-thread only; dispatches if called off-main)
 
@@ -159,12 +143,70 @@ final class DebugConsoleController: NSWindowController {
     private func rebuildTextView() {
         guard let storage = textView.textStorage else { return }
         let combined = NSMutableAttributedString()
-        for e in visibleEntries() {
-            combined.append(NSAttributedString(string: formatEntry(e) + "\n",
-                                               attributes: attrsFor(e.level)))
+        for entry in visibleEntries() {
+            combined.append(displayLine(for: entry))
         }
         storage.setAttributedString(combined)
         textView.scrollToEndOfDocument(nil)
+    }
+
+    /// One log line for display: time, level (glyph, status color and word), category,
+    /// message. Copy and Export keep using `formatEntry`.
+    private func displayLine(for entry: DebugLogEntry) -> NSAttributedString {
+        let statusColor: NSColor
+        switch entry.level {
+        case .info: statusColor = DWBAccessibility.textSecondary
+        case .warning: statusColor = DWBColor.cautionText
+        case .error: statusColor = DWBColor.errorText
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.tabStops = [
+            NSTextTab(textAlignment: .left, location: Self.levelTabStop),
+            NSTextTab(textAlignment: .left, location: Self.categoryTabStop),
+            NSTextTab(textAlignment: .left, location: Self.messageTabStop),
+        ]
+        paragraph.defaultTabInterval = Self.messageTabStop
+        paragraph.headIndent = Self.messageTabStop
+        paragraph.firstLineHeadIndent = 0
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.paragraphSpacing = 2
+
+        var base: [NSAttributedString.Key: Any] = [
+            .font: Self.logFont,
+            .paragraphStyle: paragraph,
+        ]
+        if entry.level == .error {
+            base[.backgroundColor] = DWBColor.errorFill.withAlphaComponent(0.16)
+        }
+        func attributes(color: NSColor, font: NSFont = Self.logFont) -> [NSAttributedString.Key: Any] {
+            var result = base
+            result[.foregroundColor] = color
+            result[.font] = font
+            return result
+        }
+
+        let line = NSMutableAttributedString()
+        line.append(NSAttributedString(string: timeFormatter.string(from: entry.date) + "\t",
+                                       attributes: attributes(color: DWBAccessibility.textTertiary)))
+
+        if let image = NSImage.dwbSymbol(entry.level.glyphName, pointSize: 10, weight: .semibold,
+                                         color: statusColor) {
+            let attachment = NSTextAttachment()
+            attachment.image = image
+            attachment.bounds = NSRect(x: 0, y: -1.5, width: image.size.width, height: image.size.height)
+            let glyph = NSMutableAttributedString(attachment: attachment)
+            glyph.addAttributes(base, range: NSRange(location: 0, length: glyph.length))
+            line.append(glyph)
+            line.append(NSAttributedString(string: " ", attributes: attributes(color: statusColor)))
+        }
+        line.append(NSAttributedString(string: entry.level.word + "\t",
+                                       attributes: attributes(color: statusColor, font: Self.levelFont)))
+        line.append(NSAttributedString(string: entry.category + "\t",
+                                       attributes: attributes(color: DWBAccessibility.textSecondary)))
+        line.append(NSAttributedString(string: entry.message + "\n",
+                                       attributes: attributes(color: DWBColor.textPrimary)))
+        return line
     }
 
     private func updateStatus() {
@@ -182,14 +224,6 @@ final class DebugConsoleController: NSWindowController {
         case .info:    return "[\(ts)] [\(entry.category)] \(entry.message)"
         case .warning: return "[\(ts)] [WARN] [\(entry.category)] \(entry.message)"
         case .error:   return "[\(ts)] [ERR ] [\(entry.category)] \(entry.message)"
-        }
-    }
-
-    private func attrsFor(_ level: DebugLevel) -> [NSAttributedString.Key: Any] {
-        switch level {
-        case .info:    return infoAttrs
-        case .warning: return warnAttrs
-        case .error:   return errorAttrs
         }
     }
 
@@ -326,7 +360,7 @@ final class DebugConsoleController: NSWindowController {
         updateStatus()
     }
 
-    @objc private func levelChanged(_ sender: NSSegmentedControl) {
+    @objc private func levelChanged(_ sender: DWBSegmentedControl) {
         switch sender.selectedSegment {
         case 1:  filterMinLevel = .warning
         case 2:  filterMinLevel = .error
@@ -385,47 +419,68 @@ final class DebugConsoleController: NSWindowController {
 
     private func buildUI() {
         guard let cv = window?.contentView else { return }
-        let bg     = NSColor(white: 0.09, alpha: 1.0)
-        let barBg  = NSColor(white: 0.13, alpha: 1.0)
+        let bg     = DWBColor.surfaceSunken
+        let barBg  = DWBColor.canvas
         window?.backgroundColor = bg
-
-        // ── Toolbar (bottom) ──────────────────────────────────────────
-        let toolbarH: CGFloat = 76
-        let toolbar = NSView(frame: NSRect(x: 0, y: 0, width: cv.bounds.width, height: toolbarH))
-        toolbar.wantsLayer = true
-        toolbar.layer?.backgroundColor = barBg.cgColor
-        toolbar.autoresizingMask = [.width]
-        cv.addSubview(toolbar)
+        window?.appearance = NSAppearance(named: .darkAqua)
 
         let W = cv.bounds.width   // 780
+        let barInset: CGFloat = 10
 
-        // Row 0 — status label (y: 4, h: 14)
-        statusLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        statusLabel.textColor = NSColor.white.withAlphaComponent(0.45)
-        statusLabel.frame = NSRect(x: 8, y: 4, width: W - 16, height: 14)
-        statusLabel.autoresizingMask = [.width]
-        toolbar.addSubview(statusLabel)
+        // ── Toolbar (top, on canvas) ─────────────────────────────────
+        let toolbarH: CGFloat = 40
+        let toolbar = NSView(frame: NSRect(x: 0, y: cv.bounds.height - toolbarH, width: W, height: toolbarH))
+        toolbar.wantsLayer = true
+        toolbar.layer?.backgroundColor = barBg.cgColor
+        toolbar.autoresizingMask = [.width, .minYMargin]
+        cv.addSubview(toolbar)
 
-        // Row 1 — filter controls (y: 22, h: 24)
-        let filterY: CGFloat = 22
+        let toolbarRule = DWBRuleView(kind: .border)
+        toolbarRule.frame = NSRect(x: 0, y: 0, width: W, height: 1)
+        toolbarRule.autoresizingMask = [.width]
+        toolbar.addSubview(toolbarRule)
+
         let filterH: CGFloat = 24
-        let catW:    CGFloat = 140
-        let lvlW:    CGFloat = 130
-        let gap:     CGFloat = 6
-        let searchW  = W - 8 - gap - catW - gap - lvlW - 8
+        let filterY = floor((toolbarH - filterH) / 2) + 1
+        let catW:    CGFloat = 150
+        let lvlW:    CGFloat = 150
+        let gap:     CGFloat = 8
+        let searchW  = W - barInset - gap - catW - gap - lvlW - barInset
 
-        searchField.placeholderString = "Filter…"
+        // Filter: a 24 pt pill (radius 12) on `surfaceElevated` with a 1 pt `border`.
+        filterPill.frame = NSRect(x: barInset, y: filterY, width: searchW, height: filterH)
+        filterPill.autoresizingMask = [.width]
+        toolbar.addSubview(filterPill)
+
+        searchField.cell = DWBSearchFieldCell(textCell: "")
+        searchField.placeholderAttributedString = NSAttributedString(string: "Filter…", attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: DWBAccessibility.textTertiary,
+        ])
         searchField.font = .systemFont(ofSize: 11)
-        searchField.frame = NSRect(x: 8, y: filterY, width: searchW, height: filterH)
+        searchField.textColor = DWBColor.textPrimary
+        searchField.isBordered = false
+        searchField.isBezeled = false
+        searchField.drawsBackground = false
+        searchField.focusRingType = .none
+        searchField.frame = NSRect(x: 26, y: 2, width: searchW - 26 - 8, height: filterH - 4)
         searchField.autoresizingMask = [.width]
-        toolbar.addSubview(searchField)
+        searchField.setAccessibilityLabel("Filter log")
+        filterPill.addSubview(searchField)
+        let filterIcon = NSImageView(frame: NSRect(x: 9, y: floor((filterH - 12) / 2), width: 12, height: 12))
+        filterIcon.image = NSImage.dwbSymbol("magnifyingglass", pointSize: 11, weight: .regular,
+                                             color: DWBAccessibility.textTertiary)
+        filterIcon.imageScaling = .scaleProportionallyDown
+        filterIcon.setAccessibilityElement(false)
+        filterPill.addSubview(filterIcon)
 
         categoryPopup.font = .systemFont(ofSize: 11)
         categoryPopup.target = self
         categoryPopup.action = #selector(categoryChanged(_:))
         categoryPopup.addItem(withTitle: "All Categories")
         categoryPopup.lastItem?.tag = -1
-        categoryPopup.frame = NSRect(x: W - lvlW - gap - catW - 8, y: filterY, width: catW, height: filterH)
+        categoryPopup.setAccessibilityLabel("Log category")
+        categoryPopup.frame = NSRect(x: W - lvlW - gap - catW - barInset, y: filterY, width: catW, height: filterH)
         categoryPopup.autoresizingMask = [.minXMargin]
         toolbar.addSubview(categoryPopup)
 
@@ -436,47 +491,67 @@ final class DebugConsoleController: NSWindowController {
         levelSegment.selectedSegment = 0
         levelSegment.target = self
         levelSegment.action = #selector(levelChanged(_:))
-        levelSegment.frame = NSRect(x: W - lvlW - 8, y: filterY, width: lvlW, height: filterH)
+        levelSegment.setAccessibilityLabel("Log level")
+        let levelSize = levelSegment.intrinsicContentSize
+        levelSegment.frame = NSRect(x: W - levelSize.width - barInset,
+                                    y: floor((toolbarH - levelSize.height) / 2) + 1,
+                                    width: levelSize.width,
+                                    height: levelSize.height)
         levelSegment.autoresizingMask = [.minXMargin]
         toolbar.addSubview(levelSegment)
 
-        // Row 2 — action buttons (y: 50, h: 20)
-        let btnY: CGFloat = 50
-        let btnH: CGFloat = 20
+        // ── Footer (bottom, on canvas) ───────────────────────────────
+        let footerH: CGFloat = 40
+        let footer = NSView(frame: NSRect(x: 0, y: 0, width: W, height: footerH))
+        footer.wantsLayer = true
+        footer.layer?.backgroundColor = barBg.cgColor
+        footer.autoresizingMask = [.width]
+        cv.addSubview(footer)
 
-        func makeBtn(_ title: String, action: Selector) -> NSButton {
-            let b = NSButton(title: title, target: self, action: action)
-            b.bezelStyle = .inline
-            b.sizeToFit()
-            return b
+        let footerRule = DWBRuleView(kind: .border)
+        footerRule.frame = NSRect(x: 0, y: footerH - 1, width: W, height: 1)
+        footerRule.autoresizingMask = [.width, .minYMargin]
+        footer.addSubview(footerRule)
+
+        let buttonH: CGFloat = 24
+        let buttonY = floor((footerH - buttonH) / 2) - 1
+        func makeButton(_ title: String, action: Selector) -> DWBButton {
+            DWBButton(title: title, style: .neutral, size: .small, target: self, action: action)
         }
-
-        let btns: [(NSButton)] = [
-            makeBtn("Clear",    action: #selector(clearTapped)),
-            makeBtn("Copy All", action: #selector(copyAllTapped)),
-            makeBtn("Snapshot", action: #selector(copySnapshotTapped)),
-            makeBtn("Export…",  action: #selector(exportTapped)),
+        let buttons = [
+            makeButton("Clear",    action: #selector(clearTapped)),
+            makeButton("Copy All", action: #selector(copyAllTapped)),
+            makeButton("Snapshot", action: #selector(copySnapshotTapped)),
+            makeButton("Export…",  action: #selector(exportTapped)),
         ]
-        var bx: CGFloat = 8
-        for btn in btns {
-            let bw = max(54, btn.frame.width + 6)
-            btn.frame = NSRect(x: bx, y: btnY, width: bw, height: btnH)
-            toolbar.addSubview(btn)
-            bx += bw + 4
+        var bx = barInset
+        for button in buttons {
+            let width = ceil(button.intrinsicContentSize.width)
+            button.frame = NSRect(x: bx, y: buttonY, width: width, height: buttonH)
+            footer.addSubview(button)
+            bx += width + 6
         }
 
-        pauseButton.title = "Pause"
-        pauseButton.bezelStyle = .inline
         pauseButton.target = self
         pauseButton.action = #selector(pauseTapped)
-        pauseButton.sizeToFit()
-        let pauseW = max(60, pauseButton.frame.width + 8)
-        pauseButton.frame = NSRect(x: W - pauseW - 8, y: btnY, width: pauseW, height: btnH)
+        let pauseW: CGFloat = 70
+        pauseButton.frame = NSRect(x: W - pauseW - barInset, y: buttonY, width: pauseW, height: buttonH)
         pauseButton.autoresizingMask = [.minXMargin]
-        toolbar.addSubview(pauseButton)
+        footer.addSubview(pauseButton)
 
-        // ── Scroll view ───────────────────────────────────────────────
-        scrollView.frame = NSRect(x: 0, y: toolbarH, width: W, height: cv.bounds.height - toolbarH)
+        // Status text sits between the buttons and Pause.
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.alignment = .right
+        let statusX = bx + 8
+        statusLabel.frame = NSRect(x: statusX,
+                                   y: floor((footerH - 14) / 2) - 1,
+                                   width: max(0, W - pauseW - barInset - 8 - statusX),
+                                   height: 14)
+        statusLabel.autoresizingMask = [.width]
+        footer.addSubview(statusLabel)
+
+        // ── Log (`surfaceSunken`) ────────────────────────────────────
+        scrollView.frame = NSRect(x: 0, y: footerH, width: W, height: cv.bounds.height - footerH - toolbarH)
         scrollView.autoresizingMask = [.width, .height]
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -499,8 +574,22 @@ final class DebugConsoleController: NSWindowController {
             width: scrollView.contentSize.width,
             height: CGFloat.greatestFiniteMagnitude
         )
+        textView.setAccessibilityLabel("Debug log")
         scrollView.documentView = textView
 
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(accessibilityDidChange),
+                                               name: DWBAccessibility.didChange,
+                                               object: nil)
         updateStatus()
+    }
+
+    /// Increase Contrast changes the secondary and tertiary text the log is drawn with.
+    @objc private func accessibilityDidChange() {
+        searchField.placeholderAttributedString = NSAttributedString(string: "Filter…", attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: DWBAccessibility.textTertiary,
+        ])
+        rebuildTextView()
     }
 }
