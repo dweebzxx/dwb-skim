@@ -102,7 +102,9 @@ enum SkimFileRenamer {
     static func normalizedCustomPrefix(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        return trimmed.hasSuffix("_") ? trimmed : trimmed + "_"
+        var stem = trimmed
+        while stem.last == "_" { stem.removeLast() }
+        return stem + "_"
     }
 
     /// Computes the target filename for a custom-prefix toggle/replace action,

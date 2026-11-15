@@ -313,6 +313,43 @@ final class SkimFileRenamerTests: XCTestCase {
         XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix("   "), "")
     }
 
+    func testNormalizedCustomPrefixCollapsesTrailingUnderscores() {
+        let cases = [
+            ("keep", "keep_"), ("keep_", "keep_"),
+            ("keep__", "keep_"), ("keep___", "keep_"),
+            ("  keep__  ", "keep_"), ("a_b__", "a_b_"),
+            ("_", "_"), ("__", "_"), ("", ""), ("   ", "")
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix(input), expected, input)
+        }
+    }
+
+    func testNormalizedCustomPrefixIsIdempotent() {
+        for input in ["keep", "keep_", "keep__", "keep___", "  keep__  ",
+                      "a_b__", "_", "__", "", "   "] {
+            let normalized = SkimFileRenamer.normalizedCustomPrefix(input)
+            XCTAssertEqual(SkimFileRenamer.normalizedCustomPrefix(normalized), normalized, input)
+        }
+    }
+
+    func testDoubleUnderscorePrefixToggleAndReplaceMatchSingleUnderscore() {
+        let secondary = SkimFileRenamer.normalizedCustomPrefix("delete_")
+        for filename in ["clip.mp4", "keep_clip.mp4", "delete_clip.mp4"] {
+            for action in [CustomPrefixAction.primary, .secondary] {
+                let fromDouble = SkimFileRenamer.customPrefixToggleTargetFilename(
+                    for: filename,
+                    primaryPrefix: SkimFileRenamer.normalizedCustomPrefix("keep__"),
+                    secondaryPrefix: secondary, action: action)
+                let fromSingle = SkimFileRenamer.customPrefixToggleTargetFilename(
+                    for: filename,
+                    primaryPrefix: SkimFileRenamer.normalizedCustomPrefix("keep_"),
+                    secondaryPrefix: secondary, action: action)
+                XCTAssertEqual(fromDouble, fromSingle, "\(filename), \(action)")
+            }
+        }
+    }
+
     func testNormalizedPrefixThenToggleProducesPrefixUnderscoreFilename() {
         let primary = SkimFileRenamer.normalizedCustomPrefix("select")
         XCTAssertEqual(
