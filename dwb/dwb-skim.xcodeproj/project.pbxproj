@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01A1CD3CE2C57A3FA82CEAB4 /* PlaybackStartStallMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C552CA7AF7C9CCF4196BAEA /* PlaybackStartStallMonitor.swift */; };
 		076F3D91D1653004770DA4F5 /* VideoAudioNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF2E2757E1A792C381380EE /* VideoAudioNormalizer.swift */; };
 		07C21F6E93D41C62D2A20645 /* PlaybackBarPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9CD1EEA26A2D44BDD25ABF5 /* PlaybackBarPresentation.swift */; };
 		087A69E02019259A058BBEF2 /* BackgroundAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */; };
@@ -14,15 +15,20 @@
 		0B3AC81C0A358DEC13373D9A /* PlayerHUDViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27A44EA95D754C006DF009B7 /* PlayerHUDViews.swift */; };
 		0C3652CB853B4E0780194324 /* PlaybackCompletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */; };
 		0C7BD99FE93A665C02515418 /* SkimFailedItemTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E29F651982B1AE31976B4C31 /* SkimFailedItemTrackerTests.swift */; };
+		0EA283D5EDFC12749DB62BF4 /* QueueNameFitting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C3714F31DAB112A1095AC7 /* QueueNameFitting.swift */; };
 		102FE45531EEE7F71552BFD3 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F155D6A01AEDDE6380DA268 /* SettingsWindowController.swift */; };
+		11EE385609ED914CD3718F0A /* QueueEmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1AA03F313E9895B5BFAFAC7 /* QueueEmptyStateView.swift */; };
+		125CDB25314FE553ED28FC53 /* QueuePanelGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB7970E2F74CEAE0AD240F7 /* QueuePanelGeometry.swift */; };
 		1401C81E27D5CFF32C67A356 /* VolumeOverlayPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B23AA3F5F3D052A89AF28BB /* VolumeOverlayPresentationTests.swift */; };
 		177BF523F176F857A6DA6BEE /* SkimFileRenamerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */; };
+		1792D276E14544D68780DDE8 /* QueuePanelGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DB7970E2F74CEAE0AD240F7 /* QueuePanelGeometry.swift */; };
 		17EE7FCFCF706F1F5DBAE700 /* SettingsPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0293B5229EBB185636B37794 /* SettingsPresentation.swift */; };
 		195210B2612950ED47569C13 /* UndoToastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10CB0C699A0FFB85EE91BE93 /* UndoToastPresentation.swift */; };
 		1C9733AF28AA488E5724F222 /* SettingsPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0293B5229EBB185636B37794 /* SettingsPresentation.swift */; };
 		1D1FD6AB30D141F8DAB1338A /* SkimStripConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C411BDB45F537CC7988189D /* SkimStripConfirmation.swift */; };
 		1E8159B96FB6D9D59D58294F /* MediaPlaybackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31DDE953CE0261D85A373B49 /* MediaPlaybackPolicyTests.swift */; };
 		21CC10AFA0F771F41BFED017 /* VolumeOverlayPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C8E013B037FD1201EBB3D /* VolumeOverlayPresentation.swift */; };
+		23073C6D31D706633E5A197E /* PrefixAdvanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FE2F156CD3E3A93D7ACA8E /* PrefixAdvanceTests.swift */; };
 		232B3376CF664986ECF9E8B9 /* PreviewRangePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95709703B83DE0D08F958CC3 /* PreviewRangePlannerTests.swift */; };
 		232B39E3310AC9BB3D1F3951 /* SkimPreviewDeadlineReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D11752910F4F1DC7AF08C52 /* SkimPreviewDeadlineReliabilityTests.swift */; };
 		23662AB690BB68BD00B3221C /* MediaFileSupportCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540B2F6365B7C98CD97AFECA /* MediaFileSupportCoreTests.swift */; };
@@ -37,6 +43,7 @@
 		298E57F19F9C13A4451FA32A /* SettingsSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1F3181A50AE38A3DC316B9 /* SettingsSidebarView.swift */; };
 		29F7E397E278BE4EAA887A05 /* SettingsDefaultsRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */; };
 		2A1D5BE6633AE10708330F44 /* SkimPreviewSessionScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6864433C73852FCC235000 /* SkimPreviewSessionScheduler.swift */; };
+		2A2FCE527F75587C6BDECA22 /* QueueNameFitting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C3714F31DAB112A1095AC7 /* QueueNameFitting.swift */; };
 		2AC9381182C94AD06EE74502 /* SkimStripLayoutPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BD7C1CFA6FC4BEFE7CD8245 /* SkimStripLayoutPlanTests.swift */; };
 		2BA72547FE06AD649F213A09 /* QueueRemovalPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */; };
 		2E61FA0E5992630001FCCEF8 /* DropZonePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C486F7DB6AF7A42347A45AE2 /* DropZonePresentation.swift */; };
@@ -50,6 +57,7 @@
 		36824E021BADFCEED1EA7E48 /* VideoSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1802222C6C301A9EF6D9DB40 /* VideoSurfaceView.swift */; };
 		37DB0B9DDB8F963C74BF6B1D /* SkimPreviewPlaybackPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */; };
 		37E1AA2141250FB2370686C6 /* SkimPreviewSessionScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6864433C73852FCC235000 /* SkimPreviewSessionScheduler.swift */; };
+		3A008065D0B867989AFD3D73 /* DebugConsoleRetention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343813D47CD21982794CEE03 /* DebugConsoleRetention.swift */; };
 		3CEDAED5E0BA1AF95F5912D6 /* QueueSearchHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2623DDF1351F1D1DD66C9495 /* QueueSearchHighlight.swift */; };
 		3D68515E25C76D8B82EB4E48 /* SkimReviewStatusDescriptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E98352F6CC5288D195C4A3 /* SkimReviewStatusDescriptor.swift */; };
 		3E584AC3BA3F416321686F33 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC5CB4EA165F65C5FB89BC5 /* main.swift */; };
@@ -88,10 +96,12 @@
 		7A1B5145D68A710D18FD87C2 /* DWBTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80151BA1C0E0DE2538F231B3 /* DWBTheme.swift */; };
 		7DC5A76DADE27DA83B8238F7 /* SkimTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4C4CF9AF5394DC7F4799F /* SkimTheme.swift */; };
 		7E80B55F087ACC7D05D2B8EC /* SkimStripConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C411BDB45F537CC7988189D /* SkimStripConfirmation.swift */; };
+		810922E2CCA727E60B36F839 /* QueueNameFittingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9781A496AC8B726D2FA628 /* QueueNameFittingTests.swift */; };
 		82132C00F00A899E61C62075 /* SkimApplicationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E89F788A90ACE033F64D8A7 /* SkimApplicationConfiguration.swift */; };
 		84168455CAA04C17758226FD /* MediaFileSupportCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23A8BC14657F0EBCB218E13 /* MediaFileSupportCore.swift */; };
 		84D49E71C10E27BFE5920198 /* ScaleMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3772071B27CA36C2D6126A /* ScaleMode.swift */; };
 		8518E0A3EEA89043E8677C05 /* SkimKeyboardShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */; };
+		85A7D916C63D56A9C9511B38 /* QueuePanelGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FB0335BF5560643A61DDFB /* QueuePanelGeometryTests.swift */; };
 		87AA38AB3528759A43528DA0 /* BackgroundAudioSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC350E3A09601C751A84C03A /* BackgroundAudioSettingsTests.swift */; };
 		87AFC967F1F88228A947987A /* QueueRenameReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */; };
 		88B317784FEF7F4839725A5B /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 6CE4B108430F5E22C2E084ED /* VLCKitSPM */; };
@@ -104,6 +114,7 @@
 		8F420EAB2FFFD0F1C0086149 /* DebugLevelPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91D7F9341600CCE7FC17623F /* DebugLevelPresentationTests.swift */; };
 		9387AF0A7F729BF8294851D6 /* QueueRemovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */; };
 		9523C9CFFE579D8508B6AC71 /* SkimStripLayoutPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44F29303F92C7D7F8C057A40 /* SkimStripLayoutPlan.swift */; };
+		95AF85707C6961E48C11B9AA /* PlaybackStartStallMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C552CA7AF7C9CCF4196BAEA /* PlaybackStartStallMonitor.swift */; };
 		985C4C1C799E5B43833D29E4 /* ShortcutsPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A9F4C42DC8181FC0EBAA9D /* ShortcutsPresentation.swift */; };
 		98FE630FCBFC8D4DF0383A89 /* VolumeOverlayPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F44C8E013B037FD1201EBB3D /* VolumeOverlayPresentation.swift */; };
 		9921692C577067EBD9E558A3 /* SettingsDefaultsRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B074674387F7AC2350AFE33 /* SettingsDefaultsRegistry.swift */; };
@@ -128,13 +139,17 @@
 		B20D46DE114A5B8ED5211785 /* VideoAudioNormalizationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D7669768486BD23FC1494F /* VideoAudioNormalizationPolicy.swift */; };
 		B288578947A49FC4B2238675 /* SkimApplicationConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E89F788A90ACE033F64D8A7 /* SkimApplicationConfiguration.swift */; };
 		B2A0726D36D9D8D760D92261 /* SkimMediaAssignmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20B24AC3BA6713EFB20E488A /* SkimMediaAssignmentTests.swift */; };
+		B67BC7AD6F951CFFB4698A15 /* QueuePanelWidthPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD4FF978B42ECFD581928EC /* QueuePanelWidthPolicy.swift */; };
+		B7AF718FE7CBD0225AB28811 /* DebugConsoleRetention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343813D47CD21982794CEE03 /* DebugConsoleRetention.swift */; };
 		B7C8EF0764296F4925AE7D1F /* PlayerWindowReactivationPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */; };
 		B7E803AF8E51533F148CFD15 /* SkimPreviewPlaybackPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEAEB798278CD7D12D58AE1 /* SkimPreviewPlaybackPlanTests.swift */; };
 		B802E6C5C2F621036C3C7482 /* RenameSheetPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 267C28FAF067A3901C09F1BF /* RenameSheetPresentationTests.swift */; };
 		BA0B9E3E515DF8D9AAF43330 /* SkimFileRenamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */; };
 		BC06E293CD831473FE6E89C6 /* DebugLogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795BBB21310949758B09652D /* DebugLogSanitizerTests.swift */; };
+		BC7707CA8E478B242B960CEB /* QueueHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87D3A5F675A484B4CD3AC267 /* QueueHeaderView.swift */; };
 		C1B56D66F2246882D4DB2C71 /* DebugLevelPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564D9EA622BE29DC4DFE8B8F /* DebugLevelPresentation.swift */; };
 		C2C32F090287693AC9FCBFD1 /* PreviewRangePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7383D85EF7CE413F349C588 /* PreviewRangePlanner.swift */; };
+		C439B0059C96A15B49979707 /* DebugConsoleRetentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94701B45F467A6E0819B2005 /* DebugConsoleRetentionTests.swift */; };
 		C6CC7E24DDB3F2A66683BBE1 /* SkimKeyboardShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECC62F3B52E265B4821E5BE /* SkimKeyboardShortcutTests.swift */; };
 		C7C53C0B5C41B7E6636BDC22 /* QueueMarkerChipPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E36D732B0B9EDB59A2CD5C0 /* QueueMarkerChipPresentation.swift */; };
 		C9D6E6E4A33EC089FF62867C /* SettingsDefaultsRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B074674387F7AC2350AFE33 /* SettingsDefaultsRegistry.swift */; };
@@ -147,6 +162,7 @@
 		D4B53944449B25C102256E8D /* SkimSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AEB8070B732E45E09322E97 /* SkimSettingsStore.swift */; };
 		D5DD51594A1501D08A605137 /* QueuePageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E8682BD05143B3383F3CE6 /* QueuePageView.swift */; };
 		D6D3B9A2570DC287A9589C88 /* SkimStripConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E8FA0B28523D2CF36174F07 /* SkimStripConfirmationTests.swift */; };
+		D723E69A9D02253188CBE5C7 /* QueuePanelWidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D71FC9F564CF808E05B9BF /* QueuePanelWidthPolicyTests.swift */; };
 		D918703A9A21AF75484B6E84 /* QueueFooterPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8E554E11CED9C250D1EC58 /* QueueFooterPresentation.swift */; };
 		D9456095F7A9AF3DA4B3759E /* RailButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4AD18EC8A6566CD89B83757 /* RailButton.swift */; };
 		D9CD5CCAFD3A69BFC5393CB2 /* SkimPreviewPlaybackPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */; };
@@ -155,9 +171,11 @@
 		DD4E6C091CCE65A6D74D5A7D /* DebugLogSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */; };
 		E0A131F99380499638FD9858 /* PlaybackCompletionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */; };
 		E0AABA5BB23A4869D7341287 /* SkimTogglePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D4877827DF1F16C124B7E1 /* SkimTogglePolicyTests.swift */; };
+		E0E4E5C1B97043DB9E13A690 /* QueuePanelResizeHandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65EC15FBBB657CA4B3200C6 /* QueuePanelResizeHandleView.swift */; };
 		E4ACEA7BECA5F841A88C0A42 /* ProgressiveRandomSkimPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */; };
 		E549A6EAB4FBC7EF49E7CED9 /* SkimPlaybackStartIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62B2CC86FF7C719E5CA4E3 /* SkimPlaybackStartIntent.swift */; };
 		E9C9B57501ED7D7F6CCB4DA5 /* DropZonePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B718EA66F307C09542AEDA /* DropZonePresentationTests.swift */; };
+		EB7DC6C1B0970DC90A383729 /* PlaybackStartStallMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6874094DAC58313D9858063E /* PlaybackStartStallMonitorTests.swift */; };
 		EBA7BEC7BF6E796ED4D1BDEF /* SkimFileRenamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */; };
 		EDAC7853204677C5618C939B /* QueueFooterPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8E554E11CED9C250D1EC58 /* QueueFooterPresentation.swift */; };
 		EEAA36B8CFF7487B4771D39A /* QueueFooterPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260CE247334B7748FB5C883F /* QueueFooterPresentationTests.swift */; };
@@ -166,6 +184,7 @@
 		F20D646512A8F62C603687FA /* VideoAudioNormalizationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D7669768486BD23FC1494F /* VideoAudioNormalizationPolicy.swift */; };
 		F2FEBEFFDEAA363D23B84922 /* SkimApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AA7AC9730CCA5B2BF2D7C6C /* SkimApplication.swift */; };
 		F663610AB6A6E51672A9FE56 /* SkimFolderDropShuffleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */; };
+		F7791F1415397C6C5F292F8A /* QueuePanelWidthPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD4FF978B42ECFD581928EC /* QueuePanelWidthPolicy.swift */; };
 		F92EEF49DB96FC355CDC5933 /* SkimFolderDropShuffle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */; };
 		F97B01E6DA8FC079D6E853A3 /* UndoToastPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10CB0C699A0FFB85EE91BE93 /* UndoToastPresentation.swift */; };
 		F981C211FCDEC6CB5334F958 /* QueueFooterViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A930543D6D58BBCB6D1765 /* QueueFooterViews.swift */; };
@@ -183,13 +202,16 @@
 		029F4A116A92B950D5C87800 /* PlaybackCompletionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCompletionPolicyTests.swift; sourceTree = "<group>"; };
 		04057AEF7548EB7B17ED885C /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		07BD4A74BEBA02541EA69F4B /* SkimPreviewSessionSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewSessionSchedulerTests.swift; sourceTree = "<group>"; };
+		09FB0335BF5560643A61DDFB /* QueuePanelGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePanelGeometryTests.swift; sourceTree = "<group>"; };
 		0AA7AC9730CCA5B2BF2D7C6C /* SkimApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimApplication.swift; sourceTree = "<group>"; };
 		0B074674387F7AC2350AFE33 /* SettingsDefaultsRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDefaultsRegistry.swift; sourceTree = "<group>"; };
 		0D4011E508FB28BB2055F4E1 /* SkimTogglePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimTogglePolicy.swift; sourceTree = "<group>"; };
+		0FD4FF978B42ECFD581928EC /* QueuePanelWidthPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePanelWidthPolicy.swift; sourceTree = "<group>"; };
 		103F351B26253A8A3F2017E2 /* BackgroundAudioPlaybackControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioPlaybackControllerTests.swift; sourceTree = "<group>"; };
 		10CB0C699A0FFB85EE91BE93 /* UndoToastPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UndoToastPresentation.swift; sourceTree = "<group>"; };
 		14A9F4C42DC8181FC0EBAA9D /* ShortcutsPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsPresentation.swift; sourceTree = "<group>"; };
 		1596C05AEAEF8730F1B3FC77 /* MediaFileSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileSupport.swift; sourceTree = "<group>"; };
+		17FE2F156CD3E3A93D7ACA8E /* PrefixAdvanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefixAdvanceTests.swift; sourceTree = "<group>"; };
 		1802222C6C301A9EF6D9DB40 /* VideoSurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSurfaceView.swift; sourceTree = "<group>"; };
 		18D7669768486BD23FC1494F /* VideoAudioNormalizationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoAudioNormalizationPolicy.swift; sourceTree = "<group>"; };
 		1D22986A88AA93280DC91E95 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -206,6 +228,7 @@
 		31DDE953CE0261D85A373B49 /* MediaPlaybackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackPolicyTests.swift; sourceTree = "<group>"; };
 		32A930543D6D58BBCB6D1765 /* QueueFooterViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueFooterViews.swift; sourceTree = "<group>"; };
 		33B12233C1802489A3381324 /* ShortcutsPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsPageView.swift; sourceTree = "<group>"; };
+		343813D47CD21982794CEE03 /* DebugConsoleRetention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleRetention.swift; sourceTree = "<group>"; };
 		34ECA8A1172D9CCD30F52557 /* SkimFailedItemTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFailedItemTracker.swift; sourceTree = "<group>"; };
 		35E9752F6FBE3E11906F0B4B /* OptionDoubleTapRecognizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionDoubleTapRecognizerTests.swift; sourceTree = "<group>"; };
 		36C50B5A63FFDE33BC31DC88 /* SkimReviewStatusDescriptorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimReviewStatusDescriptorTests.swift; sourceTree = "<group>"; };
@@ -217,6 +240,7 @@
 		46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogSanitizer.swift; sourceTree = "<group>"; };
 		4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressiveRandomSkimPlan.swift; sourceTree = "<group>"; };
 		4BD7C1CFA6FC4BEFE7CD8245 /* SkimStripLayoutPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimStripLayoutPlanTests.swift; sourceTree = "<group>"; };
+		4C552CA7AF7C9CCF4196BAEA /* PlaybackStartStallMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackStartStallMonitor.swift; sourceTree = "<group>"; };
 		4ECC62F3B52E265B4821E5BE /* SkimKeyboardShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimKeyboardShortcutTests.swift; sourceTree = "<group>"; };
 		4F074B70203BCC863BFC592C /* VolumeOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayView.swift; sourceTree = "<group>"; };
 		53B4635EED00A7354F89F960 /* dwb skim.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "dwb skim.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -231,6 +255,8 @@
 		64AE484B8F499E8D6856BA77 /* BackgroundAudioPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioPlaybackController.swift; sourceTree = "<group>"; };
 		669BC584F507B85081AECA5E /* OptionDoubleTapRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionDoubleTapRecognizer.swift; sourceTree = "<group>"; };
 		672DD4D86AA526C2D0A4ADA5 /* SkimSettingsStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimSettingsStripView.swift; sourceTree = "<group>"; };
+		6874094DAC58313D9858063E /* PlaybackStartStallMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackStartStallMonitorTests.swift; sourceTree = "<group>"; };
+		6A9781A496AC8B726D2FA628 /* QueueNameFittingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueNameFittingTests.swift; sourceTree = "<group>"; };
 		6C411BDB45F537CC7988189D /* SkimStripConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimStripConfirmation.swift; sourceTree = "<group>"; };
 		6EB403CD9B5C37190CE75944 /* SkimFileRenamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFileRenamer.swift; sourceTree = "<group>"; };
 		733D0D5660DD7FD554849D21 /* TransportControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportControlsView.swift; sourceTree = "<group>"; };
@@ -245,6 +271,7 @@
 		80151BA1C0E0DE2538F231B3 /* DWBTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DWBTheme.swift; sourceTree = "<group>"; };
 		81735D8B8A51AD65CA63880B /* SkimMediaAssignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimMediaAssignment.swift; sourceTree = "<group>"; };
 		87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlanner.swift; sourceTree = "<group>"; };
+		87D3A5F675A484B4CD3AC267 /* QueueHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueHeaderView.swift; sourceTree = "<group>"; };
 		89195D0AD080A7D06238C733 /* SkimFolderDropShuffleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFolderDropShuffleTests.swift; sourceTree = "<group>"; };
 		89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRemovalTests.swift; sourceTree = "<group>"; };
 		8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueDisplayProjectionTests.swift; sourceTree = "<group>"; };
@@ -252,13 +279,17 @@
 		8B23AA3F5F3D052A89AF28BB /* VolumeOverlayPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeOverlayPresentationTests.swift; sourceTree = "<group>"; };
 		8D9E1C1CD9E94DE463F71A19 /* PlayerWindowReactivationPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerWindowReactivationPlannerTests.swift; sourceTree = "<group>"; };
 		8F155D6A01AEDDE6380DA268 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		90D71FC9F564CF808E05B9BF /* QueuePanelWidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePanelWidthPolicyTests.swift; sourceTree = "<group>"; };
 		90FDB511D7220218C11422F1 /* SettingsDefaultsRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsDefaultsRegistryTests.swift; sourceTree = "<group>"; };
 		91D7F9341600CCE7FC17623F /* DebugLevelPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLevelPresentationTests.swift; sourceTree = "<group>"; };
 		93A5756C92FDDF72755410B4 /* SkimMarkerRenameUndoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimMarkerRenameUndoTests.swift; sourceTree = "<group>"; };
+		94701B45F467A6E0819B2005 /* DebugConsoleRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConsoleRetentionTests.swift; sourceTree = "<group>"; };
 		95709703B83DE0D08F958CC3 /* PreviewRangePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewRangePlannerTests.swift; sourceTree = "<group>"; };
+		97C3714F31DAB112A1095AC7 /* QueueNameFitting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueNameFitting.swift; sourceTree = "<group>"; };
 		9812E37C75E80B7C1CF2EDA1 /* SettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPresentationTests.swift; sourceTree = "<group>"; };
 		9AD6D01E610D3A73E6FA6442 /* IdleAutohideController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleAutohideController.swift; sourceTree = "<group>"; };
 		9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueOrderPlanner.swift; sourceTree = "<group>"; };
+		9DB7970E2F74CEAE0AD240F7 /* QueuePanelGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePanelGeometry.swift; sourceTree = "<group>"; };
 		9DBA1FC499C4787B7989CE37 /* DebugLogRetentionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogRetentionBuffer.swift; sourceTree = "<group>"; };
 		9E8FA0B28523D2CF36174F07 /* SkimStripConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimStripConfirmationTests.swift; sourceTree = "<group>"; };
 		A9B718EA66F307C09542AEDA /* DropZonePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropZonePresentationTests.swift; sourceTree = "<group>"; };
@@ -281,10 +312,12 @@
 		C486F7DB6AF7A42347A45AE2 /* DropZonePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropZonePresentation.swift; sourceTree = "<group>"; };
 		C62D278D7E0188722417DEB0 /* DebugLogRetentionBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogRetentionBufferTests.swift; sourceTree = "<group>"; };
 		C64BA2FF07366335BF0EFE58 /* QueueRenameReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRenameReconciler.swift; sourceTree = "<group>"; };
+		C65EC15FBBB657CA4B3200C6 /* QueuePanelResizeHandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePanelResizeHandleView.swift; sourceTree = "<group>"; };
 		C7E945C83608587935F505B1 /* SkimKeyboardShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimKeyboardShortcut.swift; sourceTree = "<group>"; };
 		C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAudioSettings.swift; sourceTree = "<group>"; };
 		C85B7880F29FA8B5F012CBB2 /* SkimFileRenamerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFileRenamerTests.swift; sourceTree = "<group>"; };
 		CEFBED317C3DC8D4F2F67E30 /* SkimFolderDropShuffle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimFolderDropShuffle.swift; sourceTree = "<group>"; };
+		D1AA03F313E9895B5BFAFAC7 /* QueueEmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueEmptyStateView.swift; sourceTree = "<group>"; };
 		D2B8D9C9C98ECD95E27080CC /* VideoAudioNormalizationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoAudioNormalizationPolicyTests.swift; sourceTree = "<group>"; };
 		D46AA33BD6A5E1E01A70A4DA /* BookmarkStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStoreTests.swift; sourceTree = "<group>"; };
 		DB4002FF7B034C11FF9E6493 /* SkimPreviewPlaybackPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkimPreviewPlaybackPlan.swift; sourceTree = "<group>"; };
@@ -330,6 +363,7 @@
 				103F351B26253A8A3F2017E2 /* BackgroundAudioPlaybackControllerTests.swift */,
 				BC350E3A09601C751A84C03A /* BackgroundAudioSettingsTests.swift */,
 				D46AA33BD6A5E1E01A70A4DA /* BookmarkStoreTests.swift */,
+				94701B45F467A6E0819B2005 /* DebugConsoleRetentionTests.swift */,
 				91D7F9341600CCE7FC17623F /* DebugLevelPresentationTests.swift */,
 				C62D278D7E0188722417DEB0 /* DebugLogRetentionBufferTests.swift */,
 				795BBB21310949758B09652D /* DebugLogSanitizerTests.swift */,
@@ -340,14 +374,19 @@
 				35E9752F6FBE3E11906F0B4B /* OptionDoubleTapRecognizerTests.swift */,
 				F8EC210A4E8A9C8E1BFA250B /* PlaybackBarPresentationTests.swift */,
 				029F4A116A92B950D5C87800 /* PlaybackCompletionPolicyTests.swift */,
+				6874094DAC58313D9858063E /* PlaybackStartStallMonitorTests.swift */,
 				8D9E1C1CD9E94DE463F71A19 /* PlayerWindowReactivationPlannerTests.swift */,
+				17FE2F156CD3E3A93D7ACA8E /* PrefixAdvanceTests.swift */,
 				95709703B83DE0D08F958CC3 /* PreviewRangePlannerTests.swift */,
 				EF7BF2658982FCE47559C5EE /* ProgressiveRandomSkimPlanTests.swift */,
 				8A5A3B33CA5FB8D96AAE6616 /* QueueDisplayProjectionTests.swift */,
 				B5EBB3ADA25A313533642ED3 /* QueueEmptyStatePresentationTests.swift */,
 				260CE247334B7748FB5C883F /* QueueFooterPresentationTests.swift */,
 				B4FE7C5C0551CF620B684508 /* QueueMarkerChipTests.swift */,
+				6A9781A496AC8B726D2FA628 /* QueueNameFittingTests.swift */,
 				1F63BA24D5F52BC71E089EC9 /* QueueOrderPlannerTests.swift */,
+				09FB0335BF5560643A61DDFB /* QueuePanelGeometryTests.swift */,
+				90D71FC9F564CF808E05B9BF /* QueuePanelWidthPolicyTests.swift */,
 				89CB2CAEF334FCEC580E26BF /* QueueRemovalTests.swift */,
 				7781D1A3F3D9420DA7D209F4 /* QueueRenameReconcilerTests.swift */,
 				B215DA37E850F26E99D1BB42 /* QueueSearchHighlightTests.swift */,
@@ -393,6 +432,7 @@
 				C8522694007659A0620F71CB /* BackgroundAudioSettings.swift */,
 				04057AEF7548EB7B17ED885C /* BookmarkStore.swift */,
 				E4B9CDB0567B1F1A60CA925B /* DebugConsoleController.swift */,
+				343813D47CD21982794CEE03 /* DebugConsoleRetention.swift */,
 				564D9EA622BE29DC4DFE8B8F /* DebugLevelPresentation.swift */,
 				9DBA1FC499C4787B7989CE37 /* DebugLogRetentionBuffer.swift */,
 				46E210D3D9BF453D6485B7F5 /* DebugLogSanitizer.swift */,
@@ -436,6 +476,7 @@
 				669BC584F507B85081AECA5E /* OptionDoubleTapRecognizer.swift */,
 				B9CD1EEA26A2D44BDD25ABF5 /* PlaybackBarPresentation.swift */,
 				2771CD8A6E55223A83D8E862 /* PlaybackCompletionPolicy.swift */,
+				4C552CA7AF7C9CCF4196BAEA /* PlaybackStartStallMonitor.swift */,
 				27A44EA95D754C006DF009B7 /* PlayerHUDViews.swift */,
 				30E082862FFA44C3ED91F059 /* PlayerWindowController.swift */,
 				87CE232362761B83C0DE5746 /* PlayerWindowReactivationPlanner.swift */,
@@ -443,11 +484,17 @@
 				4BAEEB44F8E329033EF3F248 /* ProgressiveRandomSkimPlan.swift */,
 				B1A1E285B8F81B7015A4C998 /* QueueDisplayProjection.swift */,
 				3B6333FBE562165C3DE4754F /* QueueEmptyStatePresentation.swift */,
+				D1AA03F313E9895B5BFAFAC7 /* QueueEmptyStateView.swift */,
 				5A8E554E11CED9C250D1EC58 /* QueueFooterPresentation.swift */,
 				32A930543D6D58BBCB6D1765 /* QueueFooterViews.swift */,
+				87D3A5F675A484B4CD3AC267 /* QueueHeaderView.swift */,
 				3E36D732B0B9EDB59A2CD5C0 /* QueueMarkerChipPresentation.swift */,
+				97C3714F31DAB112A1095AC7 /* QueueNameFitting.swift */,
 				9CBEE2AD9CA257EB75B841C8 /* QueueOrderPlanner.swift */,
 				54E8682BD05143B3383F3CE6 /* QueuePageView.swift */,
+				9DB7970E2F74CEAE0AD240F7 /* QueuePanelGeometry.swift */,
+				C65EC15FBBB657CA4B3200C6 /* QueuePanelResizeHandleView.swift */,
+				0FD4FF978B42ECFD581928EC /* QueuePanelWidthPolicy.swift */,
 				7F25E7A6DE17AE132882E228 /* QueueRemovalPlanner.swift */,
 				C64BA2FF07366335BF0EFE58 /* QueueRenameReconciler.swift */,
 				E7F3F50B864D4AB09F01CCF7 /* QueueRowViews.swift */,
@@ -598,6 +645,7 @@
 				310C77B89296ADC60E6034DC /* DWBSheets.swift in Sources */,
 				8B4A36BA3EF544E27FE624C5 /* DWBTheme.swift in Sources */,
 				4DFF51CE1BD362FDB498E15E /* DebugConsoleController.swift in Sources */,
+				3A008065D0B867989AFD3D73 /* DebugConsoleRetention.swift in Sources */,
 				4DA66ADE4D546A5FC0C27F2E /* DebugLevelPresentation.swift in Sources */,
 				9EC2423913634D60BBBBE3B9 /* DebugLogRetentionBuffer.swift in Sources */,
 				D22C6F66FF15E6ED5B61B201 /* DebugLogSanitizer.swift in Sources */,
@@ -609,6 +657,7 @@
 				DC5CC6F83C776AC468C5D39C /* OptionDoubleTapRecognizer.swift in Sources */,
 				07C21F6E93D41C62D2A20645 /* PlaybackBarPresentation.swift in Sources */,
 				0C3652CB853B4E0780194324 /* PlaybackCompletionPolicy.swift in Sources */,
+				01A1CD3CE2C57A3FA82CEAB4 /* PlaybackStartStallMonitor.swift in Sources */,
 				0B3AC81C0A358DEC13373D9A /* PlayerHUDViews.swift in Sources */,
 				FADDF51E131563ABF49B8F60 /* PlayerWindowController.swift in Sources */,
 				B7C8EF0764296F4925AE7D1F /* PlayerWindowReactivationPlanner.swift in Sources */,
@@ -616,11 +665,17 @@
 				3EF39A3AFA303DD62B402384 /* ProgressiveRandomSkimPlan.swift in Sources */,
 				4E35C0EF095C98827A2ADD20 /* QueueDisplayProjection.swift in Sources */,
 				4C7D664D9B0BC2111C56A4AA /* QueueEmptyStatePresentation.swift in Sources */,
+				11EE385609ED914CD3718F0A /* QueueEmptyStateView.swift in Sources */,
 				EDAC7853204677C5618C939B /* QueueFooterPresentation.swift in Sources */,
 				F981C211FCDEC6CB5334F958 /* QueueFooterViews.swift in Sources */,
+				BC7707CA8E478B242B960CEB /* QueueHeaderView.swift in Sources */,
 				C7C53C0B5C41B7E6636BDC22 /* QueueMarkerChipPresentation.swift in Sources */,
+				0EA283D5EDFC12749DB62BF4 /* QueueNameFitting.swift in Sources */,
 				F0FF056478282F44E0F27BC6 /* QueueOrderPlanner.swift in Sources */,
 				D5DD51594A1501D08A605137 /* QueuePageView.swift in Sources */,
+				125CDB25314FE553ED28FC53 /* QueuePanelGeometry.swift in Sources */,
+				E0E4E5C1B97043DB9E13A690 /* QueuePanelResizeHandleView.swift in Sources */,
+				B67BC7AD6F951CFFB4698A15 /* QueuePanelWidthPolicy.swift in Sources */,
 				FEF0B941FEFCF98DAF668E3F /* QueueRemovalPlanner.swift in Sources */,
 				A9267B251406AA30EB8B35F8 /* QueueRenameReconciler.swift in Sources */,
 				269C1719543DEDE126945898 /* QueueRowViews.swift in Sources */,
@@ -676,6 +731,8 @@
 				54FA92C407AB0C1A38F437F2 /* BookmarkStoreTests.swift in Sources */,
 				7A1B5145D68A710D18FD87C2 /* DWBTheme.swift in Sources */,
 				8E7F91F91C45862BA843C4CC /* DWBThemeTests.swift in Sources */,
+				B7AF718FE7CBD0225AB28811 /* DebugConsoleRetention.swift in Sources */,
+				C439B0059C96A15B49979707 /* DebugConsoleRetentionTests.swift in Sources */,
 				C1B56D66F2246882D4DB2C71 /* DebugLevelPresentation.swift in Sources */,
 				8F420EAB2FFFD0F1C0086149 /* DebugLevelPresentationTests.swift in Sources */,
 				2451F3F5D8F3DFB36167E0EE /* DebugLogRetentionBuffer.swift in Sources */,
@@ -694,8 +751,11 @@
 				8915B6ABE9339DB83EA9AA1C /* PlaybackBarPresentationTests.swift in Sources */,
 				E0A131F99380499638FD9858 /* PlaybackCompletionPolicy.swift in Sources */,
 				A15D009631DCAC653EFDD3AF /* PlaybackCompletionPolicyTests.swift in Sources */,
+				95AF85707C6961E48C11B9AA /* PlaybackStartStallMonitor.swift in Sources */,
+				EB7DC6C1B0970DC90A383729 /* PlaybackStartStallMonitorTests.swift in Sources */,
 				5EF141D51022F24AE6B3A07C /* PlayerWindowReactivationPlanner.swift in Sources */,
 				D1C74381D3C7213FD61C8308 /* PlayerWindowReactivationPlannerTests.swift in Sources */,
+				23073C6D31D706633E5A197E /* PrefixAdvanceTests.swift in Sources */,
 				095B77B552F7163BC638D7E7 /* PreviewRangePlanner.swift in Sources */,
 				232B3376CF664986ECF9E8B9 /* PreviewRangePlannerTests.swift in Sources */,
 				E4ACEA7BECA5F841A88C0A42 /* ProgressiveRandomSkimPlan.swift in Sources */,
@@ -708,8 +768,14 @@
 				EEAA36B8CFF7487B4771D39A /* QueueFooterPresentationTests.swift in Sources */,
 				FB279C247CB4548D8DDB538D /* QueueMarkerChipPresentation.swift in Sources */,
 				55ACA17C2D456442BA0AE9C6 /* QueueMarkerChipTests.swift in Sources */,
+				2A2FCE527F75587C6BDECA22 /* QueueNameFitting.swift in Sources */,
+				810922E2CCA727E60B36F839 /* QueueNameFittingTests.swift in Sources */,
 				25AF6FF31FFE0AAD4055B0A2 /* QueueOrderPlanner.swift in Sources */,
 				A3D548A9CF06220E596CBFB8 /* QueueOrderPlannerTests.swift in Sources */,
+				1792D276E14544D68780DDE8 /* QueuePanelGeometry.swift in Sources */,
+				85A7D916C63D56A9C9511B38 /* QueuePanelGeometryTests.swift in Sources */,
+				F7791F1415397C6C5F292F8A /* QueuePanelWidthPolicy.swift in Sources */,
+				D723E69A9D02253188CBE5C7 /* QueuePanelWidthPolicyTests.swift in Sources */,
 				2BA72547FE06AD649F213A09 /* QueueRemovalPlanner.swift in Sources */,
 				9387AF0A7F729BF8294851D6 /* QueueRemovalTests.swift in Sources */,
 				3F74F5F9CB9E9CB074329F2D /* QueueRenameReconciler.swift in Sources */,

@@ -1,26 +1,18 @@
 import Cocoa
 
-// MARK: - Log entry
-
-struct DebugLogEntry {
-    let date: Date
-    let level: DebugLevel
-    let category: String
-    let message: String
-}
-
 // MARK: - Controller
 
 /// App-wide in-app debug console. Off by default; toggle in Settings > Developer.
 /// Ring buffer of 5,000 entries. Supports category, level, and text filtering,
 /// plus Pause/Resume for freezing the visible log while the app continues buffering.
+/// While the console is off, warnings, errors, and the 400 info lines before them are still kept
+/// in memory (see `DebugConsoleRetention`); nothing is written to disk.
 final class DebugConsoleController: NSWindowController {
 
     static let shared = DebugConsoleController()
 
     // MARK: - Constants
 
-    private static let maxEntries = 5_000
     // Cap text-view rebuild rate during log storms. With multiple windows generating
     // sustained logs, an unthrottled rebuild blocks the main thread enough to freeze
     // the whole app (debug console included).
@@ -28,8 +20,8 @@ final class DebugConsoleController: NSWindowController {
 
     // MARK: - Buffer state
 
-    private var entryBuffer = DebugLogRetentionBuffer<DebugLogEntry>(capacity: maxEntries)
-    private var entries: [DebugLogEntry] { entryBuffer.entries }
+    private var retention = DebugConsoleRetention()
+    private var entries: [DebugLogEntry] { retention.entries }
     private(set) var isEnabled: Bool = false
     private var isPaused: Bool = false
     private var knownCategories: [String] = []
@@ -80,8 +72,14 @@ final class DebugConsoleController: NSWindowController {
             DispatchQueue.main.async { log(level: level, category: category, message: message) }
             return
         }
-        guard shared.isEnabled else { return }
-        shared.appendEntry(DebugLogEntry(date: Date(), level: level, category: category, message: message))
+        let entry = DebugLogEntry(date: Date(), level: level, category: category, message: message)
+        if shared.isEnabled {
+            shared.appendEntry(entry)
+        } else {
+            // Console off: keep the line in memory per the retention rules, and do no display work
+            // (no text view, category popup, or status update).
+            shared.retention.store(entry, isConsoleEnabled: false)
+        }
     }
 
     // MARK: - Internal append
@@ -92,7 +90,7 @@ final class DebugConsoleController: NSWindowController {
             knownCategories.sort()
             rebuildCategoryPopup()
         }
-        entryBuffer.append(entry)
+        retention.store(entry, isConsoleEnabled: true)
         scheduleRender()
     }
 
@@ -251,11 +249,17 @@ final class DebugConsoleController: NSWindowController {
         let enabled = SettingsWindowController.isDebugConsoleEnabled()
         if enabled && !isEnabled {
             isEnabled = true
+            // Lines kept while off join the main buffer first; then the category list is rebuilt
+            // from what is stored and the view renders once, with the enable line included.
+            retention.flushContext()
+            retention.store(DebugLogEntry(date: Date(), level: .info, category: "console",
+                                          message: "Debug Console enabled. Before this point only warnings, errors, and the lines just before them were kept."),
+                            isConsoleEnabled: true)
+            knownCategories = retention.categories
+            rebuildCategoryPopup()
             rebuildTextView()
             updateStatus()
             showWindow(nil)
-            appendEntry(DebugLogEntry(date: Date(), level: .info,
-                                      category: "console", message: "Debug Console enabled"))
         } else if !enabled && isEnabled {
             appendEntry(DebugLogEntry(date: Date(), level: .info,
                                       category: "console", message: "Debug Console disabled"))
@@ -276,7 +280,7 @@ final class DebugConsoleController: NSWindowController {
     }
 
     @objc private func clearTapped() {
-        entryBuffer.removeAll()
+        retention.removeAll()
         knownCategories.removeAll()
         filterCategory = nil
         rebuildCategoryPopup()

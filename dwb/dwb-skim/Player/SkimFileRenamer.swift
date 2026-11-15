@@ -35,6 +35,64 @@ enum CustomPrefixAction: Equatable {
     case secondary
 }
 
+/// How a custom-prefix press changes a filename.
+enum CustomPrefixTransition: Equatable {
+    /// Neither configured prefix was present; the requested one was put on.
+    case added
+    /// The other configured prefix was present; it was swapped for the requested one.
+    case replaced
+    /// The requested prefix was present; it was taken off.
+    case removed
+}
+
+/// Where a custom-prefix press came from. Only the `N` / `M` keys may advance
+/// the queue (P52); the Queue Page footer chips never do.
+enum PrefixPressOrigin: Equatable {
+    case key
+    case footerChip
+}
+
+/// Why a prefix press did not advance the queue (Debug Console wording).
+enum PrefixAdvanceSkipReason: String, Equatable {
+    case removed
+    case queueTarget
+    case noNextItem
+    case renameFailed
+}
+
+/// The outcome of the advance-after-prefix rule for one press.
+enum PrefixAdvanceDecision: Equatable {
+    /// The setting is off; behave exactly as before and log nothing extra.
+    case settingOff
+    case advance
+    case skip(PrefixAdvanceSkipReason)
+}
+
+enum PrefixAdvancePolicy {
+    /// Decides whether a prefix press may advance to the next item once its
+    /// rename succeeds. Pure: no AppKit, VLCKit, or filesystem access.
+    ///
+    /// - `targetDisplayIndices`: the resolved display indices the press acts on.
+    /// - `transition`: the transition for a single target, or `nil` when the
+    ///   press changes nothing (which never advances).
+    /// - `hasNextItem`: true when `Next` would move (a later item exists, or Loop queue is on).
+    static func decision(settingEnabled: Bool,
+                         origin: PrefixPressOrigin,
+                         targetDisplayIndices: [Int],
+                         currentDisplayIndex: Int,
+                         transition: CustomPrefixTransition?,
+                         hasNextItem: Bool) -> PrefixAdvanceDecision {
+        guard settingEnabled else { return .settingOff }
+        guard origin == .key else { return .skip(.queueTarget) }
+        guard targetDisplayIndices.count == 1,
+              targetDisplayIndices[0] == currentDisplayIndex else { return .skip(.queueTarget) }
+        guard let transition else { return .skip(.renameFailed) }
+        guard transition != .removed else { return .skip(.removed) }
+        guard hasNextItem else { return .skip(.noNextItem) }
+        return .advance
+    }
+}
+
 enum SkimFileRenamer {
 
     /// The authoritative form of a configured custom prefix: leading/trailing
@@ -68,6 +126,38 @@ enum SkimFileRenamer {
                                                 primaryPrefix: String,
                                                 secondaryPrefix: String,
                                                 action: CustomPrefixAction) -> String? {
+        guard let resolution = customPrefixResolution(for: filename,
+                                                      primaryPrefix: primaryPrefix,
+                                                      secondaryPrefix: secondaryPrefix,
+                                                      action: action) else { return nil }
+        return resolution.target == filename ? nil : resolution.target
+    }
+
+    /// What a custom-prefix action does to `filename`: `.added` (neither
+    /// configured prefix present), `.replaced` (the other prefix present), or
+    /// `.removed` (the requested prefix present). `nil` when the action is a
+    /// no-op — an empty requested prefix or an unchanged name — exactly when
+    /// `customPrefixToggleTargetFilename` returns `nil`. Both functions share
+    /// `customPrefixResolution`, so they cannot disagree.
+    static func customPrefixTransition(for filename: String,
+                                       primaryPrefix: String,
+                                       secondaryPrefix: String,
+                                       action: CustomPrefixAction) -> CustomPrefixTransition? {
+        guard let resolution = customPrefixResolution(for: filename,
+                                                      primaryPrefix: primaryPrefix,
+                                                      secondaryPrefix: secondaryPrefix,
+                                                      action: action),
+              resolution.target != filename else { return nil }
+        return resolution.transition
+    }
+
+    /// The single branch table behind the toggle target and its transition
+    /// kind. `nil` only for an empty requested prefix.
+    private static func customPrefixResolution(for filename: String,
+                                               primaryPrefix: String,
+                                               secondaryPrefix: String,
+                                               action: CustomPrefixAction)
+        -> (transition: CustomPrefixTransition, target: String)? {
         let requested = action == .primary ? primaryPrefix : secondaryPrefix
         let other     = action == .primary ? secondaryPrefix : primaryPrefix
         guard !requested.isEmpty else { return nil }
@@ -87,13 +177,11 @@ enum SkimFileRenamer {
             present = .none
         }
 
-        let target: String
         switch present {
-        case .none:      target = requested + filename
-        case .requested: target = String(filename.dropFirst(requested.count))
-        case .other:     target = requested + String(filename.dropFirst(other.count))
+        case .none:      return (.added, requested + filename)
+        case .requested: return (.removed, String(filename.dropFirst(requested.count)))
+        case .other:     return (.replaced, requested + String(filename.dropFirst(other.count)))
         }
-        return target == filename ? nil : target
     }
 
     /// Renames `sourceURL` to a target filename derived from `typedFilename`,

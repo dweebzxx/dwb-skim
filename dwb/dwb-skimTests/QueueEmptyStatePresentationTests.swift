@@ -40,7 +40,7 @@ final class QueueEmptyStatePresentationTests: XCTestCase {
 
     func testFilteredStatesUseTheNeutralGlyphs() {
         XCTAssertEqual(QueueEmptyState.noMatches.glyphName, "magnifyingglass")
-        XCTAssertEqual(QueueEmptyState.noBookmarks.glyphName, "bookmark.slash")
+        XCTAssertEqual(QueueEmptyState.noBookmarks.glyphName, "bookmark")   // design system 10.6 table
         // The empty queue shows the app icon instead of a glyph.
         XCTAssertNil(QueueEmptyState.emptyQueue.glyphName)
     }
@@ -49,5 +49,13 @@ final class QueueEmptyStatePresentationTests: XCTestCase {
         XCTAssertEqual(QueueEmptyState.emptyQueue.title, "No media in queue")
         XCTAssertEqual(QueueEmptyState.emptyQueue.detail, "Add files or folders to build the queue.")
         XCTAssertEqual(QueueEmptyState.emptyQueue.actionTitle, "Add Media")
+    }
+
+    func testFilteredStatesHaveNoHelperLine() {
+        // Design system 10.6: the filtered states are a glyph circle, a title and one button; only the genuinely
+        // empty queue has the helper text.
+        XCTAssertNil(QueueEmptyState.noMatches.detail)
+        XCTAssertNil(QueueEmptyState.noBookmarks.detail)
+        XCTAssertNotNil(QueueEmptyState.emptyQueue.detail)
     }
 }

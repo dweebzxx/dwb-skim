@@ -1,310 +1,373 @@
 import Cocoa
 
-// The queue footer's marker chip group (design system "File markers").
+// The active queue footer (design system 10.5): exactly two rows at every width.
 //
-// The group is 28 pt tall, radius 12, `surfaceElevated` with a 1 pt `border`. It holds
-// the primary and secondary prefix chips and ends with the Undo button. The `N`, `M` and
-// `⌘Z` hints are not drawn; they stay in the tooltips and accessibility labels. The chips keep the one-click
-// behavior of the prefix buttons; this file only draws them.
+//   Row 1, actions:  Remove · primary prefix (N) · secondary prefix (M) · Undo — four equal sections.
+//   Row 2, status:   Rescan · total · Clear queue — 100 / flexible / 110 (compact 34 / flexible / 34).
+//
+// Each section is the complete button and hit target. Hover and pressed are neutral `textPrimary` washes over
+// the whole section; nothing moves, scales or reflows. Frames come from `QueueFooterLayout`.
 
-final class QueueMarkerChipGroupView: NSView {
+// MARK: - Footer
 
-    static let height: CGFloat = 28
+final class QueueFooterView: NSView {
 
-    var onChipTapped: ((QueueMarkerChip.Kind) -> Void)?
-    var onUndoTapped: (() -> Void)?
+    var onRemove: (() -> Void)?
+    var onPrefix: ((QueueMarkerChip.Kind) -> Void)?
+    var onUndo: (() -> Void)?
+    var onRescan: (() -> Void)?
+    var onClearQueue: (() -> Void)?
 
-    var isUndoEnabled = false {
-        didSet { undoButton.isEnabled = isUndoEnabled }
-    }
+    private let removeCell = QueueFooterCellView()
+    private let primaryCell = QueueFooterCellView()
+    private let secondaryCell = QueueFooterCellView()
+    private let undoCell = QueueFooterCellView()
+    private let rescanCell = QueueFooterCellView()
+    private let clearCell = QueueFooterCellView()
+    private let totalLabel = DWBLabel("", size: 10.5, weight: .medium, tone: .secondary, tabularDigits: true)
 
-    /// Undo shows only its glyph. The footer sets this from `QueueFooterPresentation.markerGroupPlan`.
-    var isUndoCompact = false {
-        didSet {
-            guard isUndoCompact != oldValue else { return }
-            undoButton.isCompact = isUndoCompact
-            needsLayout = true
-            invalidateIntrinsicContentSize()
-        }
-    }
+    private let topRule = DWBRuleView(kind: .gridLine)
+    private let actionRule = DWBRuleView(kind: .gridLine)
+    private let actionDividers = (0..<3).map { _ in QueueDividerView() }
+    private let totalDividers = (0..<2).map { _ in QueueDividerView() }
 
-    private var chips: [QueueMarkerChip] = []
-    private var chipButtons: [QueueMarkerChipButton] = []
-    private let divider = DWBRuleView(kind: .border, vertical: true)
-    private let undoButton = QueueUndoButton()
+    private(set) var layoutModel = QueueFooterLayout.make(width: 0)
 
-    private let sidePadding: CGFloat = 3
-    private let chipGap: CGFloat = 2
-    private let dividerInset: CGFloat = 3
+    private var durationText = MediaFileSupport.formatClockDuration(0)
+    private var itemCount = 0
+    private var visibleCount = 0
+    private var isFiltered = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        addSubview(divider)
-        undoButton.target = self
-        undoButton.action = #selector(undoTapped)
-        undoButton.isEnabled = false
-        addSubview(undoButton)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("File markers")
+        wantsLayer = true
+        layer?.backgroundColor = DWBColor.canvas.cgColor
+
+        removeCell.content = .symbol(QueueRemovalPresentation.buttonSymbolName)
+        removeCell.toolTip = QueueRemovalPresentation.buttonToolTip
+        removeCell.setAccessibilityLabel(QueueRemovalPresentation.buttonAccessibilityLabel)
+        removeCell.target = self
+        removeCell.action = #selector(removeTapped)
+
+        primaryCell.content = .marker(kind: .primary, label: QueueMarkerChip.blankLabel)
+        primaryCell.target = self
+        primaryCell.action = #selector(primaryTapped)
+
+        secondaryCell.content = .marker(kind: .secondary, label: QueueMarkerChip.blankLabel)
+        secondaryCell.target = self
+        secondaryCell.action = #selector(secondaryTapped)
+
+        undoCell.content = .symbol("arrow.uturn.backward")
+        undoCell.toolTip = "Undo the last prefix change (⌘Z)"
+        undoCell.setAccessibilityLabel("Undo last prefix change")
+        undoCell.target = self
+        undoCell.action = #selector(undoTapped)
+
+        rescanCell.content = .utility(symbol: "arrow.clockwise", title: "Rescan")
+        rescanCell.setAccessibilityLabel("Rescan Folder")
+        rescanCell.target = self
+        rescanCell.action = #selector(rescanTapped)
+        setRescanSource("Individual files")
+
+        clearCell.content = .utility(symbol: "trash", title: "Clear queue")
+        clearCell.toolTip = "Clear Queue"
+        clearCell.setAccessibilityLabel("Clear Queue")
+        clearCell.target = self
+        clearCell.action = #selector(clearTapped)
+
+        totalLabel.alignment = .center
+        totalLabel.lineBreakMode = .byClipping
+        totalLabel.setAccessibilityRole(.staticText)
+
+        for view in [topRule, actionRule] as [NSView] { addSubview(view) }
+        for view in [removeCell, primaryCell, secondaryCell, undoCell, rescanCell, clearCell] as [NSView] { addSubview(view) }
+        for view in actionDividers + totalDividers { addSubview(view) }
+        addSubview(totalLabel)
+        updateTotalText()
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
 
-    func update(chips: [QueueMarkerChip]) {
-        self.chips = chips
-        rebuildChips()
-    }
+    // MARK: State
 
-    private func rebuildChips() {
-        chipButtons.forEach { $0.removeFromSuperview() }
-        chipButtons = []
-        for chip in chips {
-            let button = QueueMarkerChipButton(chip: chip)
-            button.target = self
-            button.action = #selector(chipTapped(_:))
-            addSubview(button)
-            chipButtons.append(button)
+    /// - Parameters:
+    ///   - chips: the marker chips from `QueueMarkerChip.chips`; a missing secondary leaves its grid position empty.
+    ///   - canRemove: something is targeted (the selection, or the visible current item).
+    func update(chips: [QueueMarkerChip], canRemove: Bool, canUndo: Bool, hasItems: Bool) {
+        for (cell, kind) in [(primaryCell, QueueMarkerChip.Kind.primary), (secondaryCell, .secondary)] {
+            guard let chip = chips.first(where: { $0.kind == kind }) else {
+                // Suppressed (the secondary repeats the primary): the position stays, with no action.
+                cell.isHidden = true
+                cell.isEnabled = false
+                continue
+            }
+            cell.isHidden = false
+            cell.content = .marker(kind: kind, label: chip.label)
+            cell.markState = chip.markState
+            cell.toolTip = chip.tooltip
+            cell.setAccessibilityLabel(chip.accessibilityLabel)
+            cell.setAccessibilityValue(chip.accessibilityValue)
+            cell.isEnabled = chip.isEnabled
         }
-        divider.isHidden = chipButtons.isEmpty
+        removeCell.isEnabled = hasItems && canRemove
+        undoCell.isEnabled = canUndo
+        rescanCell.isEnabled = hasItems
+        clearCell.isEnabled = hasItems
         needsLayout = true
-        invalidateIntrinsicContentSize()
     }
 
-    /// The width the group needs with Undo spelled out (`compactUndo` false) or glyph-only.
-    func width(compactUndo: Bool) -> CGFloat {
-        var width = sidePadding * 2
-        for button in chipButtons {
-            width += button.intrinsicContentSize.width + chipGap
-        }
-        if !chipButtons.isEmpty {
-            // The last chip gap is replaced by the divider block.
-            width += -chipGap + dividerInset * 2 + 1
-        }
-        width += QueueUndoButton.width(compact: compactUndo)
-        return ceil(width)
+    /// The window's whole-queue duration text, and the counts for the status row's total.
+    func setTotal(durationText: String, itemCount: Int, visibleCount: Int, isFiltered: Bool) {
+        self.durationText = durationText
+        self.itemCount = itemCount
+        self.visibleCount = visibleCount
+        self.isFiltered = isFiltered
+        updateTotalText()
     }
+
+    /// The retired source strip's information, kept on Rescan: its full path, or "Individual files".
+    func setRescanSource(_ display: String) {
+        let help = "Original source: \(display)"
+        rescanCell.toolTip = "Rescan Folder — refresh the queue from current folder contents on disk\n\(help)"
+        rescanCell.setAccessibilityHelp(help)
+    }
+
+    private func updateTotalText() {
+        let count = QueueTotalPresentation.countText(itemCount: itemCount, visibleCount: visibleCount, isFiltered: isFiltered)
+        let full = QueueTotalPresentation.fullText(durationText: durationText, countText: count)
+        totalLabel.stringValue = QueueTotalPresentation.fit(durationText: durationText,
+                                                            countText: count,
+                                                            availableWidth: layoutModel.totalFitWidth) {
+            QueueFonts.width(of: $0, font: QueueFonts.total)
+        }
+        totalLabel.toolTip = full
+        totalLabel.setAccessibilityLabel(full)
+        totalLabel.setAccessibilityValue(full)
+    }
+
+    // MARK: Layout
 
     override func layout() {
         super.layout()
-        let chipHeight: CGFloat = 22
-        let y = floor((bounds.height - chipHeight) / 2)
-        var x = sidePadding
-        for button in chipButtons {
-            let size = button.intrinsicContentSize
-            button.frame = NSRect(x: x, y: y, width: size.width, height: chipHeight)
-            x += size.width + chipGap
-        }
-        if !chipButtons.isEmpty {
-            x += -chipGap + dividerInset
-            divider.frame = NSRect(x: x, y: floor((bounds.height - 14) / 2), width: 1, height: 14)
-            x += 1 + dividerInset
-        }
-        let undoSize = undoButton.intrinsicContentSize
-        undoButton.frame = NSRect(x: x, y: y, width: undoSize.width, height: chipHeight)
+        let model = QueueFooterLayout.make(width: bounds.width)
+        layoutModel = model
+
+        topRule.frame = model.topRule
+        actionRule.frame = model.actionRule
+        let cells = [removeCell, primaryCell, secondaryCell, undoCell]
+        for (cell, frame) in zip(cells, model.actionCells) { cell.frame = frame }
+        for (divider, frame) in zip(actionDividers, model.actionDividers) { divider.frame = frame }
+        rescanCell.frame = model.rescanCell
+        clearCell.frame = model.clearCell
+        for (divider, frame) in zip(totalDividers, model.totalDividers) { divider.frame = frame }
+
+        for cell in [primaryCell, secondaryCell] { cell.isCompact = model.isCompact }
+        for cell in [rescanCell, clearCell] { cell.showsUtilityLabel = !model.isCompact }
+
+        let lineHeight = ceil(QueueFonts.total.ascender - QueueFonts.total.descender + QueueFonts.total.leading)
+        totalLabel.frame = NSRect(x: model.totalCell.minX + DWBMetrics.queueTotalFitInset / 2,
+                                  y: floor((model.totalCell.height - lineHeight) / 2),
+                                  width: max(0, model.totalCell.width - DWBMetrics.queueTotalFitInset),
+                                  height: lineHeight)
+        updateTotalText()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: QueueFooterPresentation.markerGroupCornerRadius,
-                                yRadius: QueueFooterPresentation.markerGroupCornerRadius)
-        DWBColor.surfaceElevated.setFill()
-        path.fill()
-        DWBAccessibility.border.setStroke()
-        path.lineWidth = 1
-        path.stroke()
-    }
+    // MARK: Actions
 
-    @objc private func chipTapped(_ sender: QueueMarkerChipButton) {
-        onChipTapped?(sender.chip.kind)
-    }
+    @objc private func removeTapped() { onRemove?() }
+    @objc private func primaryTapped() { onPrefix?(.primary) }
+    @objc private func secondaryTapped() { onPrefix?(.secondary) }
+    @objc private func undoTapped() { onUndo?() }
+    @objc private func rescanTapped() { onRescan?() }
+    @objc private func clearTapped() { onClearQueue?() }
 
-    @objc private func undoTapped() {
-        onUndoTapped?()
-    }
+    /// The right edge of the total's cell in this view's coordinates (queue geometry diagnostics).
+    var totalRightEdge: CGFloat { layoutModel.totalCell.maxX }
 }
 
-// MARK: - Chip
+// MARK: - Divider
 
-/// A prefix chip (`N` primary, `M` secondary): 22 pt tall, `radiusPill` like the group outline, the trimmed prefix in
-/// monospaced 11 pt semibold, with no key tag drawn. Applied chips take the marker fill at 18% with a 1 pt
-/// marker-fill edge. A blank prefix shows "—" in `textDisabled` and is disabled.
-private final class QueueMarkerChipButton: NSButton {
-
-    let chip: QueueMarkerChip
-    private var isHovering = false
-    private var trackingAreaReference: NSTrackingArea?
-
-    init(chip: QueueMarkerChip) {
-        self.chip = chip
-        super.init(frame: .zero)
-        isBordered = false
-        bezelStyle = .regularSquare
-        setButtonType(.momentaryPushIn)
-        focusRingType = .none
-        isEnabled = chip.isEnabled
-        title = chip.label
-        setAccessibilityLabel(chip.accessibilityLabel)
-        setAccessibilityValue(chip.accessibilityValue)
-        toolTip = chip.tooltip
+/// A 0.5 pt `border` divider (strong under Increase Contrast). It takes no clicks.
+final class QueueDividerView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        applyColor()
         DWBAccessibility.observe(self, selector: #selector(accessibilityDidChange))
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
 
-    private let horizontalPadding: CGFloat = 8
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    private var labelFont: NSFont { .monospacedSystemFont(ofSize: 11, weight: .semibold) }
+    private func applyColor() { layer?.backgroundColor = DWBAccessibility.border.cgColor }
 
-    private func width(of string: String, font: NSFont) -> CGFloat {
-        ceil((string as NSString).size(withAttributes: [.font: font]).width)
-    }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: horizontalPadding * 2 + width(of: chip.label, font: labelFont), height: 22)
-    }
-
-    private var markerColor: NSColor {
-        chip.kind == .primary ? theme.markerPrimary : theme.markerSecondary
-    }
-
-    private var markerFill: NSColor {
-        chip.kind == .primary ? theme.markerPrimaryFill : theme.markerSecondaryFill
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: QueueFooterPresentation.markerGroupCornerRadius,
-                                yRadius: QueueFooterPresentation.markerGroupCornerRadius)
-        if chip.isApplied {
-            markerFill.withAlphaComponent(0.18).setFill()
-            path.fill()
-            markerFill.setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        } else if isHovering, chip.isEnabled {
-            DWBColor.overlayHover.setFill()
-            path.fill()
-        }
-
-        let prefixColor = chip.isEnabled ? markerColor : DWBColor.textDisabled
-        let labelAttributes: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: prefixColor]
-        let labelSize = (chip.label as NSString).size(withAttributes: labelAttributes)
-        (chip.label as NSString).draw(at: NSPoint(x: floor((bounds.width - labelSize.width) / 2),
-                                                  y: floor((bounds.height - labelSize.height) / 2)),
-                                      withAttributes: labelAttributes)
-    }
-
-    override var acceptsFirstResponder: Bool { isEnabled }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-                                  owner: self,
-                                  userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaReference = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-        needsDisplay = true
-    }
-
-    @objc private func accessibilityDidChange() {
-        needsDisplay = true
-    }
+    @objc private func accessibilityDidChange() { applyColor() }
 }
 
-// MARK: - Undo
+// MARK: - Cell
 
-/// The group's Undo button: `arrow.uturn.backward` and "Undo", 22 pt tall, `radiusPill` like the group outline, with no
-/// `⌘Z` hint drawn. At narrow widths it shows only the glyph.
-private final class QueueUndoButton: NSButton {
+/// One footer section. It is the whole button: the hover and pressed washes fill it edge to edge, and its icon or
+/// label is centered in it. A marker section may carry a state mark (a 4 pt dot for applied, a 4 pt ring for
+/// mixed) in its top-right corner, in the label's color; there is no colored fill, pill or underline.
+///
+/// Disabled is the whole control at 0.4 alpha, applied once through `alphaValue`; the label keeps its own color.
+/// A mouse click never takes focus, so the 2 pt focus ring (3 pt `accentText` under Increase Contrast) shows only
+/// for keyboard focus.
+final class QueueFooterCellView: NSView {
 
-    var isCompact = false {
+    enum Content: Equatable {
+        case symbol(String)
+        case marker(kind: QueueMarkerChip.Kind, label: String)
+        case utility(symbol: String, title: String)
+    }
+
+    var content: Content = .symbol("questionmark") {
+        didSet { if content != oldValue { needsDisplay = true } }
+    }
+    var markState: QueueMarkerChip.MarkState = .none {
+        didSet { if markState != oldValue { needsDisplay = true } }
+    }
+    var isCompact = true {
+        didSet { if isCompact != oldValue { needsDisplay = true } }
+    }
+    /// Rescan and Clear queue hide their labels in the compact footer.
+    var showsUtilityLabel = false {
+        didSet { if showsUtilityLabel != oldValue { needsDisplay = true } }
+    }
+
+    private var isHovering = false { didSet { needsDisplay = true } }
+    private var isPressed = false { didSet { needsDisplay = true } }
+    private var isKeyboardFocused = false { didSet { needsDisplay = true } }
+    private var trackingAreaReference: NSTrackingArea?
+
+    override var isFlipped: Bool { true }
+
+    /// The action and its target are stored here: a bare view (unlike an `NSControl` with no cell) keeps them.
+    weak var target: AnyObject?
+    var action: Selector?
+
+    var isEnabled = true {
         didSet {
-            guard isCompact != oldValue else { return }
-            invalidateIntrinsicContentSize()
+            guard isEnabled != oldValue else { return }
+            alphaValue = isEnabled ? 1 : DWBMetrics.queueFooterDisabledAlpha
+            if !isEnabled {
+                isHovering = false
+                isPressed = false
+            }
             needsDisplay = true
         }
     }
 
-    private var isHovering = false
-    private var trackingAreaReference: NSTrackingArea?
+    @discardableResult
+    private func sendAction() -> Bool {
+        guard let action else { return false }
+        return NSApp.sendAction(action, to: target, from: self)
+    }
 
-    init() {
-        super.init(frame: .zero)
-        isBordered = false
-        bezelStyle = .regularSquare
-        setButtonType(.momentaryPushIn)
-        focusRingType = .none
-        title = "Undo"
-        toolTip = "Undo the last prefix change (⌘Z)"
-        setAccessibilityLabel("Undo last prefix change")
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
         DWBAccessibility.observe(self, selector: #selector(accessibilityDidChange))
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
 
-    override var isEnabled: Bool {
-        didSet { needsDisplay = true }
-    }
+    @objc private func accessibilityDidChange() { needsDisplay = true }
 
-    private var padding: CGFloat { isCompact ? 6 : 8 }
-    private let glyphSize: CGFloat = 12
-    private var labelFont: NSFont { .systemFont(ofSize: 11, weight: .semibold) }
+    // MARK: Drawing
 
-    private func width(of string: String, font: NSFont) -> CGFloat {
-        ceil((string as NSString).size(withAttributes: [.font: font]).width)
-    }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: Self.width(compact: isCompact), height: 22)
-    }
-
-    /// The button's width with its word ("Undo") or with the glyph only.
-    static func width(compact: Bool) -> CGFloat {
-        let padding: CGFloat = compact ? 6 : 8
-        var width = padding * 2 + 12
-        if !compact {
-            let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-            width += 5 + ceil(("Undo" as NSString).size(withAttributes: [.font: font]).width)
-        }
-        return ceil(width)
+    private var markerColor: NSColor? {
+        guard case .marker(let kind, _) = content else { return nil }
+        return kind == .primary ? theme.markerPrimary : theme.markerSecondary
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if isHovering, isEnabled {
-            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                    xRadius: QueueFooterPresentation.markerGroupCornerRadius,
-                                    yRadius: QueueFooterPresentation.markerGroupCornerRadius)
-            DWBColor.overlayHover.setFill()
-            path.fill()
+        if isEnabled, isPressed || isHovering {
+            let alpha = isPressed ? DWBMetrics.queueCellPressedAlpha : DWBMetrics.queueCellHoverAlpha
+            DWBColor.textPrimary.withAlphaComponent(alpha).setFill()
+            bounds.fill()
         }
 
-        let color = isEnabled ? DWBColor.textPrimary : DWBColor.textDisabled
-        var x = padding
-        if let glyph = NSImage.dwbSymbol("arrow.uturn.backward", pointSize: glyphSize, color: color) {
-            glyph.draw(in: NSRect(x: x, y: floor((bounds.height - glyph.size.height) / 2),
-                                  width: glyph.size.width, height: glyph.size.height))
-            x += glyphSize
+        switch content {
+        case .symbol(let name):
+            drawGlyph(name, centeredAt: NSPoint(x: bounds.midX, y: bounds.midY))
+        case .marker(_, let label):
+            drawMarkerLabel(label)
+            drawStateMark()
+        case .utility(let symbol, let title):
+            drawUtility(symbol: symbol, title: title)
         }
-        guard !isCompact else { return }
-        x += 5
-        let labelAttributes: [NSAttributedString.Key: Any] = [.font: labelFont, .foregroundColor: color]
-        let labelSize = ("Undo" as NSString).size(withAttributes: labelAttributes)
-        ("Undo" as NSString).draw(at: NSPoint(x: x, y: floor((bounds.height - labelSize.height) / 2)),
-                                  withAttributes: labelAttributes)
+
+        if isKeyboardFocused {
+            let ring = DWBAccessibility.focusWidth
+            let path = NSBezierPath(rect: bounds.insetBy(dx: 3 + ring / 2, dy: 3 + ring / 2))
+            path.lineWidth = ring
+            DWBAccessibility.focusRing.setStroke()
+            path.stroke()
+        }
     }
 
-    override var acceptsFirstResponder: Bool { isEnabled }
+    private func drawGlyph(_ name: String, centeredAt center: NSPoint) {
+        guard let image = NSImage.dwbSymbol(name, pointSize: DWBMetrics.queueCellIcon, weight: .regular,
+                                            color: DWBColor.textPrimary) else { return }
+        let size = image.size
+        image.draw(in: NSRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                              width: size.width, height: size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    private func drawUtility(symbol: String, title: String) {
+        guard let image = NSImage.dwbSymbol(symbol, pointSize: DWBMetrics.queueCellIcon, weight: .regular,
+                                            color: DWBColor.textPrimary) else { return }
+        let gap: CGFloat = 6
+        let font = QueueFonts.utility
+        let textWidth = showsUtilityLabel ? QueueFonts.width(of: title, font: font) : 0
+        let total = image.size.width + (showsUtilityLabel ? gap + textWidth : 0)
+        var x = floor((bounds.width - total) / 2)
+        image.draw(in: NSRect(x: x, y: floor((bounds.height - image.size.height) / 2),
+                              width: image.size.width, height: image.size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        guard showsUtilityLabel else { return }
+        x += image.size.width + gap
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        (title as NSString).draw(at: NSPoint(x: x, y: floor((bounds.height - lineHeight) / 2)),
+                                 withAttributes: [.font: font, .foregroundColor: DWBColor.textPrimary])
+    }
+
+    private func drawMarkerLabel(_ label: String) {
+        guard let color = markerColor else { return }
+        let limit = QueueMarkerCellGeometry.labelWidthLimit(sectionWidth: bounds.width, isCompact: isCompact)
+        let shown = QueuePrefixLabelFitting.fit(label, maxWidth: limit)
+        let font = QueueFonts.marker
+        let width = QueueFonts.width(of: shown, font: font)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        let frame = QueueMarkerCellGeometry.labelFrame(sectionSize: bounds.size, labelWidth: width, lineHeight: lineHeight)
+        (shown as NSString).draw(at: frame.origin, withAttributes: [.font: font, .foregroundColor: color])
+    }
+
+    private func drawStateMark() {
+        guard let color = markerColor, markState != .none else { return }
+        let frame = QueueMarkerCellGeometry.markFrame(sectionWidth: bounds.width)
+        switch markState {
+        case .applied:
+            color.setFill()
+            NSBezierPath(ovalIn: frame).fill()
+        case .mixed:
+            // 4 pt including its 1 pt stroke, so the ring stays inside the same box as the dot.
+            let ring = NSBezierPath(ovalIn: frame.insetBy(dx: 0.5, dy: 0.5))
+            ring.lineWidth = 1
+            color.setStroke()
+            ring.stroke()
+        case .none:
+            break
+        }
+    }
+
+    // MARK: Mouse
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -317,17 +380,67 @@ private final class QueueUndoButton: NSButton {
         trackingAreaReference = area
     }
 
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-        needsDisplay = true
+    override func mouseEntered(with event: NSEvent) { if isEnabled { isHovering = true } }
+    override func mouseExited(with event: NSEvent) { isHovering = false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isPressed = true
     }
 
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-        needsDisplay = true
+    override func mouseDragged(with event: NSEvent) {
+        guard isPressed else { return }
+        isPressed = bounds.contains(convert(event.locationInWindow, from: nil))
     }
 
-    @objc private func accessibilityDidChange() {
-        needsDisplay = true
+    override func mouseUp(with event: NSEvent) {
+        guard isPressed else { return }
+        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+        isPressed = false
+        if inside { sendAction() }
+    }
+
+    // MARK: Keyboard and accessibility
+
+    /// Keyboard focus only. A mouse press never makes a section first responder: that would draw the focus ring on
+    /// an ordinary click and take keyboard focus away from the list.
+    override var acceptsFirstResponder: Bool {
+        isEnabled && !isHidden && !QueuePointerEvent.isPointerDownInFlight
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        isKeyboardFocused = true
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        isKeyboardFocused = false
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Space and Return press the focused section.
+        if event.keyCode == 49 || event.keyCode == 36 {
+            if isEnabled { sendAction() }
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled else { return false }
+        return sendAction()
+    }
+
+    override func isAccessibilityEnabled() -> Bool { isEnabled }
+}
+
+/// Whether the event being handled is a mouse press, so views that take keyboard focus can refuse it.
+enum QueuePointerEvent {
+    static var isPointerDownInFlight: Bool {
+        switch NSApp.currentEvent?.type {
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown: return true
+        default: return false
+        }
     }
 }

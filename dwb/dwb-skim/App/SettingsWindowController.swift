@@ -69,6 +69,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     static let chromeAutohideThresholdKey = SettingsDefaultsRegistry.Keys.chromeAutohideThreshold
     static let chromeReducedMotionKey = SettingsDefaultsRegistry.Keys.chromeReducedMotion
     static let queuePanelOpenAtLaunchKey = SettingsDefaultsRegistry.Keys.queuePanelOpenAtLaunch
+    static let advanceAfterPrefixKey = SettingsDefaultsRegistry.Keys.advanceAfterPrefix
     static let playerWindowOpacityKey = SettingsDefaultsRegistry.Keys.playerWindowOpacity
     static let playerWindowOpacityMin = CGFloat(SettingsDefaultsRegistry.Defaults.playerWindowOpacityMin)
     static let playerWindowOpacityMax = CGFloat(SettingsDefaultsRegistry.Defaults.playerWindowOpacityMax)
@@ -167,6 +168,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
     static func currentQueueOrderMode() -> QueueOrderMode { SkimSettingsStore.shared.snapshot().queueOrderMode }
     static func isLoopQueueEnabled() -> Bool { SkimSettingsStore.shared.snapshot().loopQueueEnabled }
+    /// Read at the moment of each `N` / `M` press, so every player window sees the current value.
+    static func isAdvanceAfterPrefixEnabled() -> Bool { UserDefaults.standard.bool(forKey: advanceAfterPrefixKey) }
     static func setPreviewDurationMode(_ value: String) { SkimSettingsStore.shared.setPreviewDurationMode(value) }
     static func setSkimEnabled(_ enabled: Bool) { SkimSettingsStore.shared.setSkimEnabled(enabled) }
     static func setClipDurationSeconds(_ value: Int) { SkimSettingsStore.shared.setFixedDurationSeconds(value) }
@@ -238,6 +241,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private let queueOrderPopup = DWBPopUpButton()
     private let loopQueueSwitch = NSSwitch()
     private let openQueueCheckbox = NSButton()
+    private let advanceAfterPrefixCheckbox = NSButton()
 
     private let debugCheckbox = NSButton()
     private let verboseCheckbox = NSButton()
@@ -578,6 +582,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         secondaryPrefixField.setAccessibilityLabel("Secondary custom prefix")
         queueOrderPopup.setAccessibilityLabel("Queue order")
         configureCheckbox(openQueueCheckbox, title: "Open queue panel when a player window opens")
+        configureCheckbox(advanceAfterPrefixCheckbox, title: "Advance after prefix")
+        advanceAfterPrefixCheckbox.setAccessibilityLabel("Advance after prefix")
         return page(identifier: "queueFiles", sections: [
             section("Prefix rename", rows: [
                 row("Primary custom prefix", prefixFieldChrome(primaryPrefixField), swatch: theme.markerPrimary),
@@ -589,6 +595,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
                 row("Queue order", queueOrderPopup,
                     helper: "Weighted favors items that have waited longest since playback."),
                 row("Loop queue", loopQueueSwitch), row(nil, openQueueCheckbox),
+                row(nil, advanceAfterPrefixCheckbox,
+                    helper: "After N or M adds a prefix to the current item, play the next item. Removing a prefix does not advance."),
             ]),
         ])
     }
@@ -1092,6 +1100,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         queueOrderPopup.selectItem(where: { $0.representedObject as? String == skim.queueOrderMode.rawValue })
         loopQueueSwitch.state = skim.loopQueueEnabled ? .on : .off
         openQueueCheckbox.state = defaults.bool(forKey: Self.queuePanelOpenAtLaunchKey) ? .on : .off
+        advanceAfterPrefixCheckbox.state = Self.isAdvanceAfterPrefixEnabled() ? .on : .off
         debugCheckbox.state = Self.isDebugConsoleEnabled() ? .on : .off
         verboseCheckbox.state = Self.isVerboseAutoplayTraceEnabled() ? .on : .off
     }
@@ -1141,6 +1150,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
             NotificationCenter.default.post(name: .completeVideoWindowModeChanged, object: self)
         case openQueueCheckbox:
             defaults.set(enabled, forKey: Self.queuePanelOpenAtLaunchKey)
+        case advanceAfterPrefixCheckbox:
+            defaults.set(enabled, forKey: Self.advanceAfterPrefixKey)
+            DebugConsoleController.log("settings", "advanceAfterPrefix=\(enabled)")
         case debugCheckbox:
             defaults.set(enabled, forKey: Self.debugConsoleKey)
             NotificationCenter.default.post(name: .debugConsoleSettingChanged, object: self)

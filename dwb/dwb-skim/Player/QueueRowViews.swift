@@ -1,16 +1,18 @@
 import Cocoa
 
-// Queue panel rows and small queue drawing views (design system 5 "Queue panel" and
-// "File markers", 9.7 "Queue interactions"). All colors resolve at draw time, so
-// Increase Contrast applies when the rows reload.
+// Queue panel rows and small queue drawing views (design system 10.4 "Rows"; 5 "File markers" for the prefix color;
+// 9.7 "Queue interactions" for the search highlight). All colors resolve at draw time, so Increase Contrast applies
+// when the rows reload. Geometry and state precedence come from `QueueRowMetrics` and `QueueRowAppearance`.
 
 // MARK: - Row background
 
-/// The row card: 56 pt tall, inset 4 pt, radius 8, 1 pt `gridLine` edge.
+/// The row's ground, drawn in the row view's flipped coordinates.
 ///
-/// - Current: `accentTint` fill, 1 pt `accentFill` edge, a 3 pt `accentFill` bar.
-/// - Selected: `overlaySelected` fill with a 1 pt `borderStrong` edge.
-/// - Hover: `overlayHover`.
+/// - Flat row (44 pt): no fill and no outline at rest, with a 0.5 pt `gridLine` separator under it. Hover is
+///   `overlayHover`. Selected is `overlaySelected` with a 1 pt `borderStrong` inner edge and no separator.
+/// - Playing card (48 pt plus a 4 pt gap): a uniform `accentTintStrong` fill, a 0.5 pt `border` inner edge
+///   (`borderStrong` on hover, 1 pt when selected) and a 3 pt `accentText` strip flush with the left edge,
+///   clipped to the card's own rounded shape. No gradient, no detached stripe, no separator.
 final class QueuePageRowView: NSTableRowView {
 
     var isCurrent: Bool = false {
@@ -32,34 +34,43 @@ final class QueuePageRowView: NSTableRowView {
     }
 
     override func drawBackground(in dirtyRect: NSRect) {
-        let inset = DWBMetrics.queueRowInset
-        let card = bounds.insetBy(dx: inset, dy: inset)
-        let path = NSBezierPath(roundedRect: card.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: DWBMetrics.radiusRow, yRadius: DWBMetrics.radiusRow)
+        let appearance = QueueRowAppearance.resolve(isCurrent: isCurrent, isSelected: isSelected, isHovering: isHovering)
+        let card = QueueRowMetrics.cardFrame(rowWidth: bounds.width, isCurrent: isCurrent)
+        let radius = appearance.cornerRadius
+        let shape = NSBezierPath(roundedRect: card, xRadius: radius, yRadius: radius)
 
-        let fill: NSColor?
-        if isCurrent {
-            fill = DWBAccessibility.accentTint
-        } else if isSelected {
-            fill = DWBColor.overlaySelected
-        } else if isHovering {
-            fill = DWBColor.overlayHover
-        } else {
-            fill = nil
-        }
-        if let fill {
-            fill.setFill()
-            path.fill()
+        switch appearance.fill {
+        case .none: break
+        case .overlayHover: DWBColor.overlayHover.setFill(); shape.fill()
+        case .overlaySelected: DWBColor.overlaySelected.setFill(); shape.fill()
+        case .accentTintStrong: theme.accentTintStrong.setFill(); shape.fill()
         }
 
-        (isSelected ? DWBColor.borderStrong : (isCurrent ? theme.accentFill : DWBColor.gridLine)).setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        switch appearance.edge {
+        case .none:
+            break
+        case .border, .borderStrong:
+            // The edge is drawn inside the card so nothing overhangs it, and nothing draws over it afterwards.
+            let edgeRect = QueueRowMetrics.edgeRect(card: card, width: appearance.edgeWidth)
+            let edge = NSBezierPath(roundedRect: edgeRect,
+                                    xRadius: radius - appearance.edgeWidth / 2,
+                                    yRadius: radius - appearance.edgeWidth / 2)
+            edge.lineWidth = appearance.edgeWidth
+            (appearance.edge == .border ? DWBAccessibility.border : DWBColor.borderStrong).setStroke()
+            edge.stroke()
+        }
 
-        if isCurrent {
-            theme.accentFill.setFill()
-            let bar = NSRect(x: card.minX + 4, y: card.minY + 10, width: 3, height: max(0, card.height - 20))
-            NSBezierPath(roundedRect: bar, xRadius: 2, yRadius: 2).fill()
+        if appearance.showsPlayingStrip {
+            NSGraphicsContext.saveGraphicsState()
+            shape.addClip()
+            theme.accentText.setFill()
+            QueueRowMetrics.playingStripFrame(card: card).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        if appearance.showsSeparator {
+            DWBColor.gridLine.setFill()
+            QueueRowMetrics.separatorFrame(card: card).fill()
         }
     }
 
@@ -95,6 +106,16 @@ final class QueuePageCell: NSView {
     private let metadataLabel = DWBLabel("", size: 10.5, tone: .tertiary, tabularDigits: true)
     private let bookmarkIndicator = NSImageView()
 
+    private var isCurrent = false
+    private var isFailed = false
+    private var isSearching = false
+    private var fullName = NSAttributedString()
+    private var metadataText = ""
+    /// The width the name was last fitted to, with a generation so new content refits.
+    private var fittedNameWidth: CGFloat = -1
+    private var contentGeneration = 0
+    private var fittedGeneration = -1
+
     init(reuseID: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         identifier = reuseID
@@ -104,7 +125,7 @@ final class QueuePageCell: NSView {
 
         addSubview(nameView)
 
-        metadataLabel.lineBreakMode = .byTruncatingMiddle
+        metadataLabel.lineBreakMode = .byTruncatingTail
         addSubview(metadataLabel)
 
         bookmarkIndicator.imageScaling = .scaleProportionallyDown
@@ -112,64 +133,40 @@ final class QueuePageCell: NSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    override var isFlipped: Bool { true }
+
     override func layout() {
         super.layout()
-        let inset = DWBMetrics.queueRowInset
-        let card = bounds.insetBy(dx: inset, dy: inset)
-        let slotX = card.minX + 12
-        let slotWidth: CGFloat = 14
-        leadingIcon.frame = NSRect(x: slotX, y: card.midY - 7, width: slotWidth, height: 14)
-
-        let textX = slotX + slotWidth + 8
-        var right = card.maxX - 10
-        if !bookmarkIndicator.isHidden {
-            bookmarkIndicator.frame = NSRect(x: right - 12, y: card.midY - 6, width: 12, height: 12)
-            right -= 12 + 8
-        }
-        let width = max(0, right - textX)
-        let nameHeight: CGFloat = 16
-        let metadataHeight: CGFloat = 13
-        let gap: CGFloat = 3
-        let blockBottom = card.midY - (nameHeight + gap + metadataHeight) / 2
-        metadataLabel.frame = NSRect(x: textX, y: blockBottom, width: width, height: metadataHeight)
-        nameView.frame = NSRect(x: textX, y: blockBottom + metadataHeight + gap, width: width, height: nameHeight)
+        let card = QueueRowMetrics.cardFrame(rowWidth: bounds.width, isCurrent: isCurrent)
+        let frames = QueueRowMetrics.frames(card: card,
+                                            isCurrent: isCurrent,
+                                            isFailed: isFailed,
+                                            hasBookmark: !bookmarkIndicator.isHidden)
+        leadingIcon.frame = frames.leadingGlyph ?? .zero
+        if let bookmark = frames.bookmark { bookmarkIndicator.frame = bookmark }
+        nameView.frame = frames.name
+        metadataLabel.frame = frames.meta
+        fitName(to: frames.name.width)
+        fitMetadata(to: frames.meta.width)
     }
 
-    /// The row's filename, with its configured marker prefix in bold marker color at 100%
-    /// and the first search match in bold on an `accentTintStrong` ground with a 1 pt
-    /// `accentText` underline.
-    static func attributedName(for name: String,
-                               isCurrent: Bool,
-                               isFailed: Bool,
-                               searchQuery: String,
-                               primaryPrefix: String,
-                               secondaryPrefix: String) -> NSAttributedString {
-        let baseFont = NSFont.systemFont(ofSize: 12.5, weight: isCurrent ? .semibold : .medium)
-        let boldFont = NSFont.systemFont(ofSize: 12.5, weight: .bold)
-        let result = NSMutableAttributedString(string: name, attributes: [
-            .font: baseFont,
-            .foregroundColor: isFailed ? DWBAccessibility.textSecondary : DWBColor.textPrimary,
-        ])
+    /// Middle-truncates the name to the width left after the accessories (section 10.4). While a search is
+    /// active the name is end-clipped instead, so the first match keeps its position.
+    private func fitName(to width: CGFloat) {
+        guard fittedNameWidth != width || fittedGeneration != contentGeneration else { return }
+        fittedNameWidth = width
+        fittedGeneration = contentGeneration
+        nameView.attributedText = isSearching ? fullName : QueueNameFitting.fitted(fullName, maxWidth: width)
+    }
 
-        let marker = SkimReviewStatusDescriptor.describe(displayName: name,
-                                                         primaryPrefix: primaryPrefix,
-                                                         secondaryPrefix: secondaryPrefix)
-        if let token = marker.prefixToken, let color = marker.statusColor {
-            result.addAttributes([
-                .font: boldFont,
-                .foregroundColor: color,
-            ], range: NSRange(location: 0, length: (token as NSString).length))
+    private func fitMetadata(to width: CGFloat) {
+        if isFailed {
+            metadataLabel.stringValue = QueueRowTextPresentation.failedMeta(maxWidth: width) {
+                QueueFonts.width(of: $0, font: QueueFonts.metadata)
+            }
+        } else {
+            metadataLabel.stringValue = metadataText
         }
-
-        if let match = QueueSearchHighlight.matchRange(in: name, query: searchQuery) {
-            result.addAttributes([
-                .font: boldFont,
-                .backgroundColor: theme.accentTintStrong,
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-                .underlineColor: theme.accentText,
-            ], range: match)
-        }
-        return result
     }
 
     func configure(item: QueuePageView.Item,
@@ -177,18 +174,21 @@ final class QueuePageCell: NSView {
                    searchQuery: String,
                    primaryPrefix: String,
                    secondaryPrefix: String) {
-        nameView.attributedText = Self.attributedName(for: item.displayName,
-                                                      isCurrent: isCurrent,
-                                                      isFailed: item.isFailed,
-                                                      searchQuery: searchQuery,
-                                                      primaryPrefix: primaryPrefix,
-                                                      secondaryPrefix: secondaryPrefix)
+        self.isCurrent = isCurrent
+        isFailed = item.isFailed
+        isSearching = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        fullName = QueueNameStyle.attributed(for: item.displayName,
+                                              isCurrent: isCurrent,
+                                              searchQuery: searchQuery,
+                                              primaryPrefix: primaryPrefix,
+                                              secondaryPrefix: secondaryPrefix)
+        contentGeneration += 1
 
-        metadataLabel.stringValue = "\(item.duration) | \(item.fileSize)"
+        metadataText = QueueRowTextPresentation.metadata(duration: item.duration, fileSize: item.fileSize)
         metadataLabel.tone = item.isFailed ? .error : .tertiary
 
         if isCurrent {
-            leadingIcon.image = Self.symbol("play.fill", pointSize: 11, label: "Now playing")
+            leadingIcon.image = Self.symbol("play.fill", pointSize: DWBMetrics.queuePlayingGlyph, label: "Now playing")
             leadingIcon.contentTintColor = theme.accentText
             leadingIcon.isHidden = false
         } else if item.isFailed {
@@ -201,7 +201,7 @@ final class QueuePageCell: NSView {
         }
 
         if item.isBookmarked {
-            bookmarkIndicator.image = Self.symbol("bookmark.fill", pointSize: 12, label: "Bookmarked")
+            bookmarkIndicator.image = Self.symbol("bookmark.fill", pointSize: 10, label: "Bookmarked")
             bookmarkIndicator.contentTintColor = DWBAccessibility.textSecondary
             bookmarkIndicator.isHidden = false
         } else {
@@ -210,12 +210,15 @@ final class QueuePageCell: NSView {
         }
         needsLayout = true
 
+        // The full name is the row's identity: tooltip and accessible name, whatever is drawn.
+        toolTip = item.displayName
         var accessibilityParts = [item.displayName]
         if item.isBookmarked {
             accessibilityParts.append("bookmarked")
         }
         setAccessibilityLabel(accessibilityParts.joined(separator: ", "))
         setAccessibilityValue(isCurrent ? "now playing" : (item.isFailed ? "failed" : "queued"))
+        setAccessibilityHelp(item.isFailed ? QueueRowTextPresentation.failedMetaFull : nil)
     }
 
     private static func symbol(_ name: String, pointSize: CGFloat, label: String) -> NSImage? {
@@ -228,7 +231,8 @@ final class QueuePageCell: NSView {
 // MARK: - Filename text
 
 /// One line of filename text drawn with TextKit so the search match gets a rounded
-/// (radius 2) ground, which an attributed-string background cannot give.
+/// (radius 2) ground, which an attributed-string background cannot give. The text arrives already fitted
+/// (`QueueNameFitting`), so the line itself only clips.
 final class QueueRowNameView: NSView {
 
     private let textStorage = NSTextStorage()
@@ -248,7 +252,7 @@ final class QueueRowNameView: NSView {
         layoutManager.addTextContainer(textContainer)
         textContainer.lineFragmentPadding = 0
         textContainer.maximumNumberOfLines = 1
-        textContainer.lineBreakMode = .byTruncatingMiddle
+        textContainer.lineBreakMode = .byClipping
         setAccessibilityElement(false)
     }
 
@@ -283,8 +287,8 @@ private final class QueueRoundedBackgroundLayoutManager: NSLayoutManager {
 
 // MARK: - Drop line
 
-/// The drag-reorder drop line: a 2 pt `accentText` line in the row gap with an 8 pt ring
-/// at its leading edge (2 pt `accentText` edge, `surface` fill).
+/// The drag-reorder insertion line (Manual order, no filter): a straight 2 pt `accentText` line on the
+/// shared edge between two rows. No ring.
 final class QueueDropIndicatorView: NSView {
 
     override init(frame frameRect: NSRect) {
@@ -297,59 +301,7 @@ final class QueueDropIndicatorView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        let ring = DWBMetrics.dropRing
-        let line = DWBMetrics.dropLine
-        let midY = bounds.midY
-
         theme.accentText.setFill()
-        NSBezierPath(roundedRect: NSRect(x: ring - 1, y: midY - line / 2,
-                                         width: max(0, bounds.width - ring + 1), height: line),
-                     xRadius: line / 2, yRadius: line / 2).fill()
-
-        let circle = NSRect(x: 0, y: midY - ring / 2, width: ring, height: ring)
-        let path = NSBezierPath(ovalIn: circle.insetBy(dx: 1, dy: 1))
-        DWBColor.surface.setFill()
-        path.fill()
-        theme.accentText.setStroke()
-        path.lineWidth = 2
-        path.stroke()
-    }
-}
-
-// MARK: - Filtered-empty glyph
-
-/// The neutral 44 pt circle of the filtered empty states: `surfaceElevated` fill and a
-/// 1 pt `border`, with an 18 pt `textTertiary` glyph.
-final class QueueEmptyGlyphView: NSView {
-
-    var symbolName: String? {
-        didSet { needsDisplay = true }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setAccessibilityElement(false)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
-        DWBColor.surfaceElevated.setFill()
-        path.fill()
-        DWBAccessibility.border.setStroke()
-        path.lineWidth = 1
-        path.stroke()
-
-        guard let symbolName else { return }
-        guard let image = NSImage.dwbSymbol(symbolName, pointSize: 18, weight: .regular,
-                                            color: DWBAccessibility.textTertiary) else { return }
-        let size = image.size
-        image.draw(in: NSRect(x: bounds.midX - size.width / 2,
-                              y: bounds.midY - size.height / 2,
-                              width: size.width,
-                              height: size.height))
+        NSRect(x: 0, y: bounds.midY - DWBMetrics.dropLine / 2, width: bounds.width, height: DWBMetrics.dropLine).fill()
     }
 }

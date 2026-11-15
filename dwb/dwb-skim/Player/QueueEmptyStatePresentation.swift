@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which empty state the queue panel shows, and its copy (design system 9.7).
+/// Which empty state the queue panel shows, and its copy (design system 10.6).
 enum QueueEmptyState: Equatable {
     /// The queue holds no files.
     case emptyQueue
@@ -28,11 +28,11 @@ enum QueueEmptyState: Equatable {
         }
     }
 
-    var detail: String {
+    /// The helper line. Only the genuinely empty queue has one; the filtered states are a glyph, a title and one button.
+    var detail: String? {
         switch self {
         case .emptyQueue: return "Add files or folders to build the queue."
-        case .noMatches: return "Adjust search or filters to show more queue items."
-        case .noBookmarks: return "Bookmark queued files from the playback bar, then return here."
+        case .noMatches, .noBookmarks: return nil
         }
     }
 
@@ -49,7 +49,7 @@ enum QueueEmptyState: Equatable {
         switch self {
         case .emptyQueue: return nil
         case .noMatches: return "magnifyingglass"
-        case .noBookmarks: return "bookmark.slash"
+        case .noBookmarks: return "bookmark"
         }
     }
 }

@@ -55,6 +55,8 @@ enum DWBMetrics {
     // Optical rail icon scale (D16) — replaces flat railIcon 15.
     static let railIconUtility: CGFloat = 11, railIconVolume: CGFloat = 12, railIconSkip: CGFloat = 13, railIconPrimary: CGFloat = 17
     static let scrubberTrack: CGFloat = 2, scrubberRange: CGFloat = 4, knob: CGFloat = 6, knobEmphasized: CGFloat = 8
+    // queueRowHeight 56 / queueRowInset 4 are the CLASSIC look (inactive alternative) and no longer drive the queue list.
+    // The active queue metrics are the "Queue panel (active look)" block at the end of `DWBMetrics`.
     static let queueRowHeight: CGFloat = 56, queueRowInset: CGFloat = 4, queueHeaderHeight: CGFloat = 52
     static let settingsSize = NSSize(width: 820, height: 550), settingsMinSize = NSSize(width: 760, height: 500)
     static let sidebarWidth: CGFloat = 188, sidebarRow: CGFloat = 32, labelColumn: CGFloat = 156, contentMax: CGFloat = 620
@@ -70,6 +72,43 @@ enum DWBMetrics {
     static let paneChip: CGFloat = 22, paneChipGap: CGFloat = 4, paneSpinner: CGFloat = 28
     static let skimStripHeight: CGFloat = 54, skimWindowMinWidth: CGFloat = 980, skimRestoreHandle = NSSize(width: 30, height: 20)
     static let prefixSwatch: CGFloat = 8, aboutIcon: CGFloat = 96, aboutTitle: CGFloat = 26
+    // Queue panel (active look, 2026-11-11) — tokens-and-specs §10. Colors come from DWBColor / DWBTheme; no new color tokens.
+    // The panel width rule (31% of the window, 280–360, minimum 200) lives in `QueuePanelWidthPolicy`; the player-only
+    // 45% / 260 rule and the handoff's `queuePanelMaxWidth` helper are intentionally not ported.
+    // Panel (§10.1): surface, 1pt border leading edge, list padding 0 / 6 / 12. Compact below queueCompactBelow.
+    static let queuePanelMinWidth: CGFloat = 200, queueCompactBelow: CGFloat = 390
+    static let queueListSidePadding: CGFloat = 6, queueListBottomPadding: CGFloat = 12
+    static let queueDividerHitWidth: CGFloat = 8 /* 4 each side */, queueDividerLine: CGFloat = 2, queueDividerLineAlpha: CGFloat = 0.7, queueDividerKeyStep: CGFloat = 10
+    // Header (§10.2): 52 tall, no title, 1pt gridLine bottom.
+    static let queueHeaderInset: CGFloat = 12, queueHeaderInsetCompact: CGFloat = 7, queueHeaderGap: CGFloat = 4
+    static let queueSearchHeight: CGFloat = 28, queueSearchRadius: CGFloat = 6, queueHeaderButton: CGFloat = 28, queueHeaderButtonCompactWidth: CGFloat = 24, queueHeaderButtonRadius: CGFloat = 5
+    static let queueSortLabelMaxWidth: CGFloat = 120
+    // Rows (§10.4): flat row and the playing card (48 card + 4 gap = queuePlayingRowHeight).
+    static let queueFlatRowHeight: CGFloat = 44, queueFlatRowRadius: CGFloat = 6, queueRowTrailingMargin: CGFloat = 4, queueRowTextInset: CGFloat = 5, queueRowTextInsetFailed: CGFloat = 27, queueRowTextTrailing: CGFloat = 10
+    static let queueRowSeparator: CGFloat = 0.5, queueRowSeparatorInsetLeading: CGFloat = 5, queueRowSeparatorInsetTrailing: CGFloat = 7
+    static let queuePlayingRowHeight: CGFloat = 52, queuePlayingCardHeight: CGFloat = 48, queuePlayingCardGap: CGFloat = 4, queuePlayingCardRadius: CGFloat = 7
+    static let queuePlayingBar: CGFloat = 3, queuePlayingGlyph: CGFloat = 13, queuePlayingGlyphLeading: CGFloat = 14, queuePlayingTextInset: CGFloat = 37, queuePlayingEdge: CGFloat = 0.5
+    static let queueRowNameLine: CGFloat = 18, queueRowNameGap: CGFloat = 6, queueRowDragAlpha: CGFloat = 0.4
+    /// Middle truncation (§10.4): characters kept after the ellipsis = min(9, kept count / 2).
+    static let queueNameTailMax = 9
+    // Footer (§10.5): 78 tall, canvas, 1pt gridLine top. Row 1 = 39 incl. its 1pt rule; row 2 = 38.
+    static let queueFooterHeight: CGFloat = 78, queueActionRowHeight: CGFloat = 39, queueStatusRowHeight: CGFloat = 38
+    static let queueCellDivider = NSSize(width: 0.5, height: 18), queueCellDividerTop: CGFloat = 10, queueCellIcon: CGFloat = 15
+    static let queueMarkerStateMark: CGFloat = 4, queueMarkerStateInset: CGFloat = 7, queueFooterDisabledAlpha: CGFloat = 0.4
+    /// Footer cell hover / pressed: DWBColor.textPrimary at these alphas (from the study; not yet color tokens).
+    static let queueCellHoverAlpha: CGFloat = 0.035, queueCellPressedAlpha: CGFloat = 0.075
+    /// Status row columns: Rescan · total · Clear queue (compact hides the button labels).
+    static let queueStatusColumns: (leading: CGFloat, trailing: CGFloat) = (100, 110), queueStatusColumnsCompact: (leading: CGFloat, trailing: CGFloat) = (34, 34)
+    /// The total shortens until it fits the cell width minus this (§10.5).
+    static let queueTotalFitInset: CGFloat = 16
+    // Empty states (§10.6).
+    // Empty queue: faded app icon, then 10 · title · 6 · detail (max 320) · 10 · outlined pill 26 r12.
+    static let queueEmptyIcon: CGFloat = 96, queueEmptyIconAlpha: CGFloat = 0.32, queueEmptyIconSaturation: CGFloat = 0.6
+    static let queueEmptyIconToTitle: CGFloat = 10, queueEmptyTitleToDetail: CGFloat = 6, queueEmptyDetailToButton: CGFloat = 10, queueEmptyDetailMaxWidth: CGFloat = 320, queueEmptyPill: CGFloat = 26
+    // No search results / no bookmarks: glyph circle column.
+    static let queueEmptyCircle: CGFloat = 44, queueEmptyGlyph: CGFloat = 18, queueEmptyGap: CGFloat = 13, queueEmptyPadding: CGFloat = 15, queueEmptyButtonRadius: CGFloat = 5
+    // Sort menu (§10.7).
+    static let queueSortMenuWidth: CGFloat = 190, queueSortMenuOffset: CGFloat = 4
 }
 
 enum DWBRailIcon {

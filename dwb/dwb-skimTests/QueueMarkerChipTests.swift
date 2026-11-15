@@ -83,12 +83,12 @@ final class QueueMarkerChipTests: XCTestCase {
         XCTAssertEqual(QueueMarkerChip.label(for: "  keep_ "), "keep_")
     }
 
-    func testLabelKeepsUpToEightCharacters() {
+    func testLabelKeepsEveryCharacterOfALongPrefix() {
+        // The classic 8-character cut is retired: the footer cell shortens the label by measuring it against its own
+        // section (`QueuePrefixLabelFitting`), and the model keeps the whole prefix.
         XCTAssertEqual(QueueMarkerChip.label(for: "12345678"), "12345678")
-    }
-
-    func testLongerLabelIsCutToEightCharactersWithAnEllipsis() {
-        XCTAssertEqual(QueueMarkerChip.label(for: "123456789"), "12345678…")
+        XCTAssertEqual(QueueMarkerChip.label(for: "123456789"), "123456789")
+        XCTAssertEqual(QueueMarkerChip.label(for: "a_very_long_review_prefix_"), "a_very_long_review_prefix_")
     }
 
     // MARK: - Duplicate
@@ -108,15 +108,6 @@ final class QueueMarkerChipTests: XCTestCase {
 
     func testShortPrefixIsShownAsIs() {
         XCTAssertEqual(QueueMarkerChip.label(for: "keep_"), "keep_")
-    }
-
-    func testExactlyEightCharactersHasNoEllipsis() {
-        XCTAssertEqual(QueueMarkerChip.label(for: "abcdefg_"), "abcdefg_")
-        XCTAssertFalse(QueueMarkerChip.label(for: "abcdefg_").contains("…"))
-    }
-
-    func testNineCharactersShowTheFirstEightAndAnEllipsis() {
-        XCTAssertEqual(QueueMarkerChip.label(for: "abcdefgh_"), "abcdefgh…")
     }
 
     func testLabelTrimsLeadingAndTrailingWhitespaceAndNewlines() {
@@ -173,10 +164,11 @@ final class QueueMarkerChipTests: XCTestCase {
                        + "or replace the primary prefix. Shortcut: M")
     }
 
-    func testTooltipShowsTheWholePrefixNotTheCutLabel() {
+    func testTooltipAndAccessibilityNameShowTheWholePrefix() {
         let result = chips(primary: "abcdefgh_", targets: ["a.mp4"])
-        XCTAssertEqual(result[0].label, "abcdefgh…")
+        XCTAssertEqual(result[0].label, "abcdefgh_")
         XCTAssertTrue(result[0].tooltip.contains("“abcdefgh_”"))
+        XCTAssertTrue(result[0].accessibilityLabel.contains("abcdefgh_"))
     }
 
     func testBlankPrefixTooltipsPointToSettings() {
@@ -187,8 +179,9 @@ final class QueueMarkerChipTests: XCTestCase {
 
     func testAccessibilityLabelsAndValues() {
         let result = chips(targets: ["keep_a.mp4"])
-        XCTAssertEqual(result[0].accessibilityLabel, "Apply primary prefix keep_ to selected file")
-        XCTAssertEqual(result[1].accessibilityLabel, "Apply secondary prefix later_ to selected file")
+        // The N / M key hints live in the accessible name and the tooltip, not on the cell.
+        XCTAssertEqual(result[0].accessibilityLabel, "Apply primary prefix keep_ to selected file, shortcut N")
+        XCTAssertEqual(result[1].accessibilityLabel, "Apply secondary prefix later_ to selected file, shortcut M")
         XCTAssertEqual(result[0].accessibilityValue, "applied")
         XCTAssertEqual(result[1].accessibilityValue, "not applied")
     }
@@ -197,5 +190,73 @@ final class QueueMarkerChipTests: XCTestCase {
         let result = chips(primary: "", secondary: "", targets: [])
         XCTAssertEqual(result[0].accessibilityLabel, "Primary prefix not set")
         XCTAssertEqual(result[1].accessibilityLabel, "Secondary prefix not set")
+    }
+
+    // MARK: - Applied, mixed and none (P54: the footer's dot and ring)
+
+    func testNoneAppliedAndMixedAreDistinguishedByTheTargetsActuallyCarryingThePrefix() {
+        XCTAssertEqual(chips(targets: ["a.mp4", "b.mp4"])[0].markState, .none)
+        XCTAssertEqual(chips(targets: ["keep_a.mp4", "keep_b.mp4"])[0].markState, .applied)
+        XCTAssertEqual(chips(targets: ["keep_a.mp4", "b.mp4"])[0].markState, .mixed)
+        XCTAssertTrue(chips(targets: ["keep_a.mp4", "b.mp4"])[0].isMixed)
+        XCTAssertFalse(chips(targets: ["keep_a.mp4", "b.mp4"])[0].isApplied)
+    }
+
+    func testMixedDoesNotChangeWhichChipsAreEnabled() {
+        // Mixed is only a mark; the chip still acts on every target.
+        let result = chips(targets: ["keep_a.mp4", "b.mp4"])
+        XCTAssertEqual(result.map(\.isEnabled), [true, true])
+    }
+
+    func testPrimaryAndSecondaryMarksAreIndependent() {
+        let result = chips(targets: ["keep_a.mp4", "later_b.mp4", "keep_c.mp4"])
+        XCTAssertEqual(result[0].markState, .mixed)
+        XCTAssertEqual(result[1].markState, .mixed)
+    }
+
+    func testOverlappingPrefixesUseTheLongerMatchForTheMixedStateToo() {
+        // "a_" is also the start of "a_b_": for "a_b_clip.mp4" the longer prefix is the one present.
+        let result = chips(primary: "a_", secondary: "a_b_", targets: ["a_b_clip.mp4", "a_clip.mp4"])
+        XCTAssertEqual(result[0].markState, .mixed, "a_clip.mp4 carries the primary; a_b_clip.mp4 carries the secondary")
+        XCTAssertEqual(result[1].markState, .mixed)
+        let secondaryOnly = chips(primary: "a_", secondary: "a_b_", targets: ["a_b_clip.mp4", "a_b_other.mp4"])
+        XCTAssertEqual(secondaryOnly[0].markState, .none)
+        XCTAssertEqual(secondaryOnly[1].markState, .applied)
+    }
+
+    func testMarkDescribesASelectedRowCollection() {
+        // Several selected rows: the mark follows exactly those names.
+        let selected = ["keep_one.mp4", "keep_two.mp4", "plain.mp4"]
+        XCTAssertEqual(chips(targets: selected)[0].markState, .mixed)
+        XCTAssertEqual(chips(targets: Array(selected.prefix(2)))[0].markState, .applied)
+    }
+
+    func testFilteredCurrentFallbackTargetsOnlyTheCurrentItem() {
+        // With nothing selected the footer targets the visible current item alone.
+        XCTAssertEqual(chips(targets: ["keep_current.mp4"])[0].markState, .applied)
+        // With the current item filtered out there is no target: no mark, and the cells are disabled.
+        let none = QueueMarkerChip.chips(primaryPrefix: "keep_", secondaryPrefix: "later_",
+                                         targetNames: [], queueHasItems: true, hasTargets: false)
+        XCTAssertEqual(none.map(\.markState), [.none, .none])
+        XCTAssertEqual(none.map(\.isEnabled), [false, false])
+    }
+
+    func testNoTargetsDisablesChipsEvenWithItemsAndSetPrefixes() {
+        let result = QueueMarkerChip.chips(primaryPrefix: "keep_", secondaryPrefix: "later_",
+                                           targetNames: [], queueHasItems: true, hasTargets: false)
+        XCTAssertEqual(result.map(\.isEnabled), [false, false])
+    }
+
+    func testMixedIsAccessibleInTheValueAndTheTooltip() {
+        let result = chips(targets: ["keep_a.mp4", "b.mp4"])
+        XCTAssertEqual(result[0].accessibilityValue, "mixed, applied to some files")
+        XCTAssertTrue(result[0].tooltip.hasSuffix("Some of the targeted files already have it."))
+        XCTAssertEqual(result[1].accessibilityValue, "not applied")
+    }
+
+    func testEqualPrefixesLeaveOnlyThePrimaryInItsGridPosition() {
+        let result = chips(primary: "x_", secondary: "x_", targets: ["x_a.mp4"])
+        XCTAssertEqual(result.map(\.kind), [.primary])
+        XCTAssertEqual(result[0].markState, .applied)
     }
 }

@@ -20,6 +20,7 @@ enum SettingsDefaultsRegistry {
         static let chromeAutohideThreshold = "chromeAutohideThreshold"
         static let chromeReducedMotion = "chromeReducedMotion"
         static let queuePanelOpenAtLaunch = "queuePanelOpenAtLaunch"
+        static let advanceAfterPrefix = "advanceAfterPrefix"
         static let playerWindowOpacity = "playerWindowOpacity"
         static let clipDurationSeconds = "clipDurationSeconds"
         static let skimEnabled = "skimEnabled"
@@ -111,6 +112,7 @@ enum SettingsDefaultsRegistry {
             Keys.chromeAutohideThreshold: Defaults.chromeAutohideThreshold,
             Keys.chromeReducedMotion: reduceMotionDefault,
             Keys.queuePanelOpenAtLaunch: false,
+            Keys.advanceAfterPrefix: false,
             Keys.playerWindowOpacity: Defaults.playerWindowOpacity,
             Keys.clipDurationSeconds: Defaults.clipDurationSeconds,
             Keys.skimEnabled: Defaults.skimEnabled,

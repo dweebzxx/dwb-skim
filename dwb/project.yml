@@ -73,6 +73,7 @@ targets:
       - path: dwb-skim/Player/SkimMarkerRenameUndo.swift
       - path: dwb-skim/App/DebugLogSanitizer.swift
       - path: dwb-skim/App/DebugLogRetentionBuffer.swift
+      - path: dwb-skim/App/DebugConsoleRetention.swift
       - path: dwb-skim/App/BookmarkStore.swift
       - path: dwb-skim/App/SettingsDefaultsRegistry.swift
       - path: dwb-skim/App/SkimSettingsStore.swift
@@ -96,6 +97,10 @@ targets:
       - path: dwb-skim/Player/QueueRemovalPlanner.swift
       - path: dwb-skim/Player/QueueMarkerChipPresentation.swift
       - path: dwb-skim/Player/QueueFooterPresentation.swift
+      - path: dwb-skim/Player/QueuePanelWidthPolicy.swift
+      - path: dwb-skim/Player/QueuePanelGeometry.swift
+      - path: dwb-skim/Player/QueueNameFitting.swift
+      - path: dwb-skim/Player/PlaybackStartStallMonitor.swift
       - path: dwb-skim/Player/QueueSearchHighlight.swift
       - path: dwb-skim/Player/QueueEmptyStatePresentation.swift
       - path: dwb-skim/Player/RenameSheetPresentation.swift

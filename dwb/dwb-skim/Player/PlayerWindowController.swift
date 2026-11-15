@@ -117,6 +117,11 @@ class PlayerWindowController: NSWindowController {
     private var queuePage: QueuePageView!
     // The 1 pt `border` rule between the stage and the queue panel (design system `QueuePanel`).
     private let queueSeparator = DWBRuleView(kind: .border, vertical: true)
+    // Invisible 8 pt grab zone over the separator; drags the shared edge (P51).
+    private let queuePanelResizeHandle = QueuePanelResizeHandleView()
+    /// The dragged queue panel width as a fraction of the content width; nil follows the
+    /// default rule. Per window, memory only.
+    private var queuePanelCustomFraction: CGFloat?
     private let volumeOverlay = VolumeOverlayView()
     private let statusHUD = StatusHUDView()
     private let undoToast = UndoToastView()
@@ -414,6 +419,14 @@ class PlayerWindowController: NSWindowController {
     private var replacementStartSequence = 0
     private var isPlayerSessionPaused = false
 
+    /// Raw value of the last player state seen in `mediaPlayerStateChanged` (-1 before any).
+    /// Set on the main queue from the state captured on the VLC callback thread; read only by the
+    /// start-stall console lines.
+    private var lastSeenPlayerStateRaw = -1
+    private var startStallMonitor = PlaybackStartStallMonitor()
+    /// The one single-shot watchdog for the active video start. Writes console lines only.
+    private var startStallWorkItem: DispatchWorkItem? = nil
+
     // MARK: - Queue page (full in-window panel)
 
     private(set) var isQueuePageOpen = false
@@ -665,6 +678,13 @@ class PlayerWindowController: NSWindowController {
 
         queueSeparator.isHidden = true
         cv.addSubview(queueSeparator)
+
+        queuePanelResizeHandle.isHidden = true
+        queuePanelResizeHandle.onDrag = { [weak self] edgeX in self?.queuePanelEdgeDragged(to: edgeX) }
+        queuePanelResizeHandle.onDragEnded = { [weak self] in self?.queuePanelEdgeDragEnded() }
+        queuePanelResizeHandle.onReset = { [weak self] in self?.resetQueuePanelWidth() }
+        queuePanelResizeHandle.onNudge = { [weak self] delta in self?.queuePanelNudged(by: delta) }
+        cv.addSubview(queuePanelResizeHandle)
 
         cv.addSubview(dropZoneView)
         cv.addSubview(volumeOverlay)
@@ -1117,18 +1137,19 @@ class PlayerWindowController: NSWindowController {
     /// `N` / `M`. With the queue panel showing, this is the same call the footer chips make, so the
     /// keys act on the selected rows, or the current item when nothing is selected. With the panel
     /// hidden its selection is stale, so the keys act on the current item through the same delegate
-    /// methods the chips reach. Both end in `performQueuePagePrefixRename`.
+    /// methods the chips reach. Both end in `performQueuePagePrefixRename`. This is the only caller
+    /// that passes `.key`, so it is the only path that can advance after a prefix is added (P52).
     private func applyPrefixShortcut(_ kind: QueueMarkerChip.Kind) {
         if !queuePage.isHidden {
-            queuePage.applyPrefix(kind)
+            queuePage.applyPrefix(kind, origin: .key)
             return
         }
         guard currentDisplayIndex >= 0, currentDisplayIndex < displayOrder.count else { return }
         switch kind {
         case .primary:
-            queuePage(queuePage, didRequestCustomPrefixRenameAt: [currentDisplayIndex])
+            queuePage(queuePage, didRequestCustomPrefixRenameAt: [currentDisplayIndex], origin: .key)
         case .secondary:
-            queuePage(queuePage, didRequestSecondaryCustomPrefixRenameAt: [currentDisplayIndex])
+            queuePage(queuePage, didRequestSecondaryCustomPrefixRenameAt: [currentDisplayIndex], origin: .key)
         }
     }
 
@@ -1214,6 +1235,7 @@ class PlayerWindowController: NSWindowController {
             // Stable fullscreen: full-bleed video with cinematic overlay controls.
             queuePage.isHidden = true
             queueSeparator.isHidden = true
+            queuePanelResizeHandle.isHidden = true
             skimSettingsStrip.isHidden = true
             skimControlsRestoreButton.isHidden = true
             skimControlsRestoreButton.isEnabled = false
@@ -1238,7 +1260,7 @@ class PlayerWindowController: NSWindowController {
             skimControlsRestoreButton.frame = SkimRestoreHandleGeometry.frame(in: b)
             let contentHeight = max(0, b.height - (skimControlsVisibility.isVisible ? skimSettingsStripHeight : 0))
             let queueW: CGFloat = isQueuePageOpen
-                ? min(360, max(280, b.width * 0.31))
+                ? QueuePanelWidthPolicy.width(contentWidth: b.width, customFraction: queuePanelCustomFraction)
                 : 0
             let videoW = max(0, b.width - queueW)
 
@@ -1261,9 +1283,14 @@ class PlayerWindowController: NSWindowController {
                 queueSeparator.isHidden = false
                 queueSeparator.frame = NSRect(x: videoW, y: 0, width: 1, height: contentHeight)
                 queuePage.frame = NSRect(x: videoW + 1, y: 0, width: max(0, queueW - 1), height: contentHeight)
+                let grabHalf = QueuePanelWidthPolicy.grabZoneHalfWidth
+                queuePanelResizeHandle.isHidden = false
+                queuePanelResizeHandle.frame = NSRect(x: videoW - grabHalf, y: 0, width: grabHalf * 2, height: contentHeight)
+                queuePanelResizeHandle.accessibilityWidthValue = "\(Int(queueW.rounded())) points"
             } else {
                 queuePage.isHidden = true
                 queueSeparator.isHidden = true
+                queuePanelResizeHandle.isHidden = true
             }
         }
 
@@ -1995,6 +2022,40 @@ class PlayerWindowController: NSWindowController {
         transport.update()
     }
 
+    // MARK: - Queue panel width (P51)
+
+    private func queuePanelEdgeDragged(to edgeX: CGFloat) {
+        guard let contentWidth = window?.contentView?.bounds.width else { return }
+        queuePanelCustomFraction = QueuePanelWidthPolicy.customFraction(forEdgeX: edgeX, contentWidth: contentWidth)
+        layoutPlayerViews()
+    }
+
+    private func queuePanelEdgeDragEnded() {
+        guard let contentWidth = window?.contentView?.bounds.width else { return }
+        let width = QueuePanelWidthPolicy.width(contentWidth: contentWidth, customFraction: queuePanelCustomFraction)
+        let fraction = queuePanelCustomFraction.map { String(format: "%.3f", $0) } ?? "default"
+        DebugConsoleController.log("queue", "panelWidth: drag-end width=\(Int(width.rounded())) contentWidth=\(Int(contentWidth.rounded())) fraction=\(fraction)")
+    }
+
+    /// ← / → on the divider (and VoiceOver's increment / decrement): the panel gets `delta` points wider (negative =
+    /// narrower) through the same clamped route a drag takes.
+    private func queuePanelNudged(by delta: CGFloat) {
+        guard let contentWidth = window?.contentView?.bounds.width else { return }
+        let current = QueuePanelWidthPolicy.width(contentWidth: contentWidth, customFraction: queuePanelCustomFraction)
+        queuePanelEdgeDragged(to: contentWidth - (current + delta))
+        let width = QueuePanelWidthPolicy.width(contentWidth: contentWidth, customFraction: queuePanelCustomFraction)
+        let fraction = queuePanelCustomFraction.map { String(format: "%.3f", $0) } ?? "default"
+        DebugConsoleController.log("queue", "panelWidth: nudge width=\(Int(width.rounded())) contentWidth=\(Int(contentWidth.rounded())) fraction=\(fraction)")
+    }
+
+    private func resetQueuePanelWidth() {
+        queuePanelCustomFraction = nil
+        layoutPlayerViews()
+        guard let contentWidth = window?.contentView?.bounds.width else { return }
+        let width = QueuePanelWidthPolicy.width(contentWidth: contentWidth, customFraction: nil)
+        DebugConsoleController.log("queue", "panelWidth: reset width=\(Int(width.rounded())) contentWidth=\(Int(contentWidth.rounded())) fraction=default")
+    }
+
     // Coalesces multiple refreshQueuePage() calls within one runloop tick into a
     // single rebuild. Multi-window playback fires this from many paths (videoStart,
     // duration metadata callbacks, settings changes, sort changes, queue mutation),
@@ -2621,6 +2682,7 @@ class PlayerWindowController: NSWindowController {
     private func pausePlayerSession(source: String) {
         guard !isPlayerSessionPaused else { return }
         isPlayerSessionPaused = true
+        pauseStartStallWatch()
         let now = CACurrentMediaTime()
         backgroundAudioPlayback.pause()
         suspendScheduledPlaybackAction(now: now)
@@ -3029,6 +3091,7 @@ class PlayerWindowController: NSWindowController {
             transport.invalidateCachedDisplayState()
             if isQueuePageOpen { refreshQueuePage() }
             // Stop VLC if it was carrying media (video→image transition).
+            endStartStallWatch()
             if player.media != nil {
                 suppressNextStopped = true
                 suppressNextStoppedMT = CACurrentMediaTime()
@@ -3043,6 +3106,7 @@ class PlayerWindowController: NSWindowController {
 
         // Video path — clear any active image state then use VLC.
         DebugConsoleController.log("media", "videoStart: window=\(debugIdentity) file=\(url.lastPathComponent) session=\(currentPlaybackSessionID) reason=\(startReason) audio=\(audioStateDescription)")
+        beginStartStallWatch(url: url, sessionID: currentPlaybackSessionID)
         clearImageSlideshowState()
         videoAudioNormalizer.prepareForNewVideo(on: player)
         if SkimAssignmentBehavior.nextAssignment(isSkimEnabled: configuredSkimEnabled) == .skimPreview {
@@ -4177,6 +4241,9 @@ class PlayerWindowController: NSWindowController {
         guard currentPlaybackSessionID == handshake.expectedSessionID else {
             NSLog("[dwb-playback] handshakeCheck: id=%d reason=%@ session moved on — abandoning",
                   handshake.id, handshake.reason)
+            logHandshakeStep("handshake-abandoned", level: .info, handshake: handshake,
+                             stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                             detail: "cause=session-moved currentSession=\(currentPlaybackSessionID)")
             cancelPlaybackStartHandshake(reason: "session-moved", suppressLog: true)
             clearCompletionSequence(reason: "handshake-session-moved", suppressLog: true)
             return
@@ -4185,6 +4252,9 @@ class PlayerWindowController: NSWindowController {
         guard mediaAssigned else {
             NSLog("[dwb-playback] handshakeCheck: id=%d reason=%@ media changed before start — abandoning",
                   handshake.id, handshake.reason)
+            logHandshakeStep("handshake-abandoned", level: .info, handshake: handshake,
+                             stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                             detail: "cause=media-changed")
             cancelPlaybackStartHandshake(reason: "media-changed", suppressLog: true)
             clearCompletionSequence(reason: "handshake-media-changed", suppressLog: true)
             return
@@ -4223,6 +4293,9 @@ class PlayerWindowController: NSWindowController {
                       handshake.expectedURL.lastPathComponent,
                       timeMs,
                       position)
+                logHandshakeStep("handshake-progress-retry", level: .info, handshake: handshake,
+                                 stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                                 detail: "retry=\(handshake.progressRetryCount)")
                 player.play()
                 schedulePlaybackStartHandshakeCheck(for: handshake.id)
                 return
@@ -4238,6 +4311,9 @@ class PlayerWindowController: NSWindowController {
                       handshake.id,
                       handshake.reason,
                       handshake.expectedURL.lastPathComponent)
+                logHandshakeStep("handshake-recovery", level: .warning, handshake: handshake,
+                                 stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                                 detail: "recovery=fresh-player")
                 rebuildPlayerAfterFailedStart(for: handshake)
                 schedulePlaybackStartHandshakeCheck(for: handshake.id)
                 return
@@ -4264,6 +4340,9 @@ class PlayerWindowController: NSWindowController {
                   handshake.reason,
                   handshake.playRetryCount,
                   handshake.expectedURL.lastPathComponent)
+            logHandshakeStep("handshake-play-retry", level: .info, handshake: handshake,
+                             stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                             detail: "retry=\(handshake.playRetryCount)")
             player.play()
             schedulePlaybackStartHandshakeCheck(for: handshake.id)
             return
@@ -4278,6 +4357,9 @@ class PlayerWindowController: NSWindowController {
                   handshake.id,
                   handshake.reason,
                   handshake.expectedURL.lastPathComponent)
+            logHandshakeStep("handshake-recovery", level: .warning, handshake: handshake,
+                             stateRaw: stateRaw, isPlaying: started, timeMs: timeMs, position: position,
+                             detail: "recovery=rebuilding-player")
             rebuildPlayerAfterFailedStart(for: handshake)
             schedulePlaybackStartHandshakeCheck(for: handshake.id)
             return
@@ -4293,6 +4375,91 @@ class PlayerWindowController: NSWindowController {
         // same-session player rebuild attempted recovery. The existing readiness process is
         // exhausted with no playable media ever established. Automatic playback failure (P32, Part 3).
         handleAutomaticPlaybackFailure(reason: "handshake-no-playing", failedURL: handshake.expectedURL)
+    }
+
+    /// Console line for one handshake trouble step. Uses only values `verifyPlaybackStartHandshake`
+    /// has already read; it adds no `VLCMediaPlayer` access. The `NSLog` for the same step stays.
+    private func logHandshakeStep(_ step: String,
+                                  level: DebugLevel,
+                                  handshake: PlaybackStartHandshake,
+                                  stateRaw: Int,
+                                  isPlaying: Bool,
+                                  timeMs: Int,
+                                  position: Float,
+                                  detail: String) {
+        let pos = String(format: "%.3f", position)
+        DebugConsoleController.log(
+            level: level,
+            category: "playback",
+            message: "\(step): window=\(debugIdentity) file=\(handshake.expectedURL.lastPathComponent) session=\(handshake.expectedSessionID) reason=\(handshake.reason) state=\(stateRaw) isPlaying=\(isPlaying ? 1 : 0) timeMs=\(timeMs) pos=\(pos) \(detail)"
+        )
+    }
+
+    // MARK: - Start-stall watch (console lines only)
+
+    /// Starts watching a video start. Ends the previous session first, which can complete a streak.
+    /// The watchdog is one non-repeating work item; it reads window-held values only.
+    private func beginStartStallWatch(url: URL, sessionID: Int) {
+        startStallWorkItem?.cancel()
+        startStallWorkItem = nil
+        let startTime = CACurrentMediaTime()
+        let outcome = startStallMonitor.beginVideoSession(id: sessionID,
+                                                          filePath: url.path,
+                                                          fileName: url.lastPathComponent,
+                                                          startTime: startTime,
+                                                          isPaused: isPlayerSessionPaused)
+        logStartStallOutcome(outcome)
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.startStallWatchDidFire()
+        }
+        startStallWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + PlaybackStartStallMonitor.stallSeconds,
+                                      execute: workItem)
+    }
+
+    /// The video session ended without a replacement video (an image start, or the window closing).
+    private func endStartStallWatch() {
+        startStallWorkItem?.cancel()
+        startStallWorkItem = nil
+        logStartStallOutcome(startStallMonitor.endActiveSession())
+    }
+
+    private func pauseStartStallWatch() {
+        startStallWorkItem?.cancel()
+        startStallWorkItem = nil
+        startStallMonitor.notePaused()
+    }
+
+    private func notePlayingForStartStallWatch(mediaPath: String) {
+        if startStallMonitor.notePlaying(mediaPath: mediaPath, isPaused: isPlayerSessionPaused) {
+            startStallWorkItem?.cancel()
+            startStallWorkItem = nil
+        }
+    }
+
+    private func startStallWatchDidFire() {
+        startStallWorkItem = nil
+        let outcome = startStallMonitor.watchdogFired(now: CACurrentMediaTime(),
+                                                      currentSessionID: currentPlaybackSessionID,
+                                                      isPaused: isPlayerSessionPaused)
+        logStartStallOutcome(outcome)
+    }
+
+    private func logStartStallOutcome(_ outcome: PlaybackStartStallMonitor.Outcome) {
+        if let stalled = outcome.stalledStart {
+            DebugConsoleController.log(
+                level: .warning,
+                category: "playback",
+                message: "start-stalled: window=\(debugIdentity) file=\(stalled.fileName) session=\(stalled.sessionID) state=\(lastSeenPlayerStateRaw) secondsSinceStart=\(String(format: "%.1f", stalled.secondsSinceStart))"
+            )
+        }
+        if let streak = outcome.streakWarning {
+            DebugConsoleController.log(
+                level: .warning,
+                category: "playback",
+                message: "start-stalled-streak: window=\(debugIdentity) count=\(streak.count) lastFile=\(streak.fileName) lastSession=\(streak.sessionID) state=\(lastSeenPlayerStateRaw)"
+            )
+        }
     }
 
     private func rebuildPlayerAfterFailedStart(for handshake: PlaybackStartHandshake) {
@@ -5125,6 +5292,7 @@ class PlayerWindowController: NSWindowController {
     override func close() {
         cancelPendingFolderScan()
         isPreviewWindowClosing = true
+        endStartStallWatch()
         resetPlaybackCompletionSignals(reason: "window-close")
         backgroundAudioPlayback.stop()
         if currentItemIsImage {
@@ -5145,6 +5313,7 @@ extension PlayerWindowController: NSWindowDelegate {
         markerRenameUndo.clear()
         cancelPendingFolderScan()
         isPreviewWindowClosing = true
+        endStartStallWatch()
         resetPlaybackCompletionSignals(reason: "window-will-close")
         releasePlaybackSleepAssertion()
         stopUpdateTimer()
@@ -5415,8 +5584,10 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
         let capturedMediaName = capturedMediaURL?.lastPathComponent ?? "—"
 
         // M6: mark transport dirty; the 0.25 s timer is the regular consumer.
+        let capturedStateRaw = capturedState.rawValue
         DispatchQueue.main.async { [weak self] in
             self?.needsTransportUpdate = true
+            self?.lastSeenPlayerStateRaw = capturedStateRaw
         }
 
         switch capturedState {
@@ -5444,6 +5615,9 @@ extension PlayerWindowController: VLCMediaPlayerDelegate {
                     if self.player.isPlaying { self.player.pause() }
                     DebugConsoleController.log("playback", "playingRejected: window=\(self.debugIdentity) session=\(self.currentPlaybackSessionID) reason=session-paused")
                     return
+                }
+                if let capturedMediaPath = capturedMediaURL?.path {
+                    self.notePlayingForStartStallWatch(mediaPath: capturedMediaPath)
                 }
                 self.updatePlaybackProgressSnapshot(position: capturedPosition)
                 if !self.currentItemIsImage {
@@ -5671,20 +5845,20 @@ extension PlayerWindowController: QueuePageViewDelegate {
     }
 
     /// One-click custom prefix rename. Preflights all targets before renaming any (multi-select safe).
-    func queuePage(_ view: QueuePageView, didRequestCustomPrefixRenameAt indices: [Int]) {
+    func queuePage(_ view: QueuePageView, didRequestCustomPrefixRenameAt indices: [Int], origin: PrefixPressOrigin) {
         guard !SettingsWindowController.customPrefixValue().isEmpty else {
             DebugConsoleController.log("rename", "customPrefix: noop (empty prefix) source=queuePage")
             return
         }
-        performQueuePagePrefixRename(indices: indices, action: .primary, tag: "customPrefix")
+        performQueuePagePrefixRename(indices: indices, action: .primary, tag: "customPrefix", origin: origin)
     }
 
-    func queuePage(_ view: QueuePageView, didRequestSecondaryCustomPrefixRenameAt indices: [Int]) {
+    func queuePage(_ view: QueuePageView, didRequestSecondaryCustomPrefixRenameAt indices: [Int], origin: PrefixPressOrigin) {
         guard !SettingsWindowController.customPrefixSecondaryValue().isEmpty else {
             DebugConsoleController.log("rename", "customPrefixSecondary: noop (empty prefix) source=queuePage")
             return
         }
-        performQueuePagePrefixRename(indices: indices, action: .secondary, tag: "customPrefixSecondary")
+        performQueuePagePrefixRename(indices: indices, action: .secondary, tag: "customPrefixSecondary", origin: origin)
     }
 
     /// Shared implementation for queue-page prefix rename (primary and secondary).
@@ -5693,7 +5867,14 @@ extension PlayerWindowController: QueuePageViewDelegate {
     /// before any filesystem mutation — the two prefixes toggle/replace each
     /// other and never stack. Single-file renames proceed immediately;
     /// multi-file renames require explicit confirmation.
-    private func performQueuePagePrefixRename(indices: [Int], action: CustomPrefixAction, tag: String) {
+    ///
+    /// Advance after prefix (P52): when the setting is on, a `.key` press on exactly the current
+    /// item that adds or replaces a prefix plays the next item after the single-file rename
+    /// succeeds. Footer chips (`.footerChip`), other rows, several rows, and removals never do.
+    private func performQueuePagePrefixRename(indices: [Int],
+                                              action: CustomPrefixAction,
+                                              tag: String,
+                                              origin: PrefixPressOrigin) {
         guard let win = window else { return }
         let primaryPrefix = SettingsWindowController.customPrefixValue()
         let secondaryPrefix = SettingsWindowController.customPrefixSecondaryValue()
@@ -5701,13 +5882,33 @@ extension PlayerWindowController: QueuePageViewDelegate {
 
         // Resolve display indices to (pbIdx, url) pairs.
         var targets: [(pbIdx: Int, url: URL)] = []
+        var targetDisplayIndices: [Int] = []
         for displayIdx in indices {
             guard displayIdx >= 0, displayIdx < displayOrder.count else { continue }
             let pbIdx = displayOrder[displayIdx]
             guard pbIdx >= 0, pbIdx < playbackSet.count else { continue }
             targets.append((pbIdx: pbIdx, url: playbackSet[pbIdx]))
+            targetDisplayIndices.append(displayIdx)
         }
         guard !targets.isEmpty else { return }
+
+        let advanceDecision = PrefixAdvancePolicy.decision(
+            settingEnabled: SettingsWindowController.isAdvanceAfterPrefixEnabled(),
+            origin: origin,
+            targetDisplayIndices: targetDisplayIndices,
+            currentDisplayIndex: currentDisplayIndex,
+            transition: targets.count == 1
+                ? SkimFileRenamer.customPrefixTransition(for: targets[0].url.lastPathComponent,
+                                                         primaryPrefix: primaryPrefix,
+                                                         secondaryPrefix: secondaryPrefix,
+                                                         action: action)
+                : nil,
+            hasNextItem: canAdvanceAfterCompletion
+        )
+        if case .skip(let reason) = advanceDecision, reason != .renameFailed {
+            DebugConsoleController.log("rename", "prefixAdvance: skipped reason=\(reason.rawValue)")
+        }
+        let shouldAdvanceAfterRename = advanceDecision == .advance
 
         // Preflight: plan all renames atomically before mutating any file.
         let planResult = MediaFileSupport.planCustomPrefixToggleRenames(
@@ -5732,6 +5933,9 @@ extension PlayerWindowController: QueuePageViewDelegate {
             }
             DebugConsoleController.log(level: .warning, category: "rename",
                                        message: "\(tag): preflight failed — \(message)")
+            if shouldAdvanceAfterRename {
+                DebugConsoleController.log("rename", "prefixAdvance: skipped reason=\(PrefixAdvanceSkipReason.renameFailed.rawValue)")
+            }
             presentRenameAlert(title: "Cannot Rename", message: message, window: win)
 
         case .success(let planned):
@@ -5758,6 +5962,14 @@ extension PlayerWindowController: QueuePageViewDelegate {
                     "\(tag): \(sourceURL.lastPathComponent) → \(r.newName) source=queuePage")
                 if let renamedURL = renameFile(at: r.pbIdx, to: r.newName) {
                     recordMarkerRename([SkimMarkerRenameMove(source: sourceURL, destination: renamedURL)])
+                    if shouldAdvanceAfterRename {
+                        // Same path as the Next button, so its side effects run identically.
+                        playNext()
+                        DebugConsoleController.log("rename",
+                            "prefixAdvance: \(sourceURL.lastPathComponent) → next displayIdx=\(currentDisplayIndex) source=prefixKey")
+                    }
+                } else if shouldAdvanceAfterRename {
+                    DebugConsoleController.log("rename", "prefixAdvance: skipped reason=\(PrefixAdvanceSkipReason.renameFailed.rawValue)")
                 }
             } else {
                 // Multi-file: show confirmation before any filesystem mutation.
