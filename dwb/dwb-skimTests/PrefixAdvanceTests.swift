@@ -200,7 +200,7 @@ final class PrefixAdvanceTests: XCTestCase {
         defaults.set(true, forKey: SettingsDefaultsRegistry.Keys.advanceAfterPrefix)
         XCTAssertTrue(defaults.bool(forKey: SettingsDefaultsRegistry.Keys.advanceAfterPrefix))
 
-        // Restore All Settings to Default writes every registered default back.
+        // Restore Default Settings writes every registered default back.
         SettingsDefaultsRegistry.defaultValues(reduceMotionDefault: false)
             .forEach { defaults.set($0.value, forKey: $0.key) }
         XCTAssertFalse(defaults.bool(forKey: SettingsDefaultsRegistry.Keys.advanceAfterPrefix))

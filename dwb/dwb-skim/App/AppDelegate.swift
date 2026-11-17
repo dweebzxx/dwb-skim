@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         SettingsWindowController.registerDefaults()
         _ = DebugConsoleController.shared   // eagerly init so it observes settings from launch
         buildMainMenu()
+        installShortcutObserver()
         installOptionDoubleTapCoordinator()
         installPlayerActivationTracking()
         openInitialPlayerWindowIfNeeded()
@@ -453,6 +454,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.tag {
+        case 40: // Redo typing
+            guard let window = NSApp.keyWindow, window.firstResponder is NSTextView else { return false }
+            return window.undoManager?.canRedo ?? false
         case 1:
             menuItem.state = frontPlayerWindowController?.scaleMode == .fit     ? .on : .off
         case 2:
@@ -490,6 +494,73 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         return usablePlayerWindowController()
     }
 
+    // MARK: - Menu key equivalents
+
+    /// Menu items that carry a command's key. Their key equivalents come from `ShortcutStore`
+    /// (the table's defaults plus the user's overrides), never from a literal here.
+    private var shortcutMenuItems: [(id: ShortcutCommandID, item: NSMenuItem)] = []
+    private var extraShortcutMenuItems: [ShortcutCommandID: [NSMenuItem]] = [:]
+    private var shortcutObserver: NSObjectProtocol?
+
+    private func bindShortcut(_ id: ShortcutCommandID, to item: NSMenuItem) {
+        shortcutMenuItems.append((id, item))
+        applyShortcut(id, to: item)
+    }
+
+    /// Gives `item` the command's first key that uses ⌘, ⌃, or ⌥, or no key when it has none.
+    /// Keys without those modifiers belong to the player window's key handler, so a menu item
+    /// never holds a key the handler also receives.
+    private func applyShortcut(_ id: ShortcutCommandID, to item: NSMenuItem) {
+        if let key = ShortcutStore.shared.menuKeys(for: id).first {
+            item.keyEquivalent = key.key
+            item.keyEquivalentModifierMask = key.modifiers.eventFlags
+        } else {
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
+        }
+    }
+
+    private func refreshShortcutMenuKeys() {
+        for items in extraShortcutMenuItems.values {
+            for item in items { item.menu?.removeItem(item) }
+        }
+        extraShortcutMenuItems.removeAll()
+        for (id, item) in shortcutMenuItems {
+            applyShortcut(id, to: item)
+            guard let menu = item.menu else { continue }
+            let extras = ShortcutStore.shared.menuKeys(for: id).dropFirst()
+            extraShortcutMenuItems[id] = extras.map { key in
+                let hidden = NSMenuItem(title: item.title, action: item.action, keyEquivalent: key.key)
+                hidden.target = item.target
+                hidden.tag = item.tag
+                hidden.keyEquivalentModifierMask = key.modifiers.eventFlags
+                hidden.isHidden = true
+                hidden.allowsKeyEquivalentWhenHidden = true
+                menu.addItem(hidden)
+                return hidden
+            }
+        }
+    }
+
+    /// Run a menu-backed action assigned an unmodified player-window key.
+    func performKeyHandlerMenuAction(_ id: ShortcutCommandID) -> Bool {
+        guard let item = shortcutMenuItems.first(where: { $0.id == id })?.item,
+              let action = item.action, validateMenuItem(item) else { return false }
+        return NSApp.sendAction(action, to: item.target, from: item)
+    }
+
+    @objc private func redoTyping(_ sender: Any?) {
+        guard let window = NSApp.keyWindow, window.firstResponder is NSTextView else { return }
+        window.undoManager?.redo()
+    }
+
+    private func installShortcutObserver() {
+        guard shortcutObserver == nil else { return }
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: .shortcutsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.refreshShortcutMenuKeys() }
+    }
+
     // MARK: - Main menu (programmatic)
 
     private func buildMainMenu() {
@@ -508,14 +579,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let settingsItem = NSMenuItem(title: "Settings\u{2026}",
                                       action: #selector(openSettings(_:)),
-                                      keyEquivalent: ",")
+                                      keyEquivalent: "")
         settingsItem.target = self
+        bindShortcut(.openSettings, to: settingsItem)
         appMenu.addItem(settingsItem)
 
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit dwb skim",
-                        action: #selector(NSApplication.terminate(_:)),
-                        keyEquivalent: "q")
+        let quitItem = appMenu.addItem(withTitle: "Quit dwb skim",
+                                       action: #selector(NSApplication.terminate(_:)),
+                                       keyEquivalent: "")
+        bindShortcut(.quit, to: quitItem)
 
         // ── File menu ───────────────────────────────────────────────────────
         let fileItem = NSMenuItem()
@@ -525,17 +598,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let openItem = NSMenuItem(title: "Open\u{2026}",
                                   action: #selector(openFile(_:)),
-                                  keyEquivalent: "o")
+                                  keyEquivalent: "")
         openItem.target = self
+        bindShortcut(.openFile, to: openItem)
         fileMenu.addItem(openItem)
 
         fileMenu.addItem(.separator())
 
         let revealItem = NSMenuItem(title: "Reveal in Finder",
                                     action: #selector(revealInFinder(_:)),
-                                    keyEquivalent: "r")
-        revealItem.keyEquivalentModifierMask = [.command, .shift]
+                                    keyEquivalent: "")
         revealItem.target = self
+        bindShortcut(.revealInFinder, to: revealItem)
         revealItem.tag    = 10
         fileMenu.addItem(revealItem)
 
@@ -544,6 +618,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
                                     keyEquivalent: "")
         renameItem.target = self
         renameItem.tag    = 11
+        bindShortcut(.renameFile, to: renameItem)
         fileMenu.addItem(renameItem)
 
         let removeItem = NSMenuItem(title: QueueRemovalPresentation.menuItemTitle,
@@ -553,13 +628,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         removeItem.tag    = 12
         fileMenu.addItem(removeItem)
 
-        // AppKit represents Delete as NSDeleteCharacter for menu shortcuts.
-        // The visible shortcut remains Command+Shift+Delete.
+        // AppKit represents Delete as NSDeleteCharacter for menu shortcuts (`ShortcutKey.delete`).
         let deleteAllItem = NSMenuItem(title: "Clear Queue",
                                        action: #selector(deleteAllQueueItems(_:)),
-                                       keyEquivalent: String(UnicodeScalar(NSDeleteCharacter)!))
-        deleteAllItem.keyEquivalentModifierMask = [.command, .shift]
+                                       keyEquivalent: "")
         deleteAllItem.target = self
+        bindShortcut(.clearQueue, to: deleteAllItem)
         deleteAllItem.tag    = 13
         fileMenu.addItem(deleteAllItem)
 
@@ -567,23 +641,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let newWindowItem = NSMenuItem(title: "New Window",
                                        action: #selector(newWindow(_:)),
-                                       keyEquivalent: "n")
+                                       keyEquivalent: "")
         newWindowItem.target = self
+        bindShortcut(.newWindow, to: newWindowItem)
         fileMenu.addItem(newWindowItem)
 
         // ── Edit menu ───────────────────────────────────────────────────────
-        // Only the standard Undo item. `undo:` travels the responder chain:
-        // a player window turns it into "Undo Prefix Change" (or text-field
-        // typing undo while a field is being edited); other windows keep
-        // their standard undo.
+        // `undo:` travels the responder chain: a player window turns it into
+        // "Undo Prefix Change" (or typing undo while a field is being edited).
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
         let editMenu = NSMenu(title: "Edit")
         editMenu.delegate = self
         editItem.submenu = editMenu
-        editMenu.addItem(withTitle: "Undo",
-                         action: Selector(("undo:")),
-                         keyEquivalent: "z")
+        let undoItem = editMenu.addItem(withTitle: "Undo",
+                                        action: Selector(("undo:")),
+                                        keyEquivalent: "")
+        bindShortcut(.undoPrefixChange, to: undoItem)
+        let redoItem = editMenu.addItem(withTitle: "Redo", action: #selector(redoTyping(_:)), keyEquivalent: "")
+        redoItem.target = self
+        redoItem.tag = 40
+        bindShortcut(.redoTyping, to: redoItem)
+        editMenu.addItem(.separator())
+        let cutItem = editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "")
+        bindShortcut(.cut, to: cutItem)
+        let copyItem = editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")
+        bindShortcut(.copy, to: copyItem)
+        let pasteItem = editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "")
+        bindShortcut(.paste, to: pasteItem)
+        let selectAllItem = editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "")
+        bindShortcut(.selectAll, to: selectAllItem)
 
         // ── Playback menu ───────────────────────────────────────────────────
         let playbackItem = NSMenuItem()
@@ -593,8 +680,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let playPauseItem = NSMenuItem(title: "Play / Pause",
                                        action: #selector(playPause(_:)),
-                                       keyEquivalent: " ")
+                                       keyEquivalent: "")
         playPauseItem.target = self
+        bindShortcut(.playPause, to: playPauseItem)
         playbackMenu.addItem(playPauseItem)
 
         let stopItem = NSMenuItem(title: "Stop",
@@ -607,16 +695,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let volUpItem = NSMenuItem(title: "Volume Up",
                                    action: #selector(volumeUp(_:)),
-                                   keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!))
-        volUpItem.keyEquivalentModifierMask = .command
+                                   keyEquivalent: "")
         volUpItem.target = self
+        bindShortcut(.volumeUp, to: volUpItem)
         playbackMenu.addItem(volUpItem)
 
         let volDownItem = NSMenuItem(title: "Volume Down",
                                      action: #selector(volumeDown(_:)),
-                                     keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!))
-        volDownItem.keyEquivalentModifierMask = .command
+                                     keyEquivalent: "")
         volDownItem.target = self
+        bindShortcut(.volumeDown, to: volDownItem)
         playbackMenu.addItem(volDownItem)
 
         playbackMenu.addItem(.separator())
@@ -651,22 +739,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
 
         let fitItem = NSMenuItem(title: "Fit",
                                  action: #selector(setScaleFit(_:)),
-                                 keyEquivalent: "1")
+                                 keyEquivalent: "")
         fitItem.target = self
+        bindShortcut(.fitVideo, to: fitItem)
         fitItem.tag = 1
         videoMenu.addItem(fitItem)
 
         let fillItem = NSMenuItem(title: "Fill",
                                   action: #selector(setScaleFill(_:)),
-                                  keyEquivalent: "2")
+                                  keyEquivalent: "")
         fillItem.target = self
+        bindShortcut(.fillVideo, to: fillItem)
         fillItem.tag = 2
         videoMenu.addItem(fillItem)
 
         let stretchItem = NSMenuItem(title: "Stretch",
                                      action: #selector(setScaleStretch(_:)),
-                                     keyEquivalent: "3")
+                                     keyEquivalent: "")
         stretchItem.target = self
+        bindShortcut(.stretchVideo, to: stretchItem)
         stretchItem.tag = 3
         videoMenu.addItem(stretchItem)
 
@@ -675,23 +766,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         mainMenu.addItem(windowItem)
         let windowMenu = NSMenu(title: "Window")
         windowItem.submenu = windowMenu
-        windowMenu.addItem(withTitle: "Minimize",
-                           action: #selector(NSWindow.performMiniaturize(_:)),
-                           keyEquivalent: "m")
+        let minimizeItem = windowMenu.addItem(withTitle: "Minimize",
+                                              action: #selector(NSWindow.performMiniaturize(_:)),
+                                              keyEquivalent: "")
+        bindShortcut(.minimizeWindow, to: minimizeItem)
         windowMenu.addItem(withTitle: "Zoom",
                            action: #selector(NSWindow.performZoom(_:)),
                            keyEquivalent: "")
-        windowMenu.addItem(withTitle: "Close",
-                           action: #selector(NSWindow.performClose(_:)),
-                           keyEquivalent: "w")
+        let closeItem = windowMenu.addItem(withTitle: "Close",
+                                           action: #selector(NSWindow.performClose(_:)),
+                                           keyEquivalent: "")
+        bindShortcut(.closeWindow, to: closeItem)
 
         windowMenu.addItem(.separator())
 
         let gridItem = NSMenuItem(title: "Four Window Grid",
                                   action: #selector(fourWindowGrid(_:)),
-                                  keyEquivalent: "4")
-        gridItem.keyEquivalentModifierMask = .command
+                                  keyEquivalent: "")
         gridItem.target = self
+        bindShortcut(.fourWindowGrid, to: gridItem)
         windowMenu.addItem(gridItem)
 
         windowMenu.addItem(.separator())
@@ -713,6 +806,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         NSApp.windowsMenu = windowMenu
 
         NSApp.mainMenu = mainMenu
+        refreshShortcutMenuKeys()
     }
 
     /// Resets the Undo title before validation, so a window that does not

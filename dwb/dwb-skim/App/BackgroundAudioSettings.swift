@@ -6,8 +6,8 @@ enum BackgroundAudioMixMode: String, CaseIterable, Equatable {
 
     var title: String {
         switch self {
-        case .uploadedOnly: return "Uploaded Audio Only"
-        case .videoAndUploaded: return "Video + Uploaded Audio"
+        case .uploadedOnly: return "Background Audio Only"
+        case .videoAndUploaded: return "Video + Background Audio"
         }
     }
 }
@@ -85,6 +85,8 @@ enum BackgroundAudioSelection {
 }
 
 struct BackgroundAudioSettingsSnapshot {
+    /// The Enable background audio setting. Off keeps the track, mix, and volume stored.
+    let isEnabled: Bool
     let selection: BackgroundAudioSelection
     let mixMode: BackgroundAudioMixMode
     let volume: Double
@@ -109,7 +111,8 @@ final class BackgroundAudioSettingsStore {
     }
 
     func snapshot() -> BackgroundAudioSettingsSnapshot {
-        BackgroundAudioSettingsSnapshot(selection: selection(),
+        BackgroundAudioSettingsSnapshot(isEnabled: isEnabled(),
+                                        selection: selection(),
                                         mixMode: mixMode(),
                                         volume: volume())
     }
@@ -137,6 +140,14 @@ final class BackgroundAudioSettingsStore {
         notificationCenter.post(name: .skimPlusSettingsChanged, object: self)
     }
 
+    /// Turns background audio on or off. Only the flag changes: the selected track, mix choice,
+    /// and volume stay stored. Choosing a track never calls this.
+    func setEnabled(_ enabled: Bool) {
+        guard isEnabled() != enabled else { return }
+        defaults.set(enabled, forKey: SettingsDefaultsRegistry.Keys.backgroundAudioEnabled)
+        notificationCenter.post(name: .skimPlusSettingsChanged, object: self)
+    }
+
     func setMixMode(_ mode: BackgroundAudioMixMode) {
         let key = SettingsDefaultsRegistry.Keys.backgroundAudioMixMode
         guard defaults.string(forKey: key) != mode.rawValue else { return }
@@ -150,6 +161,12 @@ final class BackgroundAudioSettingsStore {
         guard abs(defaults.double(forKey: key) - normalized) > 0.0001 else { return }
         defaults.set(normalized, forKey: key)
         notificationCenter.post(name: .skimPlusSettingsChanged, object: self)
+    }
+
+    private func isEnabled() -> Bool {
+        defaults.object(forKey: SettingsDefaultsRegistry.Keys.backgroundAudioEnabled) == nil
+            ? SettingsDefaultsRegistry.Defaults.backgroundAudioEnabled
+            : defaults.bool(forKey: SettingsDefaultsRegistry.Keys.backgroundAudioEnabled)
     }
 
     private func mixMode() -> BackgroundAudioMixMode {

@@ -6,11 +6,23 @@ private final class SkimPlayerWindow: NSWindow {
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
+           !ShortcutFocusRouting.focusedControlTakesKey(
+                focusedControlKind, keyCode: event.keyCode,
+                modifiers: ShortcutModifiers(eventFlags: event.modifierFlags)),
            let controller = windowController as? PlayerWindowController,
            controller.handleSkimShortcut(event) {
             return
         }
         super.sendEvent(event)
+    }
+
+    private var focusedControlKind: ShortcutFocusRouting.Control {
+        switch firstResponder {
+        case is QueueFooterCellView: return .footerSection
+        case is QueuePanelResizeHandleView: return .queueDivider
+        case is NSButton: return .button
+        default: return .other
+        }
     }
 
     /// Edit > Undo (Command-Z). While a text field in this window is being
@@ -857,20 +869,27 @@ class PlayerWindowController: NSWindowController {
 
     func handleSkimShortcut(_ event: NSEvent) -> Bool {
         guard !isTextEntryFocused else { return false }
-        let forbidden = event.modifierFlags.intersection([.command, .option, .control, .shift])
-        guard forbidden.isEmpty,
-              let key = event.charactersIgnoringModifiers?.lowercased(),
-              let shortcut = SkimKeyboardShortcut(unmodifiedKey: key) else { return false }
+        let modifiers = ShortcutModifiers(eventFlags: event.modifierFlags)
+        let base = event.characters(byApplyingModifiers: []) ?? event.charactersIgnoringModifiers
+        guard let key = ShortcutKey.recorded(keyCode: event.keyCode, characters: base,
+                                             modifiers: modifiers), key.isRecordable else { return false }
+        guard let resolution = SkimKeyboardShortcut.resolve(
+                key: key,
+                isSkimEnabled: configuredSkimEnabled,
+                isProgressiveRandomSkimSessionActive: isProgressiveRandomSkimSessionActive,
+                canManuallyAdvanceProgressiveRandomSkimSegment: canManuallyAdvanceProgressiveRandomSkimSegment
+              ) else {
+            guard !event.isARepeat, let app = NSApp.delegate as? AppDelegate,
+                  let id = ShortcutCommandTable.keyHandlerMenuCommand(for: key, store: .shared) else { return false }
+            return app.performKeyHandlerMenuAction(id)
+        }
+        let shortcut = resolution.shortcut
         // AppKit delivers normal key-repeat as additional key-down events. Only
         // non-Skim arrows consume those repeats; all existing Skim and non-arrow
         // shortcut repeat behavior remains unchanged.
         guard !event.isARepeat || shortcut.handlesKeyRepeat(isSkimEnabled: configuredSkimEnabled) else { return false }
 
-        if let arrowDispatch = shortcut.arrowDispatch(
-            isSkimEnabled: configuredSkimEnabled,
-            isProgressiveRandomSkimSessionActive: isProgressiveRandomSkimSessionActive,
-            canManuallyAdvanceProgressiveRandomSkimSegment: canManuallyAdvanceProgressiveRandomSkimSegment
-        ) {
+        if let arrowDispatch = resolution.arrow {
             switch arrowDispatch {
             case .seek(let seconds):
                 seekByArrowKey(seconds: seconds)
@@ -895,7 +914,7 @@ class PlayerWindowController: NSWindowController {
         case .toggleQueuePanel: toggleQueuePage(); return true
         case .togglePlayPause: togglePlayPause(); return true
         case .toggleFullScreen: window?.toggleFullScreen(nil); return true
-        case .seekBackwardTenSeconds, .seekForwardTenSeconds:
+        case .seekBackwardTenSeconds, .seekForwardTenSeconds, .nextProgressiveRandomSkimSegment:
             assertionFailure("Arrow shortcuts must be resolved before the standard shortcut switch")
             return false
         }
@@ -1432,16 +1451,18 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func showScaleHUD(for mode: ScaleMode) {
-        let symbol: String, name: String, shortcut: String
+        let symbol: String, name: String, command: ShortcutCommandID
         switch mode {
         case .fit:
-            (symbol, name, shortcut) = ("rectangle.arrowtriangle.2.inward", "Fit", "⌘1")
+            (symbol, name, command) = ("rectangle.arrowtriangle.2.inward", "Fit", .fitVideo)
         case .fill:
-            (symbol, name, shortcut) = ("rectangle.arrowtriangle.2.outward", "Fill", "⌘2")
+            (symbol, name, command) = ("rectangle.arrowtriangle.2.outward", "Fill", .fillVideo)
         case .stretch:
-            (symbol, name, shortcut) = ("arrow.left.and.arrow.right", "Stretch", "⌘3")
+            (symbol, name, command) = ("arrow.left.and.arrow.right", "Stretch", .stretchVideo)
         }
-        showStatusHUD(symbol: symbol, tint: DWBColor.textPrimary, title: name, detail: shortcut,
+        // The key shown is the one in use now; an unassigned mode shows no key.
+        showStatusHUD(symbol: symbol, tint: DWBColor.textPrimary, title: name,
+                      detail: ShortcutHints.keyText(for: command),
                       hold: DWBMotion.scaleHUDHold)
     }
 

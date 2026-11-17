@@ -1,7 +1,9 @@
 import AppKit
 
-// Settings > Shortcuts (design system `ShortcutsPage`): a keyboard map, a search pill,
-// and the shortcut rows grouped by task. Hovering a row lights its keys on the map.
+// Settings > Shortcuts: a keyboard map, a toolbar (search and Restore Defaults…), the scope
+// text, and the shortcut rows grouped by task. Hovering or focusing a row lights its keys on
+// the map. Clicking a key opens the Edit shortcut sheet. Every key comes from
+// `ShortcutCommandTable` and `ShortcutStore`, so the rows follow the user's changes.
 
 // MARK: - Page
 
@@ -9,11 +11,20 @@ final class ShortcutsPageView: NSView, NSTextFieldDelegate {
 
     private let mapView = ShortcutsKeyboardMapView()
     private let searchPill = ShortcutsSearchPill()
+    private let restoreButton = DWBButton(title: ShortcutsPresentation.restoreDefaultsTitle, style: .neutral)
+    private let toolbar = ShortcutsToolbarView()
+    private let scopeLabel = DWBLabel(ShortcutsPresentation.scopeText, size: 11, tone: .tertiary)
+    private let noMatchesLabel = DWBLabel(ShortcutsPresentation.noMatchesText, size: 12, tone: .tertiary)
     private let groupsStack = NSStackView()
     private let stack = NSStackView()
+    private let store: ShortcutStore
+    private var shortcutObserver: NSObjectProtocol?
+    /// The command whose first key takes keyboard focus after the next rebuild (after an edit).
+    private var commandToRefocus: ShortcutCommandID?
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(store: ShortcutStore = .shared) {
+        self.store = store
+        super.init(frame: .zero)
 
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -22,53 +33,86 @@ final class ShortcutsPageView: NSView, NSTextFieldDelegate {
         addSubview(stack)
 
         mapView.translatesAutoresizingMaskIntoConstraints = false
-        searchPill.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
         groupsStack.orientation = .vertical
         groupsStack.alignment = .leading
         groupsStack.spacing = 18
         groupsStack.translatesAutoresizingMaskIntoConstraints = false
 
+        toolbar.install(search: searchPill, button: restoreButton)
+        restoreButton.target = self
+        restoreButton.action = #selector(restoreDefaultsTapped)
+        restoreButton.setAccessibilityHelp("Resets every keyboard shortcut in dwb skim to its default.")
+
+        scopeLabel.lineBreakMode = .byWordWrapping
+        noMatchesLabel.setAccessibilityLabel(ShortcutsPresentation.noMatchesText)
+
         stack.addArrangedSubview(mapView)
-        stack.addArrangedSubview(searchPill)
+        stack.addArrangedSubview(toolbar)
+        stack.addArrangedSubview(scopeLabel)
         stack.addArrangedSubview(groupsStack)
+        stack.setCustomSpacing(6, after: toolbar)
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            searchPill.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
-            searchPill.widthAnchor.constraint(equalTo: stack.widthAnchor).withPriority(.defaultHigh),
+            toolbar.widthAnchor.constraint(equalTo: stack.widthAnchor),
             groupsStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
 
         searchPill.field.delegate = self
-        mapView.tones = ShortcutsPresentation.mapTones()
-        rebuildGroups(query: "")
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: .shortcutsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.reload() }
+        reload()
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
 
+    deinit {
+        if let shortcutObserver { NotificationCenter.default.removeObserver(shortcutObserver) }
+    }
+
     private var query: String { searchPill.field.stringValue }
 
     func controlTextDidChange(_ obj: Notification) {
-        rebuildGroups(query: query)
+        rebuildGroups()
     }
 
-    private func rebuildGroups(query: String) {
+    /// Rebuilds the map tones and the rows from the keys in use now. The search text stays.
+    private func reload() {
+        mapView.tones = ShortcutsPresentation.mapTones(in: ShortcutsPresentation.groups(store: store))
+        rebuildGroups()
+    }
+
+    private func rebuildGroups() {
         for view in groupsStack.arrangedSubviews {
             groupsStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
         mapView.highlightedKeys = []
-        for group in ShortcutsPresentation.filtered(ShortcutsPresentation.groups, query: query) {
+        let groups = ShortcutsPresentation.filtered(ShortcutsPresentation.groups(store: store), query: query)
+        if groups.isEmpty {
+            groupsStack.addArrangedSubview(noMatchesLabel)
+        }
+        var refocus: NSView?
+        for group in groups {
             let section = makeSection(group)
-            groupsStack.addArrangedSubview(section)
-            section.widthAnchor.constraint(equalTo: groupsStack.widthAnchor).isActive = true
+            groupsStack.addArrangedSubview(section.view)
+            section.view.widthAnchor.constraint(equalTo: groupsStack.widthAnchor).isActive = true
+            if refocus == nil, let id = commandToRefocus, let row = section.rows.first(where: { $0.row.commandID == id }) {
+                refocus = row.preferredFocusView
+            }
+        }
+        if let refocus {
+            commandToRefocus = nil
+            DispatchQueue.main.async { [weak self] in self?.window?.makeFirstResponder(refocus) }
         }
     }
 
-    private func makeSection(_ group: ShortcutGroup) -> NSView {
+    private func makeSection(_ group: ShortcutGroup) -> (view: NSView, rows: [ShortcutRowView]) {
         let title = DWBLabel(group.title, size: 11, weight: .semibold, tone: .accent)
         title.setAccessibilityRole(.staticText)
         let rows = NSStackView()
@@ -81,23 +125,89 @@ final class ShortcutsPageView: NSView, NSTextFieldDelegate {
         section.alignment = .leading
         section.spacing = 6
 
+        var rowViews: [ShortcutRowView] = []
         for row in group.rows {
             let view = ShortcutRowView(row: row)
-            view.onHoverChange = { [weak self] hovering in
-                self?.mapView.highlightedKeys = hovering ? Set(row.mapKeys) : []
+            view.onHighlightChange = { [weak self] highlighted in
+                self?.mapView.highlightedKeys = highlighted ? Set(row.mapKeys) : []
             }
+            view.onEdit = { [weak self] key in self?.presentEditor(for: row.commandID, key: key) }
             rows.addArrangedSubview(view)
             view.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+            rowViews.append(view)
         }
         rows.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true
-        return section
+        return (section, rowViews)
+    }
+
+    // MARK: Actions
+
+    private func presentEditor(for id: ShortcutCommandID, key: ShortcutKey?) {
+        guard let window else { return }
+        commandToRefocus = id
+        let editor = ShortcutEditorSheetController(commandID: id, editingKey: key, store: store)
+        // A saved or removed key rebuilds the rows and returns focus to this action's first key;
+        // a cancelled sheet leaves focus where it was.
+        editor.onCancelled = { [weak self] in self?.commandToRefocus = nil }
+        editor.present(on: window)
+    }
+
+    @objc private func restoreDefaultsTapped() {
+        guard let window else { return }
+        let store = store
+        ConfirmSheetController(title: ShortcutsPresentation.restoreConfirmTitle,
+                               message: ShortcutsPresentation.restoreConfirmMessage,
+                               actionTitle: ShortcutsPresentation.restoreConfirmAction) {
+            store.restoreDefaults()
+        }.present(on: window)
     }
 }
 
-private extension NSLayoutConstraint {
-    func withPriority(_ priority: NSLayoutConstraint.Priority) -> NSLayoutConstraint {
-        self.priority = priority
-        return self
+// MARK: - Toolbar
+
+/// The search pill and the Restore Defaults… button on one line; the button wraps below the
+/// field when the page is too narrow for both.
+private final class ShortcutsToolbarView: NSView {
+    private var search: NSView?
+    private var button: NSView?
+    private var isWrapped = false
+    private let gap: CGFloat = 8
+
+    func install(search: NSView, button: NSView) {
+        self.search = search
+        self.button = button
+        for view in [search, button] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(view)
+        }
+    }
+
+    private var searchSize: NSSize { search?.intrinsicContentSize ?? .zero }
+    private var buttonSize: NSSize { button?.fittingSize ?? .zero }
+
+    override var intrinsicContentSize: NSSize {
+        let height = isWrapped ? searchSize.height + gap + buttonSize.height : max(searchSize.height, buttonSize.height)
+        return NSSize(width: NSView.noIntrinsicMetric, height: height)
+    }
+
+    override func layout() {
+        super.layout()
+        guard let search, let button else { return }
+        let wrap = bounds.width < searchSize.width + gap + buttonSize.width
+        if wrap != isWrapped {
+            isWrapped = wrap
+            invalidateIntrinsicContentSize()
+        }
+        let height = bounds.height
+        let searchWidth = min(searchSize.width, bounds.width)
+        if wrap {
+            search.frame = NSRect(x: 0, y: height - searchSize.height, width: searchWidth, height: searchSize.height)
+            button.frame = NSRect(x: 0, y: 0, width: min(buttonSize.width, bounds.width), height: buttonSize.height)
+        } else {
+            search.frame = NSRect(x: 0, y: floor((height - searchSize.height) / 2), width: searchWidth, height: searchSize.height)
+            button.frame = NSRect(x: searchWidth + gap, y: floor((height - buttonSize.height) / 2),
+                                  width: buttonSize.width, height: buttonSize.height)
+        }
     }
 }
 
@@ -175,54 +285,150 @@ private final class ShortcutsSearchPill: NSView {
 
 // MARK: - Row
 
-/// A shortcut row: at least 30 pt tall, a `gridLine` bottom edge, and the keys drawn as
-/// `surfaceElevated` caps with a `borderStrong` edge (the marker color for `N` and `M`).
+/// A shortcut row: at least 30 pt tall, a `gridLine` bottom edge, the action name with its
+/// context text under it, and the keys at the end as key caps. An editable action's keys are
+/// buttons that open the editor; a reference row's caps only show. A row lights its keys on
+/// the map while it is hovered or holds keyboard focus.
 private final class ShortcutRowView: NSView {
-    var onHoverChange: ((Bool) -> Void)?
+    var onHighlightChange: ((Bool) -> Void)?
+    var onEdit: ((ShortcutKey?) -> Void)?
 
-    private let row: ShortcutRow
+    let row: ShortcutRow
     private let titleLabel: DWBLabel
+    private let contextLabel: DWBLabel?
     private let capsStack = NSStackView()
+    private var caps: [ShortcutKeyCapControl] = []
     private var isHovering = false {
-        didSet { needsDisplay = true }
+        didSet { needsDisplay = true; updateHighlight() }
+    }
+    private var focusCount = 0 {
+        didSet { updateHighlight() }
+    }
+    private var isRowFocused = false {
+        didSet { needsDisplay = true; updateHighlight() }
     }
     private var trackingAreaReference: NSTrackingArea?
 
     init(row: ShortcutRow) {
         self.row = row
         titleLabel = DWBLabel(row.title, size: 13, tone: .primary)
+        if let text = row.contextText {
+            let label = DWBLabel(text, size: 11, tone: .tertiary)
+            label.lineBreakMode = .byWordWrapping
+            label.maximumNumberOfLines = 0
+            label.cell?.wraps = true
+            label.cell?.isScrollable = false
+            contextLabel = label
+        } else {
+            contextLabel = nil
+        }
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.lineBreakMode = .byWordWrapping
+        titleLabel.maximumNumberOfLines = 0
+        titleLabel.cell?.wraps = true
+        titleLabel.cell?.isScrollable = false
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        addSubview(titleLabel)
+
+        let textStack = NSStackView(views: [titleLabel] + (contextLabel.map { [$0] } ?? []))
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 1
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(textStack)
+        self.textStack = textStack
 
         capsStack.orientation = .horizontal
         capsStack.spacing = 4
         capsStack.translatesAutoresizingMaskIntoConstraints = false
-        for cap in row.caps {
-            capsStack.addArrangedSubview(ShortcutKeyCapView(text: cap, tone: row.tone))
-        }
+        buildCaps()
         capsStack.setContentHuggingPriority(.required, for: .horizontal)
+        capsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(capsStack)
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(greaterThanOrEqualToConstant: 30),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            textStack.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            textStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
             capsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             capsStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: capsStack.leadingAnchor, constant: -12),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: capsStack.leadingAnchor, constant: -12),
         ])
 
         setAccessibilityElement(true)
         setAccessibilityRole(.row)
         setAccessibilityLabel(row.accessibilityLabel)
+        if let text = row.contextText { setAccessibilityHelp(text) }
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
+
+    private var textStack: NSStackView!
+
+    /// The control that takes focus after an edit: the row's first key, or the row itself.
+    var preferredFocusView: NSView? { caps.first(where: { $0.isInteractive }) ?? (acceptsFirstResponder ? self : nil) }
+
+    private func buildCaps() {
+        if let gesture = row.gestureText {
+            add(ShortcutKeyCapControl(kind: .reference(gesture), tone: row.tone, title: row.title))
+        } else if !row.isEditable {
+            for key in row.keys {
+                add(ShortcutKeyCapControl(kind: .reference(key.capText), tone: row.tone, title: row.title, spoken: key.spokenText))
+            }
+        } else if row.keys.isEmpty {
+            let cap = ShortcutKeyCapControl(kind: .unassigned, tone: row.tone, title: row.title)
+            cap.onActivate = { [weak self] in self?.onEdit?(nil) }
+            add(cap)
+        } else {
+            for key in row.keys {
+                let cap = ShortcutKeyCapControl(kind: .key(key.capText), tone: row.tone, title: row.title, spoken: key.spokenText)
+                cap.onActivate = { [weak self] in self?.onEdit?(key) }
+                add(cap)
+            }
+            let plus = ShortcutKeyCapControl(kind: .add, tone: row.tone, title: row.title)
+            plus.onActivate = { [weak self] in self?.onEdit?(nil) }
+            add(plus)
+        }
+    }
+
+    private func add(_ cap: ShortcutKeyCapControl) {
+        cap.onFocusChange = { [weak self] focused in
+            guard let self else { return }
+            self.focusCount += focused ? 1 : -1
+        }
+        caps.append(cap)
+        capsStack.addArrangedSubview(cap)
+    }
+
+    private func updateHighlight() {
+        onHighlightChange?(isHovering || focusCount > 0 || isRowFocused)
+    }
+
+    // A reference row has nothing to click, so keyboard focus lands on the row itself.
+    override var acceptsFirstResponder: Bool { !row.isEditable }
+
+    override func becomeFirstResponder() -> Bool {
+        isRowFocused = true
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        isRowFocused = false
+        return true
+    }
+
+    override func layout() {
+        // Wrap the title and the context text to the width the caps leave free.
+        let free = max(60, bounds.width - 8 - 12 - 8 - capsStack.fittingSize.width)
+        if titleLabel.preferredMaxLayoutWidth != free || contextLabel?.preferredMaxLayoutWidth != free {
+            titleLabel.preferredMaxLayoutWidth = free
+            contextLabel?.preferredMaxLayoutWidth = free
+        }
+        super.layout()
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         if isHovering {
@@ -232,6 +438,14 @@ private final class ShortcutRowView: NSView {
         }
         DWBColor.gridLine.setFill()
         NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
+        if isRowFocused {
+            let width = DWBAccessibility.focusWidth
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: width / 2, dy: width / 2),
+                                    xRadius: DWBMetrics.radiusControl, yRadius: DWBMetrics.radiusControl)
+            ring.lineWidth = width
+            DWBAccessibility.focusRing.setStroke()
+            ring.stroke()
+        }
     }
 
     override func updateTrackingAreas() {
@@ -247,46 +461,154 @@ private final class ShortcutRowView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovering = true
-        onHoverChange?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovering = false
-        onHoverChange?(false)
     }
 }
 
-/// A key cap in a row: min width 22, 20 pt tall, radius 4, monospaced 11 pt medium.
-private final class ShortcutKeyCapView: NSView {
-    private let text: String
-    private let tone: ShortcutRow.Tone
+/// A key cap in a row: min width 22, 20 pt tall, radius 4, monospaced 11 pt medium. An
+/// editable action's caps are buttons: Return or Space on a focused one, or a click, opens the
+/// editor. `Unassigned` and the add (+) cap use the same cap.
+private final class ShortcutKeyCapControl: NSControl {
+    enum Kind: Equatable {
+        case key(String)
+        case reference(String)
+        case unassigned
+        case add
+    }
 
-    init(text: String, tone: ShortcutRow.Tone) {
-        self.text = text
+    let kind: Kind
+    private let tone: ShortcutRow.Tone
+    var onActivate: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
+    private var isHovering = false {
+        didSet { needsDisplay = true }
+    }
+    private var isPressed = false {
+        didSet { needsDisplay = true }
+    }
+    private var trackingAreaReference: NSTrackingArea?
+
+    var isInteractive: Bool {
+        if case .reference = kind { return false }
+        return true
+    }
+
+    private var text: String {
+        switch kind {
+        case .key(let text), .reference(let text): return text
+        case .unassigned: return ShortcutRow.unassignedText
+        case .add: return ""
+        }
+    }
+
+    init(kind: Kind, tone: ShortcutRow.Tone, title: String, spoken: String? = nil) {
+        self.kind = kind
         self.tone = tone
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        setAccessibilityElement(false)
+        focusRingType = .none
+        switch kind {
+        case .reference:
+            setAccessibilityElement(false)
+        case .key:
+            setAccessibilityElement(true)
+            setAccessibilityRole(.button)
+            setAccessibilityLabel("\(spoken ?? text), shortcut for \(title)")
+            setAccessibilityHelp("Opens the shortcut editor.")
+        case .unassigned:
+            setAccessibilityElement(true)
+            setAccessibilityRole(.button)
+            setAccessibilityLabel("Unassigned, shortcut for \(title)")
+            setAccessibilityHelp("Opens the shortcut editor to add a key.")
+        case .add:
+            setAccessibilityElement(true)
+            setAccessibilityRole(.button)
+            setAccessibilityLabel("Add another shortcut for \(title)")
+            setAccessibilityHelp("Opens the shortcut editor to add a key.")
+        }
         DWBAccessibility.observe(self, selector: #selector(accessibilityDidChange))
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
 
     private var attributes: [NSAttributedString.Key: Any] {
-        [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
-         .foregroundColor: DWBColor.textPrimary]
+        let color: NSColor = kind == .unassigned ? DWBAccessibility.textTertiary : DWBColor.textPrimary
+        return [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium), .foregroundColor: color]
     }
 
     override var intrinsicContentSize: NSSize {
+        if kind == .add { return NSSize(width: 22, height: 20) }
         let width = ceil((text as NSString).size(withAttributes: attributes).width)
         return NSSize(width: max(22, width + 12), height: 20)
     }
+
+    override var acceptsFirstResponder: Bool { isInteractive }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { isInteractive }
+
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        onFocusChange?(true)
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        onFocusChange?(false)
+        return true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Return, keypad Enter, and Space press the focused key.
+        if isInteractive, [36, 76, 49].contains(event.keyCode) {
+            onActivate?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isInteractive else { return super.mouseDown(with: event) }
+        isPressed = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isInteractive else { return super.mouseUp(with: event) }
+        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
+        isPressed = false
+        if inside { onActivate?() }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isInteractive else { return false }
+        onActivate?()
+        return true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaReference { removeTrackingArea(trackingAreaReference) }
+        guard isInteractive else { return }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaReference = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseExited(with event: NSEvent) { isHovering = false }
 
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: DWBMetrics.radiusKey, yRadius: DWBMetrics.radiusKey)
         DWBColor.surfaceElevated.setFill()
         path.fill()
+        if isInteractive, isHovering || isPressed {
+            (isPressed ? DWBColor.overlayPressed : DWBColor.overlayHover).setFill()
+            path.fill()
+        }
         let edge: NSColor
         switch tone {
         case .accent: edge = DWBColor.borderStrong
@@ -297,10 +619,27 @@ private final class ShortcutKeyCapView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        let measured = (text as NSString).size(withAttributes: attributes)
-        (text as NSString).draw(at: NSPoint(x: floor((bounds.width - measured.width) / 2),
-                                            y: floor((bounds.height - measured.height) / 2)),
-                                withAttributes: attributes)
+        if kind == .add {
+            if let image = NSImage.dwbSymbol("plus", pointSize: 10, weight: .semibold, color: DWBAccessibility.textSecondary) {
+                image.draw(in: NSRect(x: floor((bounds.width - image.size.width) / 2),
+                                      y: floor((bounds.height - image.size.height) / 2),
+                                      width: image.size.width, height: image.size.height))
+            }
+        } else {
+            let measured = (text as NSString).size(withAttributes: attributes)
+            (text as NSString).draw(at: NSPoint(x: floor((bounds.width - measured.width) / 2),
+                                                y: floor((bounds.height - measured.height) / 2)),
+                                    withAttributes: attributes)
+        }
+
+        if isInteractive, window?.firstResponder === self {
+            let width = DWBAccessibility.focusWidth
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: -width / 2, dy: -width / 2),
+                                    xRadius: DWBMetrics.radiusKey + width / 2, yRadius: DWBMetrics.radiusKey + width / 2)
+            ring.lineWidth = width
+            DWBAccessibility.focusRing.setStroke()
+            ring.stroke()
+        }
     }
 
     @objc private func accessibilityDidChange() {

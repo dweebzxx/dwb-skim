@@ -212,21 +212,30 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private let startPositionControl = DWBSegmentedControl()
     private let skipIntroField = DWBInlineTextField()
     private let progressiveRandomSkimCheckbox = NSButton()
-    private let progressiveRandomSkimIntensityControl = DWBSegmentedControl()
+    private let coveragePopup = DWBPopUpButton()
     private var fixedDurationRow: SettingsFormRow?
     private var randomMinimumRow: SettingsFormRow?
     private var randomMaximumRow: SettingsFormRow?
+    private var progressiveRandomSkimRow: SettingsFormRow?
+    private var coverageRow: SettingsFormRow?
 
-    private let audioSelectedLabel = DWBLabel("No audio track selected", size: 12, tone: .tertiary)
+    private let enableBackgroundAudioCheckbox = NSButton()
+    private let audioSelectedLabel = DWBLabel(SettingsPresentation.Text.noAudioTrackSelected, size: 12, tone: .tertiary)
     private let audioUnavailableLabel = DWBLabel("", size: 11, tone: .secondary)
-    private let chooseAudioButton = DWBButton(title: "Choose Audio Track...", style: .neutral)
-    private let clearAudioButton = DWBButton(title: "Clear", style: .plain, size: .small)
+    private let chooseAudioButton = DWBButton(title: SettingsPresentation.Text.chooseAudioTrackTitle, style: .neutral)
+    private let clearAudioButton = DWBButton(title: SettingsPresentation.Text.clearAudioTrackTitle, style: .plain, size: .small)
     private let audioMixControl = DWBSegmentedControl()
     private let backgroundVolumeSlider = NSSlider()
     private let backgroundVolumeLabel = DWBLabel("75%", size: 13, tabularDigits: true)
     private var audioSelectionWell: SettingsAudioWellView?
     private var audioMixRow: SettingsFormRow?
     private var backgroundVolumeRow: SettingsFormRow?
+    private var audioUnavailableRow: SettingsFormRow?
+
+    private var hideDelayRow: SettingsFormRow?
+    private var autoHideTitlebarRow: SettingsFormRow?
+    private var primaryPrefixRow: SettingsFormRow?
+    private var secondaryPrefixRow: SettingsFormRow?
 
     private let autoHideCheckbox = NSButton()
     private let chromeThresholdPopup = DWBPopUpButton()
@@ -239,14 +248,14 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     private let primaryPrefixField = DWBInlineTextField()
     private let secondaryPrefixField = DWBInlineTextField()
     private let queueOrderPopup = DWBPopUpButton()
-    private let loopQueueSwitch = NSSwitch()
+    private let loopQueueCheckbox = NSButton()
     private let openQueueCheckbox = NSButton()
     private let advanceAfterPrefixCheckbox = NSButton()
 
     private let debugCheckbox = NSButton()
     private let verboseCheckbox = NSButton()
-    private let clearBookmarksButton = DWBButton(title: "Clear All Bookmarks...", style: .neutralDestructive)
-    private let restoreDefaultsButton = DWBButton(title: "Restore All Settings to Default", style: .neutral)
+    private let clearBookmarksButton = DWBButton(title: SettingsPresentation.Text.clearAllBookmarksTitle, style: .neutralDestructive)
+    private let restoreDefaultsButton = DWBButton(title: SettingsPresentation.Text.restoreDefaultSettingsTitle, style: .neutral)
 
     private init() {
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: SettingsPresentation.defaultWindowSize),
@@ -281,6 +290,16 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
                                                    name: name,
                                                    object: nil)
         }
+        // A saved, removed, or restored shortcut rewrites the shortcut line under each prefix field at once.
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(shortcutsDidChange(_:)),
+                                               name: .shortcutsChanged,
+                                               object: nil)
+    }
+
+    @objc private func shortcutsDidChange(_ note: Notification) {
+        refreshPrefixShortcutLines()
+        refreshNextSkimSegmentLine()
     }
 
     private func buildUI() {
@@ -342,11 +361,12 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     private func buildPlaybackPage() -> NSView {
-        configureCheckbox(showTitleOverlayCheckbox, title: "Show title overlay on playback start")
-        configureCheckbox(normalizeVideoAudioCheckbox, title: "Normalize video audio")
+        typealias Text = SettingsPresentation.Text
+        configureCheckbox(showTitleOverlayCheckbox, title: Text.showFilenameTitle)
+        configureCheckbox(normalizeVideoAudioCheckbox, title: Text.normalizeVideoAudioTitle)
         configurePopup(playbackSpeedPopup, action: #selector(playbackSpeedChanged(_:)))
         PlaybackSpeedOption.all.forEach {
-            playbackSpeedPopup.addItem(withTitle: $0.title)
+            playbackSpeedPopup.addItem(withTitle: SettingsPresentation.speedPopupTitle(forRate: $0.rate))
             playbackSpeedPopup.lastItem?.tag = $0.tag
         }
         configureNumericField(imageDurationField,
@@ -369,48 +389,40 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
                          maximum: Double(SettingsDefaultsRegistry.Defaults.gifLoopCountMaximum),
                          increment: 1,
                          action: #selector(gifLoopCountStepperChanged(_:)))
-        configureCheckbox(acceptVideoCheckbox, title: "Video")
-        configureCheckbox(acceptImagesCheckbox, title: "Images")
-        configureCheckbox(acceptGIFCheckbox, title: "GIF")
-        playbackSpeedPopup.setAccessibilityLabel("Playback speed")
+        playbackSpeedPopup.setAccessibilityLabel(Text.playbackSpeedLabel)
+        showTitleOverlayCheckbox.setAccessibilityLabel(Text.showFilenameTitle)
         imageDurationField.setAccessibilityLabel("Image duration in seconds")
         imageDurationStepper.setAccessibilityLabel("Adjust image duration")
         gifLoopCountField.setAccessibilityLabel("GIF loop count")
         gifLoopCountStepper.setAccessibilityLabel("Adjust GIF loop count")
-        // The three acceptance checkboxes read as bare "Video"/"Images"/"GIF"
-        // without their section heading; qualify them for VoiceOver.
-        acceptVideoCheckbox.setAccessibilityLabel("Accept video media")
-        acceptImagesCheckbox.setAccessibilityLabel("Accept image media")
-        acceptGIFCheckbox.setAccessibilityLabel("Accept GIF media")
-        let accept = NSStackView(views: [acceptVideoCheckbox, acceptImagesCheckbox, acceptGIFCheckbox])
-        accept.orientation = .horizontal
-        accept.spacing = 16
+        normalizeVideoAudioCheckbox.setAccessibilityLabel(Text.normalizeVideoAudioTitle)
         return page(identifier: "playback", sections: [
-            section("Playback", rows: [
-                row("Playback speed", playbackSpeedPopup, helper: "Applies to the frontmost player window."),
+            section(Text.playbackSections[0], rows: [
+                row(Text.playbackSpeedLabel, playbackSpeedPopup, helper: Text.playbackSpeedHelper),
                 row(nil, showTitleOverlayCheckbox),
             ]),
-            section("Media duration", rows: [
-                row("Image duration", numericStepperControl(imageDurationField,
-                                                              stepper: imageDurationStepper,
-                                                              suffix: "s"),
-                    helper: "Still images advance after the selected number of seconds."),
-                row("GIF loops", numericStepperControl(gifLoopCountField,
-                                                        stepper: gifLoopCountStepper),
-                    helper: "GIFs advance after the selected number of completed animation loops."),
+            section(Text.playbackSections[1], rows: [
+                row(Text.imageDurationLabel, numericStepperControl(imageDurationField,
+                                                                   stepper: imageDurationStepper,
+                                                                   suffix: Text.imageDurationUnit),
+                    helper: Text.imageDurationHelper),
+                row(Text.gifLoopsLabel, numericStepperControl(gifLoopCountField,
+                                                              stepper: gifLoopCountStepper,
+                                                              suffix: Text.gifLoopsUnit),
+                    helper: Text.gifLoopsHelper),
             ]),
-            section("Video audio", rows: [
-                row(nil, normalizeVideoAudioCheckbox,
-                    helper: "Adjusts video audio in real time. dwb+ background audio is never processed."),
+            section(Text.playbackSections[2], rows: [
+                row(nil, normalizeVideoAudioCheckbox, helper: Text.normalizeVideoAudioHelper),
             ]),
-            section("Accepted media", rows: [row(nil, accept)]),
         ])
     }
 
     private func buildSkimPreviewPage() -> NSView {
-        previewDurationModeControl.segmentCount = 2
-        previewDurationModeControl.setLabel("Fixed", forSegment: 0)
-        previewDurationModeControl.setLabel("Random", forSegment: 1)
+        typealias Text = SettingsPresentation.Text
+        previewDurationModeControl.segmentCount = Text.clipDurationModeTitles.count
+        for (index, title) in Text.clipDurationModeTitles.enumerated() {
+            previewDurationModeControl.setLabel(title, forSegment: index)
+        }
         previewDurationModeControl.target = self
         previewDurationModeControl.action = #selector(previewModeChanged(_:))
 
@@ -418,64 +430,71 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         configureNumericField(randomMinimumField, placeholder: "5")
         configureNumericField(randomMaximumField, placeholder: "15")
         configureNumericField(skipIntroField, placeholder: "5")
-        configureCheckbox(progressiveRandomSkimCheckbox, title: "Progressive Random Skim")
+        configureCheckbox(progressiveRandomSkimCheckbox, title: Text.progressiveRandomSkimTitle)
 
-        progressiveRandomSkimIntensityControl.segmentCount = SettingsPresentation.progressiveRandomSkimIntensityOptions.count
-        for (index, label) in SettingsPresentation.progressiveRandomSkimIntensityLabels.enumerated() {
-            progressiveRandomSkimIntensityControl.setLabel(label, forSegment: index)
-        }
-        progressiveRandomSkimIntensityControl.target = self
-        progressiveRandomSkimIntensityControl.action = #selector(progressiveRandomSkimIntensityChanged(_:))
-        progressiveRandomSkimIntensityControl.setAccessibilityLabel("Progressive Random Skim coverage intensity")
+        configurePopup(coveragePopup, action: #selector(progressiveRandomSkimIntensityChanged(_:)))
+        SettingsPresentation.progressiveRandomSkimIntensityLabels.forEach { coveragePopup.addItem(withTitle: $0) }
 
         // The visual grid label is a sibling view, so AppKit does not associate it
         // with the field; each control carries its own human-facing label.
-        previewDurationModeControl.setAccessibilityLabel("Clip duration mode")
-        fixedDurationField.setAccessibilityLabel("Fixed clip duration in seconds")
-        fixedDurationField.toolTip = "Controls Progressive segment length in Fixed mode."
-        randomMinimumField.setAccessibilityLabel("Minimum random clip duration in seconds")
-        randomMinimumField.toolTip = "Bounds Progressive segment length in Random mode."
-        randomMaximumField.setAccessibilityLabel("Maximum random clip duration in seconds")
-        randomMaximumField.toolTip = "Bounds Progressive segment length in Random mode."
-        startPositionControl.setAccessibilityLabel("Start position")
+        previewDurationModeControl.setAccessibilityLabel(Text.clipDurationLabel)
+        fixedDurationField.setAccessibilityLabel("Fixed duration in seconds")
+        randomMinimumField.setAccessibilityLabel("Minimum duration in seconds")
+        randomMaximumField.setAccessibilityLabel("Maximum duration in seconds")
+        startPositionControl.setAccessibilityLabel(Text.startPreviewsLabel)
         skipIntroField.setAccessibilityLabel("Skip intro in seconds")
+        progressiveRandomSkimCheckbox.setAccessibilityLabel(Text.progressiveRandomSkimTitle)
+        coveragePopup.setAccessibilityLabel(Text.coverageLabel)
 
-        startPositionControl.segmentCount = 2
-        startPositionControl.setLabel("Beginning", forSegment: 0)
-        startPositionControl.setLabel("Random", forSegment: 1)
+        startPositionControl.segmentCount = Text.startPreviewsTitles.count
+        for (index, title) in Text.startPreviewsTitles.enumerated() {
+            startPositionControl.setLabel(title, forSegment: index)
+        }
         startPositionControl.target = self
         startPositionControl.action = #selector(startPositionChanged(_:))
 
-        let fixed = row("Fixed duration", secondsControl(fixedDurationField),
-                        helper: "0 plays the full file. Controls Progressive segment length in Fixed mode.")
-        let minimum = row("Random minimum", secondsControl(randomMinimumField),
-                          helper: "Bounds Progressive segment length in Random mode.")
-        let maximum = row("Random maximum", secondsControl(randomMaximumField),
-                          helper: "Bounds Progressive segment length in Random mode.")
+        let fixed = row(Text.fixedDurationLabel, secondsControl(fixedDurationField),
+                        helper: Text.fixedDurationHelper)
+        let minimum = row(Text.minimumDurationLabel, secondsControl(randomMinimumField))
+        let maximum = row(Text.maximumDurationLabel, secondsControl(randomMaximumField))
         fixedDurationRow = fixed
         randomMinimumRow = minimum
         randomMaximumRow = maximum
 
+        let progressive = row(nil, progressiveRandomSkimCheckbox,
+                              helper: Text.progressiveRandomSkimHelper,
+                              extraHelper: SettingsPresentation.nextSkimSegmentLine())
+        let coverage = row(Text.coverageLabel, coveragePopup, helper: Text.coverageHelper)
+        progressiveRandomSkimRow = progressive
+        coverageRow = coverage
+
         return page(identifier: "skimPreview", sections: [
-            section("Skim preview", rows: [
-                row("Clip duration", previewDurationModeControl),
+            section(Text.skimPreviewSections[0], rows: [
+                row(Text.clipDurationLabel, previewDurationModeControl),
                 fixed,
                 minimum,
                 maximum,
-                row("Start position", startPositionControl),
-                row("Skip intro", secondsControl(skipIntroField)),
-                row(nil, progressiveRandomSkimCheckbox,
-                    helper: "Samples several short, randomized segments spread across videos 30 seconds or longer, always starting no earlier than Skip Intro."),
-                row("Coverage intensity", progressiveRandomSkimIntensityControl,
-                    helper: SettingsPresentation.progressiveRandomSkimCoverageHelperText),
+            ]),
+            section(Text.skimPreviewSections[1], rows: [
+                row(Text.startPreviewsLabel, startPositionControl),
+                row(Text.skipIntroLabel, secondsControl(skipIntroField), helper: Text.skipIntroHelper),
+            ]),
+            section(Text.skimPreviewSections[2], rows: [
+                progressive,
+                coverage,
             ]),
         ])
     }
 
     private func buildSkimPlusPage() -> NSView {
+        typealias Text = SettingsPresentation.Text
+        configureCheckbox(enableBackgroundAudioCheckbox, title: Text.enableBackgroundAudioTitle)
+        enableBackgroundAudioCheckbox.setAccessibilityLabel(Text.enableBackgroundAudioTitle)
+
         chooseAudioButton.target = self
         chooseAudioButton.action = #selector(chooseAudioTrack(_:))
         chooseAudioButton.setAccessibilityLabel("Choose Background Audio Track")
+        chooseAudioButton.setAccessibilityHelp(Text.audioTrackHelper)
 
         clearAudioButton.target = self
         clearAudioButton.action = #selector(clearAudioTrack(_:))
@@ -492,7 +511,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         selection.alignment = .centerY
         selection.spacing = 8
 
-        audioMixControl.segmentCount = 2
+        audioMixControl.segmentCount = BackgroundAudioMixMode.allCases.count
         audioMixControl.setLabel(BackgroundAudioMixMode.uploadedOnly.title, forSegment: 0)
         audioMixControl.setLabel(BackgroundAudioMixMode.videoAndUploaded.title, forSegment: 1)
         audioMixControl.target = self
@@ -504,7 +523,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         backgroundVolumeSlider.target = self
         backgroundVolumeSlider.action = #selector(backgroundVolumeChanged(_:))
         backgroundVolumeSlider.widthAnchor.constraint(equalToConstant: SettingsPresentation.sliderWidth).isActive = true
-        backgroundVolumeSlider.setAccessibilityLabel("Background audio volume")
+        backgroundVolumeSlider.setAccessibilityLabel(Text.backgroundAudioVolumeLabel)
         audioMixControl.setAccessibilityLabel("Audio mix")
         audioSelectedLabel.setAccessibilityLabel("Selected background audio track")
         clearAudioButton.setAccessibilityLabel("Clear background audio track")
@@ -515,18 +534,22 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         volume.alignment = .centerY
         volume.spacing = 10
 
-        let mix = row(nil, audioMixControl)
-        let backgroundVolume = row("Background audio volume", volume)
+        let mix = row(nil, audioMixControl, helper: SettingsPresentation.audioMixHelperText(for: .uploadedOnly))
+        let backgroundVolume = row(Text.backgroundAudioVolumeLabel, volume)
+        let unavailable = row(nil, audioUnavailableLabel)
         audioMixRow = mix
         backgroundVolumeRow = backgroundVolume
+        audioUnavailableRow = unavailable
 
         return page(identifier: "skimPlus", sections: [
-            section("Background audio", rows: [
-                row("Audio track", chooseAudioButton),
-                row("Selected", selection),
-                row(nil, audioUnavailableLabel),
+            section(Text.skimPlusSections[0], rows: [
+                row(nil, enableBackgroundAudioCheckbox, helper: Text.enableBackgroundAudioHelper),
+                row(Text.audioTrackLabel, chooseAudioButton),
+                row(Text.selectedTrackLabel, selection),
+                row(nil, helperNote(Text.audioTrackHelper)),
+                unavailable,
             ]),
-            section("Audio mix", rows: [
+            section(Text.skimPlusSections[1], rows: [
                 mix,
                 backgroundVolume,
             ]),
@@ -534,10 +557,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     private func buildControlsPage() -> NSView {
-        configureCheckbox(autoHideCheckbox, title: "Auto-hide playback overlay")
-        configureCheckbox(reducedMotionCheckbox, title: "Reduce overlay motion")
-        configureCheckbox(autoHideTitlebarCheckbox, title: "Auto-hide titlebar")
-        configureCheckbox(completeVideoCheckbox, title: "Complete video mode in windowed playback")
+        typealias Text = SettingsPresentation.Text
+        configureCheckbox(autoHideCheckbox, title: Text.autoHidePlaybackControlsTitle)
+        configureCheckbox(reducedMotionCheckbox, title: Text.reduceMotionTitle)
+        configureCheckbox(autoHideTitlebarCheckbox, title: Text.autoHideTitleBarTitle)
+        configureCheckbox(completeVideoCheckbox, title: Text.hideTitleBarTitle)
         configurePopup(chromeThresholdPopup, action: #selector(chromeThresholdChanged(_:)))
         Self.chromeThresholdOptions.forEach {
             chromeThresholdPopup.addItem(withTitle: $0.title)
@@ -549,54 +573,85 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         opacitySlider.target = self
         opacitySlider.action = #selector(opacityChanged(_:))
         opacitySlider.widthAnchor.constraint(equalToConstant: SettingsPresentation.sliderWidth).isActive = true
-        opacitySlider.setAccessibilityLabel("Window opacity")
-        chromeThresholdPopup.setAccessibilityLabel("Playback overlay hide delay")
+        opacitySlider.setAccessibilityLabel(Text.windowOpacityLabel)
+        autoHideCheckbox.setAccessibilityLabel(Text.autoHidePlaybackControlsTitle)
+        reducedMotionCheckbox.setAccessibilityLabel(Text.reduceMotionTitle)
+        autoHideTitlebarCheckbox.setAccessibilityLabel(Text.autoHideTitleBarTitle)
+        completeVideoCheckbox.setAccessibilityLabel(Text.hideTitleBarTitle)
+        chromeThresholdPopup.setAccessibilityLabel(Text.hideDelayLabel)
         opacityLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
         opacityLabel.alignment = .left
         let opacity = NSStackView(views: [opacitySlider, opacityLabel])
         opacity.orientation = .horizontal
         opacity.alignment = .centerY
         opacity.spacing = 10
+        let hideDelay = row(Text.hideDelayLabel, chromeThresholdPopup)
+        let autoHideTitlebar = row(nil, autoHideTitlebarCheckbox)
+        hideDelayRow = hideDelay
+        autoHideTitlebarRow = autoHideTitlebar
         return page(identifier: "controls", sections: [
-            section("Playback overlay", rows: [
-                row(nil, autoHideCheckbox), row("Hide delay", chromeThresholdPopup), row(nil, reducedMotionCheckbox),
+            section(Text.controlsSections[0], rows: [
+                row(nil, autoHideCheckbox), hideDelay, row(nil, reducedMotionCheckbox),
             ]),
-            section("Window", rows: [
-                row(nil, autoHideTitlebarCheckbox), row(nil, completeVideoCheckbox), row("Window opacity", opacity),
+            section(Text.controlsSections[1], rows: [
+                autoHideTitlebar,
+                row(nil, completeVideoCheckbox, helper: Text.hideTitleBarHelper),
+                row(Text.windowOpacityLabel, opacity, helper: Text.windowOpacityHelper),
             ]),
         ])
     }
 
     private func buildQueueFilesPage() -> NSView {
-        configureTextField(primaryPrefixField, placeholder: "e.g. select_")
-        configureTextField(secondaryPrefixField, placeholder: "e.g. later_")
+        typealias Text = SettingsPresentation.Text
+        configureTextField(primaryPrefixField, placeholder: Text.primaryPrefixPlaceholder)
+        configureTextField(secondaryPrefixField, placeholder: Text.secondaryPrefixPlaceholder)
         configurePopup(queueOrderPopup, action: #selector(queueOrderChanged(_:)))
         QueueOrderMode.allCases.forEach {
             queueOrderPopup.addItem(withTitle: $0.rawValue.capitalized)
             queueOrderPopup.lastItem?.representedObject = $0.rawValue
         }
-        loopQueueSwitch.target = self
-        loopQueueSwitch.action = #selector(loopQueueSwitchChanged(_:))
-        loopQueueSwitch.setAccessibilityLabel("Loop queue")
-        primaryPrefixField.setAccessibilityLabel("Primary custom prefix")
-        secondaryPrefixField.setAccessibilityLabel("Secondary custom prefix")
-        queueOrderPopup.setAccessibilityLabel("Queue order")
-        configureCheckbox(openQueueCheckbox, title: "Open queue panel when a player window opens")
-        configureCheckbox(advanceAfterPrefixCheckbox, title: "Advance after prefix")
-        advanceAfterPrefixCheckbox.setAccessibilityLabel("Advance after prefix")
+        configureCheckbox(acceptVideoCheckbox, title: Text.acceptedMediaTitles[0])
+        configureCheckbox(acceptImagesCheckbox, title: Text.acceptedMediaTitles[1])
+        configureCheckbox(acceptGIFCheckbox, title: Text.acceptedMediaTitles[2])
+        // The three acceptance checkboxes read as bare "Videos"/"Images"/"GIFs"
+        // without their section heading; qualify them for VoiceOver.
+        acceptVideoCheckbox.setAccessibilityLabel("Accept video media")
+        acceptImagesCheckbox.setAccessibilityLabel("Accept image media")
+        acceptGIFCheckbox.setAccessibilityLabel("Accept GIF media")
+        let accept = NSStackView(views: [acceptVideoCheckbox, acceptImagesCheckbox, acceptGIFCheckbox])
+        accept.orientation = .horizontal
+        accept.spacing = 16
+        configureCheckbox(loopQueueCheckbox, title: Text.loopQueueTitle)
+        configureCheckbox(openQueueCheckbox, title: Text.showQueuePanelTitle)
+        configureCheckbox(advanceAfterPrefixCheckbox, title: Text.advanceAfterPrefixTitle)
+        primaryPrefixField.setAccessibilityLabel(Text.primaryPrefixLabel)
+        secondaryPrefixField.setAccessibilityLabel(Text.secondaryPrefixLabel)
+        queueOrderPopup.setAccessibilityLabel(Text.queueOrderLabel)
+        loopQueueCheckbox.setAccessibilityLabel(Text.loopQueueTitle)
+        openQueueCheckbox.setAccessibilityLabel(Text.showQueuePanelTitle)
+        advanceAfterPrefixCheckbox.setAccessibilityLabel(Text.advanceAfterPrefixTitle)
+        let primary = row(Text.primaryPrefixLabel, prefixFieldChrome(primaryPrefixField),
+                          helper: SettingsPresentation.prefixShortcutLine(for: .primaryPrefixRename),
+                          swatch: theme.markerPrimary)
+        let secondary = row(Text.secondaryPrefixLabel, prefixFieldChrome(secondaryPrefixField),
+                            helper: SettingsPresentation.prefixShortcutLine(for: .secondaryPrefixRename),
+                            swatch: theme.markerSecondary)
+        primaryPrefixRow = primary
+        secondaryPrefixRow = secondary
         return page(identifier: "queueFiles", sections: [
-            section("Prefix rename", rows: [
-                row("Primary custom prefix", prefixFieldChrome(primaryPrefixField), swatch: theme.markerPrimary),
-                row("Secondary custom prefix", prefixFieldChrome(secondaryPrefixField),
-                    helper: "Custom prefixes rename immediately in the same directory and preserve the extension.",
-                    swatch: theme.markerSecondary),
+            section(Text.queueFilesSections[0], rows: [
+                row(nil, accept, helper: Text.acceptedMediaHelper),
             ]),
-            section("Queue behavior", rows: [
-                row("Queue order", queueOrderPopup,
-                    helper: "Weighted favors items that have waited longest since playback."),
-                row("Loop queue", loopQueueSwitch), row(nil, openQueueCheckbox),
-                row(nil, advanceAfterPrefixCheckbox,
-                    helper: "After N or M adds a prefix to the current item, play the next item. Removing a prefix does not advance."),
+            section(Text.queueFilesSections[1], rows: [
+                row(Text.queueOrderLabel, queueOrderPopup, helper: Text.queueOrderHelper),
+                row(nil, loopQueueCheckbox),
+                row(nil, openQueueCheckbox),
+            ]),
+            section(Text.queueFilesSections[2], description: Text.filenamePrefixesDescription, rows: [
+                primary,
+                secondary,
+                row(nil, helperNote(Text.prefixGuidance)),
+                row(nil, advanceAfterPrefixCheckbox, helper: Text.advanceAfterPrefixHelper),
             ]),
         ])
     }
@@ -608,16 +663,26 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     private func buildAdvancedPage() -> NSView {
-        configureCheckbox(debugCheckbox, title: "Show debug console")
-        configureCheckbox(verboseCheckbox, title: "Verbose autoplay diagnostics")
+        typealias Text = SettingsPresentation.Text
+        configureCheckbox(debugCheckbox, title: Text.showDebugConsoleTitle)
+        configureCheckbox(verboseCheckbox, title: Text.detailedAutoplayLoggingTitle)
+        debugCheckbox.setAccessibilityLabel(Text.showDebugConsoleTitle)
+        verboseCheckbox.setAccessibilityLabel(Text.detailedAutoplayLoggingTitle)
         clearBookmarksButton.target = self
         clearBookmarksButton.action = #selector(clearAllBookmarks(_:))
         restoreDefaultsButton.target = self
         restoreDefaultsButton.action = #selector(restoreDefaults(_:))
         return page(identifier: "advanced", sections: [
-            section("Diagnostics", rows: [row(nil, debugCheckbox), row(nil, verboseCheckbox)]),
-            section("Bookmarks", rows: [row(nil, clearBookmarksButton, helper: "This cannot be undone.")]),
-            section("Reset", rows: [row(nil, restoreDefaultsButton, helper: "Media files, queues, and bookmarks are not deleted.")]),
+            section(Text.advancedSections[0], rows: [
+                row(nil, debugCheckbox),
+                row(nil, verboseCheckbox, helper: Text.detailedAutoplayLoggingHelper),
+            ]),
+            section(Text.advancedSections[1], rows: [
+                row(nil, clearBookmarksButton, helper: Text.clearAllBookmarksHelper),
+            ]),
+            section(Text.advancedSections[2], rows: [
+                row(nil, restoreDefaultsButton, helper: Text.restoreDefaultSettingsHelper),
+            ]),
         ])
     }
 
@@ -649,8 +714,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         productName.attributedStringValue = nameText
         productName.setAccessibilityLabel(values.productName)
 
-        let version = DWBLabel("Version \(values.version) \u{2022} Build \(values.build)",
-                               size: 13, tone: .secondary, tabularDigits: true)
+        let version = DWBLabel(values.versionLine, size: 13, tone: .secondary, tabularDigits: true)
         let description = DWBLabel(SettingsPresentation.productDescription, size: 13, tone: .primary)
         description.lineBreakMode = .byWordWrapping
         description.maximumNumberOfLines = 0
@@ -660,16 +724,11 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         let rule = DWBRuleView(kind: .border)
         rule.translatesAutoresizingMaskIntoConstraints = false
 
-        let facts = aboutFacts([
-            ("License", "MIT License"),
-            ("Platform", "macOS \(values.minimumSystemVersion) or later"),
-            ("Interface", "AppKit"),
-            ("Playback", "VLCKit"),
-            ("VLC backend", Self.vlcBackendVersionText()),
-        ])
-        let repo = DWBButton(title: "GitHub Repository", style: .link,
+        let facts = aboutFacts(SettingsPresentation.aboutFacts(values: values,
+                                                               vlcBackendVersion: Self.vlcBackendVersionText()))
+        let repo = DWBButton(title: SettingsPresentation.aboutRepositoryLinkTitle, style: .link,
                              target: self, action: #selector(openRepository(_:)))
-        let issues = DWBButton(title: "Report an Issue", style: .link,
+        let issues = DWBButton(title: SettingsPresentation.aboutIssuesLinkTitle, style: .link,
                                target: self, action: #selector(openIssues(_:)))
         repo.setAccessibilityLabel("Open dwb skim GitHub repository")
         repo.setAccessibilityHelp(Self.githubURLString)
@@ -697,20 +756,30 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         return aboutPage(identity: identity)
     }
 
-    private func aboutFacts(_ facts: [(String, String)]) -> NSView {
-        let views = facts.map { label, value -> [NSView] in
-            let name = DWBLabel(label, size: 12.5, tone: .tertiary)
-            let detail = DWBLabel(value, size: 12.5, tone: .primary, tabularDigits: true)
+    /// The 110 pt key column wraps a long key such as `Playback framework` and top-aligns it with
+    /// its value. VoiceOver reads each pair as one item, `<key>: <value>`, on the value.
+    private func aboutFacts(_ facts: [SettingsPresentation.AboutFact]) -> NSView {
+        let keyColumnWidth: CGFloat = 110
+        let views = facts.map { fact -> [NSView] in
+            let name = DWBLabel(fact.label, size: 12.5, tone: .tertiary)
+            name.lineBreakMode = .byWordWrapping
+            name.maximumNumberOfLines = 0
+            name.cell?.wraps = true
+            name.preferredMaxLayoutWidth = keyColumnWidth
+            name.setAccessibilityElement(false)
+            let detail = DWBLabel(fact.value, size: 12.5, tone: .primary, tabularDigits: true)
             detail.lineBreakMode = .byTruncatingTail
             detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            detail.setAccessibilityLabel("\(fact.label): \(fact.value)")
             return [name, detail]
         }
         let grid = NSGridView(views: views)
         grid.columnSpacing = 12
         grid.rowSpacing = 7
-        grid.column(at: 0).width = 110
+        grid.column(at: 0).width = keyColumnWidth
         grid.column(at: 0).xPlacement = .leading
         grid.column(at: 1).xPlacement = .leading
+        for index in 0..<grid.numberOfRows { grid.row(at: index).yPlacement = .top }
         return grid
     }
 
@@ -766,13 +835,20 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     /// A label and control row, kept so a dependent row can be disabled rather than hidden.
     private final class SettingsFormRow {
         let view: NSView
+        /// The supporting text under the control, when the row has any.
+        let helperLabel: DWBLabel?
+        /// A second supporting line under the first, for the one row that has two.
+        let extraHelperLabel: DWBLabel?
         private let label: DWBLabel?
         private let control: NSView
 
-        init(view: NSView, label: DWBLabel?, control: NSView) {
+        init(view: NSView, label: DWBLabel?, control: NSView, helperLabel: DWBLabel? = nil,
+             extraHelperLabel: DWBLabel? = nil) {
             self.view = view
             self.label = label
             self.control = control
+            self.helperLabel = helperLabel
+            self.extraHelperLabel = extraHelperLabel
         }
 
         /// Design system 9.5: the label is `textDisabled` and the control sits at 0.32 alpha.
@@ -848,7 +924,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         return stack
     }
 
-    private func section(_ title: String, rows: [SettingsFormRow]) -> NSView {
+    /// A section: its heading, an optional description in the helper style, then its rows.
+    private func section(_ title: String, description: String? = nil, rows: [SettingsFormRow]) -> NSView {
         let heading = DWBLabel(title, size: 11, weight: .semibold, tone: .accent)
         heading.setAccessibilityRole(.staticText)
 
@@ -857,26 +934,58 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         rowStack.alignment = .leading
         rowStack.spacing = LayoutMetrics.rowSpacing
 
-        let stack = NSStackView(views: [heading, rowStack])
+        var parts: [NSView] = [heading]
+        if let description { parts.append(helperNote(description)) }
+        parts.append(rowStack)
+        let stack = NSStackView(views: parts)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = LayoutMetrics.rowSpacing
+        if description != nil { stack.setCustomSpacing(5, after: heading) }
         return stack
+    }
+
+    /// Supporting text: 11 pt `textTertiary`, wrapped at the helper width.
+    private func helperNote(_ text: String) -> DWBLabel {
+        let note = DWBLabel(text, size: 11, tone: .tertiary)
+        note.lineBreakMode = .byWordWrapping
+        note.maximumNumberOfLines = 0
+        note.cell?.wraps = true
+        note.preferredMaxLayoutWidth = LayoutMetrics.helperMaximumWidth
+        note.widthAnchor.constraint(lessThanOrEqualToConstant: LayoutMetrics.helperMaximumWidth).isActive = true
+        return note
+    }
+
+    /// Attaches a row's supporting text as accessibility help on the controls it explains, so
+    /// VoiceOver reads it with them. Steppers keep their own label; static text is skipped.
+    private func applyAccessibilityHelp(_ help: String, to view: NSView) {
+        if let control = view as? NSControl, !(control is NSStepper) {
+            let isStaticText = (control as? NSTextField).map { !$0.isEditable } ?? false
+            if !isStaticText { control.setAccessibilityHelp(help) }
+        }
+        view.subviews.forEach { applyAccessibilityHelp(help, to: $0) }
     }
 
     private func row(_ label: String?,
                      _ control: NSView,
                      helper: String? = nil,
+                     extraHelper: String? = nil,
                      swatch: NSColor? = nil) -> SettingsFormRow {
         var controls: [NSView] = [control]
+        var helperLabel: DWBLabel?
+        var extraHelperLabel: DWBLabel?
         if let helper {
-            let note = DWBLabel(helper, size: 11, tone: .tertiary)
-            note.lineBreakMode = .byWordWrapping
-            note.maximumNumberOfLines = 0
-            note.cell?.wraps = true
-            note.preferredMaxLayoutWidth = LayoutMetrics.helperMaximumWidth
-            note.widthAnchor.constraint(lessThanOrEqualToConstant: LayoutMetrics.helperMaximumWidth).isActive = true
+            let note = helperNote(helper)
+            helperLabel = note
             controls.append(note)
+            var help = helper
+            if let extraHelper {
+                let extraNote = helperNote(extraHelper)
+                extraHelperLabel = extraNote
+                controls.append(extraNote)
+                help += " " + extraHelper
+            }
+            applyAccessibilityHelp(help, to: control)
         }
         let controlColumn = NSStackView(views: controls)
         controlColumn.orientation = .vertical
@@ -886,7 +995,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         controlColumn.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
 
         guard let label else {
-            return SettingsFormRow(view: controlColumn, label: nil, control: control)
+            return SettingsFormRow(view: controlColumn, label: nil, control: control, helperLabel: helperLabel,
+                                   extraHelperLabel: extraHelperLabel)
         }
 
         let labelView = DWBLabel(label, size: 13, tone: .primary)
@@ -922,7 +1032,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         grid.column(at: 0).xPlacement = .leading
         grid.column(at: 1).xPlacement = .leading
         grid.row(at: 0).yPlacement = .top
-        return SettingsFormRow(view: grid, label: labelView, control: control)
+        return SettingsFormRow(view: grid, label: labelView, control: control, helperLabel: helperLabel,
+                               extraHelperLabel: extraHelperLabel)
     }
 
     private func configureCheckbox(_ button: NSButton, title: String) {
@@ -1061,27 +1172,39 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         startPositionControl.selectedSegment = skim.startPositionMode == Self.startPositionModeBeginning ? 0 : 1
         skipIntroField.stringValue = String(skim.skipIntroSeconds)
         progressiveRandomSkimCheckbox.state = skim.progressiveRandomSkimEnabled ? .on : .off
-        progressiveRandomSkimIntensityControl.selectedSegment = Self.intensitySegment(for: skim.progressiveRandomSkimIntensity)
-        updatePreviewRowVisibility()
+        coveragePopup.selectItem(at: Self.intensitySegment(for: skim.progressiveRandomSkimIntensity))
+        updateSkimPreviewDependentRows()
+        refreshNextSkimSegmentLine()
 
         let audio = BackgroundAudioSettingsStore.shared.snapshot()
-        audioSelectedLabel.stringValue = audio.selection.displayName ?? "No audio track selected"
+        enableBackgroundAudioCheckbox.state = audio.isEnabled ? .on : .off
+        audioSelectedLabel.stringValue = audio.selection.displayName ?? SettingsPresentation.Text.noAudioTrackSelected
         audioSelectedLabel.toolTip = audio.selection.displayName
         audioSelectedLabel.tone = audio.selection.displayName == nil ? .tertiary : .primary
         audioSelectionWell?.hasSelection = audio.selection.displayName != nil
+        // The always-shown "Choose one local MP3 or M4A file." line covers an empty selection;
+        // this row appears only for an unavailable track.
         if case .unavailable(_, let reason) = audio.selection {
             audioUnavailableLabel.stringValue = "Unavailable: \(reason)"
+            audioUnavailableRow?.view.isHidden = false
         } else {
-            audioUnavailableLabel.stringValue = audio.selection.isAvailable ? "" : "Choose one MP3 or M4A file."
+            audioUnavailableLabel.stringValue = ""
+            audioUnavailableRow?.view.isHidden = true
         }
         clearAudioButton.isEnabled = audio.selection.displayName != nil
-        let audioEnabled = audio.selection.isAvailable
-        audioMixControl.isEnabled = audioEnabled
-        backgroundVolumeSlider.isEnabled = audioEnabled
+        let audioMixEnabled = SettingsPresentation.audioMixControlsAreEnabled(
+            backgroundAudioEnabled: audio.isEnabled,
+            trackIsAvailable: audio.selection.isAvailable
+        )
+        audioMixControl.isEnabled = audioMixEnabled
+        backgroundVolumeSlider.isEnabled = audioMixEnabled
         // Dependent rows are disabled, not hidden (design system 9.5).
-        audioMixRow?.setDisabled(!audioEnabled)
-        backgroundVolumeRow?.setDisabled(!audioEnabled)
+        audioMixRow?.setDisabled(!audioMixEnabled)
+        backgroundVolumeRow?.setDisabled(!audioMixEnabled)
         audioMixControl.selectedSegment = audio.mixMode == .uploadedOnly ? 0 : 1
+        let mixHelp = SettingsPresentation.audioMixHelperText(for: audio.mixMode)
+        audioMixRow?.helperLabel?.stringValue = mixHelp
+        audioMixControl.setAccessibilityHelp(mixHelp)
         backgroundVolumeSlider.doubleValue = audio.volume
         backgroundVolumeLabel.stringValue = "\(Int((audio.volume * 100).rounded()))%"
 
@@ -1091,30 +1214,81 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         completeVideoCheckbox.state = Self.isCompleteVideoWindowModeEnabled() ? .on : .off
         let threshold = defaults.double(forKey: Self.chromeAutohideThresholdKey)
         chromeThresholdPopup.selectItem(withTag: Int(((threshold > 0 ? threshold : 3) * 10).rounded()))
+        updateDependentRows()
         let opacity = targetPlayerWindowController()?.currentWindowOpacity ?? Self.defaultPlayerWindowOpacity()
         opacitySlider.doubleValue = Double(opacity * 100)
         opacityLabel.stringValue = "\(Self.playerWindowOpacityPercent(opacity))%"
 
+        refreshPrefixShortcutLines()
         primaryPrefixField.stringValue = Self.customPrefixValue()
         secondaryPrefixField.stringValue = Self.customPrefixSecondaryValue()
         queueOrderPopup.selectItem(where: { $0.representedObject as? String == skim.queueOrderMode.rawValue })
-        loopQueueSwitch.state = skim.loopQueueEnabled ? .on : .off
+        loopQueueCheckbox.state = skim.loopQueueEnabled ? .on : .off
         openQueueCheckbox.state = defaults.bool(forKey: Self.queuePanelOpenAtLaunchKey) ? .on : .off
         advanceAfterPrefixCheckbox.state = Self.isAdvanceAfterPrefixEnabled() ? .on : .off
         debugCheckbox.state = Self.isDebugConsoleEnabled() ? .on : .off
         verboseCheckbox.state = Self.isVerboseAutoplayTraceEnabled() ? .on : .off
     }
 
-    /// The Fixed row applies in Fixed mode and the Random rows in Random mode. The other
-    /// rows are disabled, not hidden.
-    private func updatePreviewRowVisibility() {
-        let random = previewDurationModeControl.selectedSegment == 1
-        fixedDurationField.isEnabled = !random
-        randomMinimumField.isEnabled = random
-        randomMaximumField.isEnabled = random
-        fixedDurationRow?.setDisabled(random)
-        randomMinimumRow?.setDisabled(!random)
-        randomMaximumRow?.setDisabled(!random)
+    /// The two dependent rows on Appearance & Controls: Hide delay follows Automatically hide
+    /// playback controls, and Automatically hide title bar yields to Hide title bar. A row is
+    /// dimmed and disabled, never hidden, and its saved value is not touched.
+    private func updateDependentRows() {
+        let delayEnabled = SettingsPresentation.hideDelayIsEnabled(
+            automaticallyHidesPlaybackControls: autoHideCheckbox.state == .on
+        )
+        chromeThresholdPopup.isEnabled = delayEnabled
+        hideDelayRow?.setDisabled(!delayEnabled)
+
+        let titleBarHidingEnabled = SettingsPresentation.automaticTitleBarHidingIsEnabled(
+            hidesTitleBar: completeVideoCheckbox.state == .on
+        )
+        autoHideTitlebarCheckbox.isEnabled = titleBarHidingEnabled
+        autoHideTitlebarRow?.setDisabled(!titleBarHidingEnabled)
+    }
+
+    /// Rewrites the shortcut line under each prefix field from the live key assignments.
+    private func refreshPrefixShortcutLines() {
+        let lines: [(SettingsFormRow?, NSView, SkimKeyboardShortcut)] = [
+            (primaryPrefixRow, primaryPrefixField, .primaryPrefixRename),
+            (secondaryPrefixRow, secondaryPrefixField, .secondaryPrefixRename),
+        ]
+        for (row, field, shortcut) in lines {
+            let line = SettingsPresentation.prefixShortcutLine(for: shortcut)
+            row?.helperLabel?.stringValue = line
+            field.setAccessibilityHelp("\(line). \(SettingsPresentation.Text.prefixGuidance)")
+        }
+    }
+
+    /// Fixed duration applies in Fixed mode, Minimum and Maximum duration in Random mode, and
+    /// Coverage while Progressive Random Skim is on. A row that does not apply is dimmed and
+    /// disabled, not hidden, and keeps its value.
+    private func updateSkimPreviewDependentRows() {
+        let mode = previewDurationModeControl.selectedSegment == 1
+            ? Self.previewDurationModeRandom : Self.previewDurationModeFixed
+        let fixedEnabled = SettingsPresentation.fixedDurationIsEnabled(previewDurationMode: mode)
+        let randomEnabled = SettingsPresentation.randomDurationIsEnabled(previewDurationMode: mode)
+        fixedDurationField.isEnabled = fixedEnabled
+        randomMinimumField.isEnabled = randomEnabled
+        randomMaximumField.isEnabled = randomEnabled
+        fixedDurationRow?.setDisabled(!fixedEnabled)
+        randomMinimumRow?.setDisabled(!randomEnabled)
+        randomMaximumRow?.setDisabled(!randomEnabled)
+
+        let coverageEnabled = SettingsPresentation.coverageIsEnabled(
+            progressiveRandomSkimEnabled: progressiveRandomSkimCheckbox.state == .on
+        )
+        coveragePopup.isEnabled = coverageEnabled
+        coverageRow?.setDisabled(!coverageEnabled)
+    }
+
+    /// Rewrites the second line under Progressive Random Skim from the live key assignments.
+    private func refreshNextSkimSegmentLine() {
+        let line = SettingsPresentation.nextSkimSegmentLine()
+        progressiveRandomSkimRow?.extraHelperLabel?.stringValue = line
+        progressiveRandomSkimCheckbox.setAccessibilityHelp(
+            "\(SettingsPresentation.Text.progressiveRandomSkimHelper) \(line)"
+        )
     }
 
     @objc private func checkboxChanged(_ sender: NSButton) {
@@ -1139,6 +1313,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         case autoHideCheckbox:
             defaults.set(enabled, forKey: Self.autoHideKey)
             NotificationCenter.default.post(name: .autoHideSettingChanged, object: self)
+            updateDependentRows()
         case reducedMotionCheckbox:
             defaults.set(enabled, forKey: Self.chromeReducedMotionKey)
             NotificationCenter.default.post(name: .transportVisibilityChanged, object: self)
@@ -1148,6 +1323,9 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         case completeVideoCheckbox:
             defaults.set(enabled, forKey: Self.completeVideoWindowModeKey)
             NotificationCenter.default.post(name: .completeVideoWindowModeChanged, object: self)
+            updateDependentRows()
+        case loopQueueCheckbox:
+            Self.setLoopQueueEnabled(enabled)
         case openQueueCheckbox:
             defaults.set(enabled, forKey: Self.queuePanelOpenAtLaunchKey)
         case advanceAfterPrefixCheckbox:
@@ -1158,15 +1336,13 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
             NotificationCenter.default.post(name: .debugConsoleSettingChanged, object: self)
         case verboseCheckbox:
             defaults.set(enabled, forKey: Self.verboseAutoplayTraceKey)
+        case enableBackgroundAudioCheckbox:
+            BackgroundAudioSettingsStore.shared.setEnabled(enabled)
         case progressiveRandomSkimCheckbox:
             SkimSettingsStore.shared.setProgressiveRandomSkimEnabled(enabled)
+            updateSkimPreviewDependentRows()
         default: break
         }
-    }
-
-    @objc private func loopQueueSwitchChanged(_ sender: NSSwitch) {
-        guard !isSynchronizing else { return }
-        Self.setLoopQueueEnabled(sender.state == .on)
     }
 
     @objc private func playbackSpeedChanged(_ sender: NSPopUpButton) {
@@ -1184,7 +1360,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
 
     @objc private func previewModeChanged(_ sender: DWBSegmentedControl) {
         Self.setPreviewDurationMode(sender.selectedSegment == 1 ? Self.previewDurationModeRandom : Self.previewDurationModeFixed)
-        updatePreviewRowVisibility()
+        updateSkimPreviewDependentRows()
     }
 
     @objc private func startPositionChanged(_ sender: DWBSegmentedControl) {
@@ -1195,8 +1371,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
         SettingsPresentation.intensitySegment(for: intensity)
     }
 
-    @objc private func progressiveRandomSkimIntensityChanged(_ sender: DWBSegmentedControl) {
-        let intensity = SettingsPresentation.intensity(forSegment: sender.selectedSegment)
+    @objc private func progressiveRandomSkimIntensityChanged(_ sender: NSPopUpButton) {
+        let intensity = SettingsPresentation.intensity(forSegment: sender.indexOfSelectedItem)
         Self.setProgressiveRandomSkimIntensity(intensity)
     }
 
@@ -1287,21 +1463,23 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     @objc private func clearAllBookmarks(_ sender: NSButton) {
-        confirm(title: "Clear all bookmarks?",
-                message: "Bookmarks are stored locally and may include full file paths. This cannot be undone.",
-                actionTitle: "Clear Bookmarks") {
+        typealias Text = SettingsPresentation.Text
+        confirm(title: Text.clearBookmarksConfirmTitle,
+                message: Text.clearBookmarksConfirmMessage,
+                actionTitle: Text.clearBookmarksConfirmAction) {
             BookmarkStore.shared.clearAll()
         }
     }
 
     @objc private func restoreDefaults(_ sender: NSButton) {
-        confirm(title: "Restore all settings to default?",
-                message: "This resets preferences and the selected background-audio track. It does not delete media files, queues, or bookmarks.",
-                actionTitle: "Restore Defaults") { [weak self] in
-            let defaults = UserDefaults.standard
-            SettingsDefaultsRegistry.defaultValues(
+        typealias Text = SettingsPresentation.Text
+        confirm(title: Text.restoreConfirmTitle,
+                message: Text.restoreConfirmMessage,
+                actionTitle: Text.restoreConfirmAction) { [weak self] in
+            SettingsDefaultsRegistry.restoreAllSettings(
                 reduceMotionDefault: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ).forEach { defaults.set($0.value, forKey: $0.key) }
+            )
+            ShortcutStore.shared.reload()
             BackgroundAudioSettingsStore.shared.clearSelection()
             [.autoHideSettingChanged, .transportVisibilityChanged, .autoHideTitlebarChanged,
              .completeVideoWindowModeChanged, .playbackSettingsChanged,

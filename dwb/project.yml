@@ -37,7 +37,7 @@ targets:
       base:
         INFOPLIST_FILE: dwb-skim/Resources/Info.plist
         MARKETING_VERSION: "1.2.1"
-        CURRENT_PROJECT_VERSION: "1.2.1"
+        CURRENT_PROJECT_VERSION: "65"
         PRODUCT_BUNDLE_IDENTIFIER: com.dwb.skim
         PRODUCT_NAME: "dwb skim"
         PRODUCT_MODULE_NAME: dwb_skim
@@ -104,7 +104,13 @@ targets:
       - path: dwb-skim/Player/QueueSearchHighlight.swift
       - path: dwb-skim/Player/QueueEmptyStatePresentation.swift
       - path: dwb-skim/Player/RenameSheetPresentation.swift
+      - path: dwb-skim/App/ShortcutKey.swift
+      - path: dwb-skim/App/ShortcutCommands.swift
+      - path: dwb-skim/App/ShortcutStore.swift
+      - path: dwb-skim/App/ShortcutValidation.swift
       - path: dwb-skim/App/ShortcutsPresentation.swift
+      - path: dwb-skim/App/SettingsSidebarNavigation.swift
+      - path: dwb-skim/Player/ShortcutFocusRouting.swift
       - path: dwb-skim/App/DebugLevelPresentation.swift
       - path: dwb-skim/Player/SkimStripLayoutPlan.swift
       - path: dwb-skim/Player/SkimStripConfirmation.swift

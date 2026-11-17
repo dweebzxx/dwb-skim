@@ -97,6 +97,15 @@ final class SettingsSidebarView: NSView {
                                                    section: section,
                                                    target: target,
                                                    action: action)
+                button.onArrow = { [weak self, weak button] direction in
+                    guard let self, let button,
+                          let index = self.buttons.firstIndex(of: button),
+                          let next = SettingsSidebarNavigation.adjacentIndex(
+                            from: index, direction: direction, count: self.buttons.count) else { return }
+                    let nextButton = self.buttons[next]
+                    nextButton.window?.makeFirstResponder(nextButton)
+                    nextButton.performClick(nil)
+                }
                 button.translatesAutoresizingMaskIntoConstraints = false
                 groupStack.addArrangedSubview(button)
                 button.widthAnchor.constraint(equalTo: groupStack.widthAnchor).isActive = true
@@ -118,6 +127,7 @@ final class SettingsSidebarView: NSView {
 
 final class SettingsSidebarButton: NSButton {
     let section: SettingsWindowController.Section
+    var onArrow: ((Int) -> Void)?
     var isSelected = false {
         didSet {
             setAccessibilityValue(isSelected ? "selected" : "not selected")
@@ -158,6 +168,17 @@ final class SettingsSidebarButton: NSButton {
     override func resignFirstResponder() -> Bool {
         needsDisplay = true
         return super.resignFirstResponder()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+            switch event.keyCode {
+            case 125: onArrow?(1); return
+            case 126: onArrow?(-1); return
+            default: break
+            }
+        }
+        super.keyDown(with: event)
     }
 
     override func draw(_ dirtyRect: NSRect) {

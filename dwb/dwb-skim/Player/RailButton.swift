@@ -100,6 +100,12 @@ final class RailButton: NSButton {
         updateFocusRingFrame()
     }
 
+    /// Rewrites the tooltip and help text only (a shortcut changed), keeping the symbol.
+    func updateHelp(_ help: String) {
+        setAccessibilityHelp(help)
+        toolTip = help
+    }
+
     /// Sets the symbol at the rail's optical size for its role (D16, weight medium).
     func configureSymbol(_ symbolName: String,
                          accessibilityLabel: String,

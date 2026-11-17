@@ -42,11 +42,25 @@ final class BottomRailView: NSView {
                                                selector: #selector(accessibilityOptionsChanged),
                                                name: DWBAccessibility.didChange,
                                                object: nil)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(refreshShortcutHints),
+                                               name: .shortcutsChanged,
+                                               object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("programmatic only") }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    /// A shortcut changed: rewrite the key named in each rail tooltip and help text.
+    @objc private func refreshShortcutHints() {
+        queueButton.updateHelp(ShortcutHints.help("Toggle queue panel", for: .toggleQueuePanel))
+        previousButton.updateHelp(ShortcutHints.help("Previous item", for: .previousItem))
+        playPauseButton.updateHelp(ShortcutHints.help("Play or Pause", for: .playPause))
+        nextButton.updateHelp(ShortcutHints.help("Next item", for: .nextItem))
+        fullscreenButton.updateHelp(ShortcutHints.help("Toggle Fullscreen", for: .toggleFullScreen))
+        bookmarkButton.updateHelp(ShortcutHints.help("Bookmark", for: .toggleBookmark))
+    }
 
     /// Increase Contrast changed: re-resolve the label colors that depend on it.
     @objc private func accessibilityOptionsChanged() {
@@ -76,14 +90,14 @@ final class BottomRailView: NSView {
         scrubber.toolTip = "Relocate preview and seek"
         addSubview(scrubber)
 
-        configure(queueButton, symbol: "rectangle.righthalf.inset.filled", label: "Queue", help: "Toggle queue panel (Q)", action: #selector(queueTapped))
-        configure(previousButton, symbol: "backward.end.fill", label: "Previous", help: "Previous item (,)", action: #selector(previousTapped))
+        configure(queueButton, symbol: "rectangle.righthalf.inset.filled", label: "Queue", help: ShortcutHints.help("Toggle queue panel", for: .toggleQueuePanel), action: #selector(queueTapped))
+        configure(previousButton, symbol: "backward.end.fill", label: "Previous", help: ShortcutHints.help("Previous item", for: .previousItem), action: #selector(previousTapped))
         configure(skimButton, symbol: "bolt.fill", label: "Skim", help: "Skim is on. Double-tap Option to toggle Skim.", action: #selector(skimTapped))
-        configure(playPauseButton, symbol: "play.fill", label: "Play or Pause", help: "Play or Pause (Space)", action: #selector(playPauseTapped), emphasized: true)
-        configure(nextButton, symbol: "forward.end.fill", label: "Next", help: "Next item (.)", action: #selector(nextTapped))
+        configure(playPauseButton, symbol: "play.fill", label: "Play or Pause", help: ShortcutHints.help("Play or Pause", for: .playPause), action: #selector(playPauseTapped), emphasized: true)
+        configure(nextButton, symbol: "forward.end.fill", label: "Next", help: ShortcutHints.help("Next item", for: .nextItem), action: #selector(nextTapped))
         configure(volumeButton, symbol: "speaker.wave.2.fill", label: "Mute or Unmute", help: "Mute or Unmute", action: #selector(volumeTapped))
-        configure(fullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", label: "Fullscreen", help: "Toggle Fullscreen (F)", action: #selector(fullscreenTapped))
-        configure(bookmarkButton, symbol: "bookmark", label: "Bookmark", help: "Bookmark (B)", action: #selector(bookmarkTapped))
+        configure(fullscreenButton, symbol: "arrow.up.left.and.arrow.down.right", label: "Fullscreen", help: ShortcutHints.help("Toggle Fullscreen", for: .toggleFullScreen), action: #selector(fullscreenTapped))
+        configure(bookmarkButton, symbol: "bookmark", label: "Bookmark", help: ShortcutHints.help("Bookmark", for: .toggleBookmark), action: #selector(bookmarkTapped))
         configure(settingsButton, symbol: "gearshape", label: "Settings", help: "Open Settings", action: #selector(settingsTapped))
         configure(manualAdvanceButton, symbol: "forward.frame.fill", label: "Advance Segment",
                  help: "Manually advance to the next Progressive Random Skim segment (active only when Progressive Random Skim is on)",
@@ -280,7 +294,7 @@ final class BottomRailView: NSView {
     private func setPlaySymbol(isPlaying: Bool) {
         playPauseButton.configureSymbol(isPlaying ? "pause.fill" : "play.fill",
                                         accessibilityLabel: isPlaying ? "Pause" : "Play",
-                                        help: "Play or Pause (Space)")
+                                        help: ShortcutHints.help("Play or Pause", for: .playPause))
     }
 
     private func setVolumeSymbol() {
@@ -303,7 +317,7 @@ final class BottomRailView: NSView {
         bookmarkButton.isToggled = state.bookmarked
         bookmarkButton.configureSymbol(state.bookmarked ? "bookmark.fill" : "bookmark",
                                        accessibilityLabel: state.bookmarked ? "Remove Bookmark" : "Bookmark",
-                                       help: "Bookmark (B)")
+                                       help: ShortcutHints.help("Bookmark", for: .toggleBookmark))
         bookmarkButton.setAccessibilityValue(state.bookmarked ? "bookmarked" : "not bookmarked")
     }
 

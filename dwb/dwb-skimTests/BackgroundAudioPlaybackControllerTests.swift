@@ -162,6 +162,97 @@ final class BackgroundAudioPlaybackControllerTests: XCTestCase {
         XCTAssertEqual(player.playCount, 1)
     }
 
+    // MARK: - Enable background audio (P57)
+
+    func testTurningBackgroundAudioOffStopsTheTrackAndKeepsTheStoredSettings() throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suite) }
+        let track = URL(fileURLWithPath: "/tmp/track.mp3")
+        try context.store.select(track)
+        context.store.setMixMode(.videoAndUploaded)
+        context.store.setVolume(0.4)
+        let controller = BackgroundAudioPlaybackController(settingsStore: context.store,
+                                                           playerFactory: context.factory,
+                                                           startAccessing: { _ in false },
+                                                           stopAccessing: { _ in })
+        XCTAssertEqual(controller.applySettings(), .playing(track))
+        let player = try XCTUnwrap(context.factory.players.first)
+
+        context.store.setEnabled(false)
+        XCTAssertEqual(controller.applySettings(), .inactive)
+        XCTAssertFalse(controller.isActive)
+        XCTAssertEqual(player.stopCount, 1)
+        XCTAssertFalse(player.isPlaying)
+
+        let snapshot = context.store.snapshot()
+        XCTAssertFalse(snapshot.isEnabled)
+        XCTAssertEqual(snapshot.selection.displayName, "track.mp3")
+        XCTAssertTrue(snapshot.selection.isAvailable)
+        XCTAssertEqual(snapshot.mixMode, .videoAndUploaded)
+        XCTAssertEqual(snapshot.volume, 0.4, accuracy: 0.0001)
+    }
+
+    func testVideoAudioPlaysNormallyInUploadedOnlyModeWhileBackgroundAudioIsOff() throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suite) }
+        try context.store.select(URL(fileURLWithPath: "/tmp/track.mp3"))
+        let controller = BackgroundAudioPlaybackController(settingsStore: context.store,
+                                                           playerFactory: context.factory,
+                                                           startAccessing: { _ in false },
+                                                           stopAccessing: { _ in })
+        controller.applySettings()
+        XCTAssertEqual(context.store.snapshot().mixMode, .uploadedOnly)
+        XCTAssertEqual(VideoAudioPolicy.effectiveVolume(storedVolume: 64, muted: false,
+                                                        mixMode: .uploadedOnly,
+                                                        backgroundAudioIsActive: controller.isActive), 0)
+
+        context.store.setEnabled(false)
+        controller.applySettings()
+        XCTAssertEqual(VideoAudioPolicy.effectiveVolume(storedVolume: 64, muted: false,
+                                                        mixMode: .uploadedOnly,
+                                                        backgroundAudioIsActive: controller.isActive), 64)
+    }
+
+    func testTurningBackgroundAudioBackOnStartsTheKeptTrackAgain() throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suite) }
+        let track = URL(fileURLWithPath: "/tmp/track.mp3")
+        try context.store.select(track)
+        let controller = BackgroundAudioPlaybackController(settingsStore: context.store,
+                                                           playerFactory: context.factory,
+                                                           startAccessing: { _ in false },
+                                                           stopAccessing: { _ in })
+        controller.applySettings()
+        context.store.setEnabled(false)
+        controller.applySettings()
+        context.store.setEnabled(true)
+        XCTAssertEqual(controller.applySettings(), .playing(track))
+        XCTAssertEqual(context.factory.players.count, 2)
+        XCTAssertTrue(try XCTUnwrap(context.factory.players.last).isPlaying)
+        XCTAssertEqual(try XCTUnwrap(context.factory.players.last).numberOfLoops, -1)
+    }
+
+    func testEveryWindowStopsWhenBackgroundAudioIsTurnedOff() throws {
+        let context = makeContext()
+        defer { context.defaults.removePersistentDomain(forName: context.suite) }
+        try context.store.select(URL(fileURLWithPath: "/tmp/track.mp3"))
+        let firstFactory = FakeBackgroundPlayerFactory()
+        let secondFactory = FakeBackgroundPlayerFactory()
+        let first = BackgroundAudioPlaybackController(settingsStore: context.store, playerFactory: firstFactory,
+                                                      startAccessing: { _ in false }, stopAccessing: { _ in })
+        let second = BackgroundAudioPlaybackController(settingsStore: context.store, playerFactory: secondFactory,
+                                                       startAccessing: { _ in false }, stopAccessing: { _ in })
+        first.applySettings()
+        second.applySettings()
+        context.store.setEnabled(false)
+        first.applySettings()
+        second.applySettings()
+        XCTAssertFalse(first.isActive)
+        XCTAssertFalse(second.isActive)
+        XCTAssertFalse(firstFactory.players[0].isPlaying)
+        XCTAssertFalse(secondFactory.players[0].isPlaying)
+    }
+
     private func makeContext() -> (defaults: UserDefaults,
                                    store: BackgroundAudioSettingsStore,
                                    factory: FakeBackgroundPlayerFactory,

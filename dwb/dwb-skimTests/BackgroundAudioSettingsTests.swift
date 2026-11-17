@@ -71,6 +71,74 @@ final class BackgroundAudioSettingsTests: XCTestCase {
         XCTAssertEqual(missing.snapshot().selection.displayName, "moved.mp3")
     }
 
+    // MARK: - Enable background audio (P57)
+
+    func testBackgroundAudioIsEnabledByDefault() {
+        let (defaults, store, suite) = makeStore(exists: { _ in true })
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(store.snapshot().isEnabled)
+        XCTAssertEqual(SettingsDefaultsRegistry.Keys.backgroundAudioEnabled, "backgroundAudioEnabled")
+    }
+
+    func testAnUnregisteredStoreStillReadsTheDefaultAsOn() {
+        let suite = "com.dwb.skimTests.BackgroundAudioUnregistered.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = BackgroundAudioSettingsStore(defaults: defaults, notificationCenter: NotificationCenter(),
+                                                bookmarkCodec: FakeBackgroundBookmarkCodec(), fileExists: { _ in true })
+        XCTAssertTrue(store.snapshot().isEnabled)
+    }
+
+    func testSetEnabledKeepsTheTrackMixAndVolumeAndPostsOnlyOnChange() throws {
+        let center = NotificationCenter()
+        let suite = "com.dwb.skimTests.BackgroundAudioEnabled.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        SettingsDefaultsRegistry.register(defaults: defaults, reduceMotionDefault: false)
+        let store = BackgroundAudioSettingsStore(defaults: defaults, notificationCenter: center,
+                                                bookmarkCodec: FakeBackgroundBookmarkCodec(), fileExists: { _ in true })
+        try store.select(URL(fileURLWithPath: "/tmp/kept.mp3"))
+        store.setMixMode(.videoAndUploaded)
+        store.setVolume(0.25)
+
+        var posts = 0
+        let token = center.addObserver(forName: .skimPlusSettingsChanged, object: nil, queue: nil) { _ in posts += 1 }
+        defer { center.removeObserver(token) }
+        store.setEnabled(false)
+        store.setEnabled(false)
+        XCTAssertEqual(posts, 1)
+        let off = store.snapshot()
+        XCTAssertFalse(off.isEnabled)
+        XCTAssertEqual(off.selection.displayName, "kept.mp3")
+        XCTAssertEqual(off.mixMode, .videoAndUploaded)
+        XCTAssertEqual(off.volume, 0.25, accuracy: 0.0001)
+        store.setEnabled(true)
+        XCTAssertEqual(posts, 2)
+        XCTAssertTrue(store.snapshot().isEnabled)
+    }
+
+    func testChoosingOrClearingATrackDoesNotChangeEnableBackgroundAudio() throws {
+        let (defaults, store, suite) = makeStore(exists: { _ in true })
+        defer { defaults.removePersistentDomain(forName: suite) }
+        store.setEnabled(false)
+        try store.select(URL(fileURLWithPath: "/tmp/new.m4a"))
+        XCTAssertFalse(store.snapshot().isEnabled, "Choosing a track while off must not turn background audio on")
+        XCTAssertTrue(store.snapshot().selection.isAvailable)
+        store.clearSelection()
+        XCTAssertFalse(store.snapshot().isEnabled)
+
+        store.setEnabled(true)
+        try store.select(URL(fileURLWithPath: "/tmp/other.mp3"))
+        XCTAssertTrue(store.snapshot().isEnabled)
+    }
+
+    func testMixTitlesNameBackgroundAudio() {
+        XCTAssertEqual(BackgroundAudioMixMode.uploadedOnly.title, "Background Audio Only")
+        XCTAssertEqual(BackgroundAudioMixMode.videoAndUploaded.title, "Video + Background Audio")
+        XCTAssertEqual(BackgroundAudioMixMode.uploadedOnly.rawValue, "uploadedOnly")
+        XCTAssertEqual(BackgroundAudioMixMode.videoAndUploaded.rawValue, "videoAndUploaded")
+    }
+
     func testVideoAudioPolicyKeepsVolumesIndependent() {
         XCTAssertEqual(VideoAudioPolicy.effectiveVolume(storedVolume: 88, muted: false,
                                                         mixMode: .uploadedOnly,

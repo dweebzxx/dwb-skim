@@ -69,6 +69,12 @@ final class BackgroundAudioPlaybackController {
     @discardableResult
     func applySettings() -> BackgroundAudioPlaybackState {
         let snapshot = settingsStore.snapshot()
+        // Enable background audio is off: stop this window's track and report it inactive so
+        // video audio plays normally. The stored track, mix, and volume are not touched.
+        guard snapshot.isEnabled else {
+            stop()
+            return state
+        }
         switch snapshot.selection {
         case .none:
             stop()

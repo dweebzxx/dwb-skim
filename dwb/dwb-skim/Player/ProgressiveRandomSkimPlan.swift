@@ -6,7 +6,7 @@ struct ProgressiveRandomSkimSegment: Equatable {
     let durationSeconds: Double
 }
 
-/// Coverage intensity (Part 4): scales the Part 2 adaptive planner's preview *count* only —
+/// Coverage (Part 4): scales the Part 2 adaptive planner's preview *count* only —
 /// duration stays governed entirely by `targetSegmentDuration`. `standard` is the unscaled Part 2
 /// behavior and is the persisted default, so existing users see zero change until they opt in.
 enum ProgressiveRandomSkimIntensity: String, CaseIterable, Equatable {

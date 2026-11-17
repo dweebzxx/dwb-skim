@@ -33,6 +33,7 @@ enum SettingsDefaultsRegistry {
         static let progressiveRandomSkimIntensity = "progressiveRandomSkimIntensity"
         static let queueOrderMode = "queueOrderMode"
         static let loopQueueEnabled = "loopQueueEnabled"
+        static let backgroundAudioEnabled = "backgroundAudioEnabled"
         static let backgroundAudioBookmark = "backgroundAudioBookmark"
         static let backgroundAudioDisplayName = "backgroundAudioDisplayName"
         static let backgroundAudioMixMode = "backgroundAudioMixMode"
@@ -68,6 +69,7 @@ enum SettingsDefaultsRegistry {
         static let queueOrderModeWeighted = "weighted"
         static let queueOrderMode = queueOrderModeSequential
         static let loopQueueEnabled = false
+        static let backgroundAudioEnabled = true
         static let backgroundAudioMixMode = "uploadedOnly"
         static let backgroundAudioVolume = 0.75
     }
@@ -125,9 +127,18 @@ enum SettingsDefaultsRegistry {
             Keys.progressiveRandomSkimIntensity: Defaults.progressiveRandomSkimIntensity,
             Keys.queueOrderMode: Defaults.queueOrderMode,
             Keys.loopQueueEnabled: Defaults.loopQueueEnabled,
+            Keys.backgroundAudioEnabled: Defaults.backgroundAudioEnabled,
             Keys.backgroundAudioMixMode: Defaults.backgroundAudioMixMode,
             Keys.backgroundAudioVolume: Defaults.backgroundAudioVolume,
         ]
+    }
+
+    /// "Restore Default Settings": every preference returns to its default value, and the
+    /// keyboard shortcut overrides are removed with them. Media files, queues, and bookmarks are
+    /// not touched here.
+    static func restoreAllSettings(defaults: UserDefaults = .standard, reduceMotionDefault: Bool) {
+        defaultValues(reduceMotionDefault: reduceMotionDefault).forEach { defaults.set($0.value, forKey: $0.key) }
+        ShortcutStore.clearOverrides(in: defaults)
     }
 
     static func register(defaults: UserDefaults = .standard, reduceMotionDefault: Bool) {
