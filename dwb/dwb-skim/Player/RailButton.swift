@@ -13,6 +13,9 @@ final class RailButton: NSButton {
         case prefixSecondary
         case bookmark
         case warning
+        /// The 24 pt popover trigger (design system `PopoverButton`): the glyph is `textSecondary` at
+        /// rest and `accentText` while its popover is open (`isToggled`).
+        case popoverTrigger
     }
 
     var railStyle: Style = .normal {
@@ -160,6 +163,8 @@ final class RailButton: NSButton {
             return theme.markerSecondary
         case .warning:
             return DWBColor.cautionText
+        case .popoverTrigger:
+            return isToggled ? theme.accentText : DWBAccessibility.textSecondary
         }
     }
 

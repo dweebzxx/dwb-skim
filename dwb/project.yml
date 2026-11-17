@@ -112,6 +112,8 @@ targets:
       - path: dwb-skim/App/SettingsSidebarNavigation.swift
       - path: dwb-skim/Player/ShortcutFocusRouting.swift
       - path: dwb-skim/App/DebugLevelPresentation.swift
+      - path: dwb-skim/App/ErrorSurfacePresentation.swift
+      - path: dwb-skim/App/DWBPopoverGeometry.swift
       - path: dwb-skim/Player/SkimStripLayoutPlan.swift
       - path: dwb-skim/Player/SkimStripConfirmation.swift
     settings:

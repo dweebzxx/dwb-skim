@@ -290,6 +290,10 @@ class PlayerWindowController: NSWindowController {
 
     var hasPrevious: Bool { currentDisplayIndex > 0 }
     var hasNext:     Bool { canAdvanceAfterCompletion }
+    /// This window's background track state. The rail's "dwb+ on" label reads it; the track state
+    /// changes with `applySettings()`, `pause()`, `resume()`, and `stop()`, each of which already
+    /// marks the transport for a refresh.
+    var backgroundAudioState: BackgroundAudioPlaybackState { backgroundAudioPlayback.state }
 
     var isCurrentItemBookmarked: Bool {
         guard let url = currentMediaURL else { return false }
@@ -909,6 +913,7 @@ class PlayerWindowController: NSWindowController {
         case .toggleBookmark: toggleBookmark(); return true
         case .previousVideo: playPrevious(); return true
         case .nextVideo: playNext(); return true
+        case .startQueueFromTop: startQueueFromTop(); return true
         case .primaryPrefixRename: applyPrefixShortcut(.primary); return true
         case .secondaryPrefixRename: applyPrefixShortcut(.secondary); return true
         case .toggleQueuePanel: toggleQueuePage(); return true
@@ -1210,7 +1215,7 @@ class PlayerWindowController: NSWindowController {
             clearMarkerRenameUndo()
             DebugConsoleController.log(level: .warning, category: "rename",
                                        message: "markerUndo: refused — \(refusal.message) source=\(source)")
-            presentRenameAlert(title: "Cannot Undo", message: refusal.message, window: win)
+            presentRenameAlert(title: DWBMessageText.cannotUndo, message: refusal.message, window: win)
 
         case .success(let plan):
             let result = SkimMarkerRenameUndoPlanner.perform(plan)
@@ -1230,7 +1235,7 @@ class PlayerWindowController: NSWindowController {
             if let error = result.error {
                 DebugConsoleController.log(level: .error, category: "rename",
                                            message: "markerUndo: failed after \(result.completed.count) of \(plan.count) — \(error.localizedDescription)")
-                presentRenameAlert(title: "Undo Failed", message: error.localizedDescription, window: win)
+                presentRenameAlert(title: DWBMessageText.undoFailed, message: error.localizedDescription, window: win)
             }
         }
     }
@@ -1655,6 +1660,31 @@ class PlayerWindowController: NSWindowController {
         DebugConsoleController.log("playback", "next: source=nextButton")
         advanceToNextItem(reason: "manual-next")
         clearFailedStatusForCurrentItem()
+    }
+
+    /// Whether the window's queue has an item to start from. The rail's Start From Top button reads it.
+    var canStartQueueFromTop: Bool {
+        StartFromTop.targetDisplayIndex(displayOrderCount: displayOrder.count) != nil
+    }
+
+    /// Plays the first item in the current display order, whatever the playback state. The button and
+    /// the key both run this. It does nothing for an empty queue.
+    func startQueueFromTop() {
+        guard canStartQueueFromTop else { return }
+        enqueuePlaybackCommand(named: "startQueueFromTop") { [weak self] finish in
+            guard let self, self.canStartQueueFromTop else { finish(); return }
+            self.cancelSkimPreviewSession(reason: "start-from-top")
+            // A paused session plays again: the first item starts on a fresh player, so the old item
+            // is not resumed. The background track resumes with the session, as it does on Play.
+            if self.isPlayerSessionPaused {
+                self.isPlayerSessionPaused = false
+                self.backgroundAudioPlayback.resume()
+                DebugConsoleController.log("playback", "sessionResumed: window=\(self.debugIdentity) source=start-from-top")
+            }
+            self.restartQueueFromFirstItem(source: "start-from-top")
+            self.clearFailedStatusForCurrentItem()
+            finish()
+        }
     }
 
     /// Explicit user reassignment (queue-panel pick, Next, Previous) is this app's existing
@@ -2309,7 +2339,7 @@ class PlayerWindowController: NSWindowController {
         let dir    = url.deletingLastPathComponent()
         let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let validatedName = validatedRenameFilename(trimmedName, originalURL: url) else {
-            presentRenameAlert(title: "Cannot Rename",
+            presentRenameAlert(title: DWBMessageText.cannotRename,
                                message: "Enter a valid filename. The extension is preserved automatically, and filenames cannot contain path separators.",
                                window: win)
             return nil
@@ -2318,7 +2348,7 @@ class PlayerWindowController: NSWindowController {
 
         guard FileManager.default.fileExists(atPath: url.path) else {
             DebugConsoleController.log(level: .warning, category: "rename", message: "missing source: \(url.lastPathComponent)")
-            presentRenameAlert(title: "Cannot Rename",
+            presentRenameAlert(title: DWBMessageText.cannotRename,
                                message: "The original file could not be found.",
                                window: win)
             return nil
@@ -2331,7 +2361,7 @@ class PlayerWindowController: NSWindowController {
 
         if FileManager.default.fileExists(atPath: newURL.path) {
             DebugConsoleController.log(level: .warning, category: "rename", message: "collision: \(url.lastPathComponent) → \(validatedName) (target exists)")
-            presentRenameAlert(title: "Cannot Rename",
+            presentRenameAlert(title: DWBMessageText.cannotRename,
                                message: "A file named \"\(validatedName)\" already exists in this folder.",
                                window: win)
             return nil
@@ -2341,7 +2371,7 @@ class PlayerWindowController: NSWindowController {
             try FileManager.default.moveItem(at: url, to: newURL)
         } catch {
             DebugConsoleController.log(level: .error, category: "error", message: "rename failed: \(url.lastPathComponent) → \(validatedName): \(error.localizedDescription)")
-            presentRenameAlert(title: "Rename Failed",
+            presentRenameAlert(title: DWBMessageText.renameFailed,
                                message: error.localizedDescription,
                                window: win)
             return nil
@@ -2376,12 +2406,7 @@ class PlayerWindowController: NSWindowController {
     }
 
     private func presentRenameAlert(title: String, message: String, window: NSWindow) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        alert.beginSheetModal(for: window)
+        MessageSheetController.present(title: title, message: message, on: window)
     }
 
     // MARK: - Fullscreen toggle
@@ -2473,7 +2498,7 @@ class PlayerWindowController: NSWindowController {
                                                category: "queue",
                                                message: "expandAsync failed: \(error.localizedDescription)")
                     self.showDropError("Could not scan \"\(folder.lastPathComponent)\".",
-                                       title: "Unable to Open Folder")
+                                       title: DWBMessageText.unableToOpenFolder)
                 }
             }
         }
@@ -2513,7 +2538,7 @@ class PlayerWindowController: NSWindowController {
                                                category: "queue",
                                                message: "expandAsync failed: \(error.localizedDescription)")
                     self.showDropError("Could not scan the selected folders.",
-                                       title: "Unable to Open Folder")
+                                       title: DWBMessageText.unableToOpenFolder)
                 }
             }
         }
@@ -2555,12 +2580,12 @@ class PlayerWindowController: NSWindowController {
             } else if !emptyFolders.isEmpty {
                 let names = emptyFolders.map { "\"\($0)\"" }.joined(separator: ", ")
                 showDropError("No supported media files found in \(names).",
-                              title: "Nothing to Play")
+                              title: DWBMessageText.nothingToPlay)
             } else {
                 let ext = MediaFileSupport.supportedExtensions.sorted().joined(separator: ", ")
                 showDropError(
                     "None of the dropped files are supported media.\n\nSupported: \(ext)",
-                    title: "Unsupported Files")
+                    title: DWBMessageText.unsupportedFiles)
             }
             return
         }
@@ -2609,12 +2634,9 @@ class PlayerWindowController: NSWindowController {
 
     private func showDropError(_ message: String, title: String) {
         DispatchQueue.main.async { [weak self] in
-            let alert = NSAlert()
-            alert.messageText    = title
-            alert.informativeText = message
-            alert.alertStyle     = .warning
-            alert.addButton(withTitle: "OK")
-            if let window = self?.window { alert.beginSheetModal(for: window) }
+            if let window = self?.window {
+                MessageSheetController.present(title: title, message: message, on: window)
+            }
         }
     }
 
@@ -2622,18 +2644,18 @@ class PlayerWindowController: NSWindowController {
                                         unsupportedMessage: String? = nil) {
         if SettingsWindowController.acceptedMediaKinds().isEmpty {
             showDropError("All media types are disabled in Accept settings. Enable Video, Images, or GIF to load media.",
-                          title: "Nothing to Play")
+                          title: DWBMessageText.nothingToPlay)
             return
         }
 
         if result.excludedMediaCount > 0 {
             showDropError("Media files were found, but they are disabled in Accept settings.",
-                          title: "Nothing to Play")
+                          title: DWBMessageText.nothingToPlay)
             return
         }
 
         showDropError(unsupportedMessage ?? "No supported media files found.",
-                      title: "Nothing to Play")
+                      title: DWBMessageText.nothingToPlay)
     }
 
     @discardableResult
@@ -2675,17 +2697,7 @@ class PlayerWindowController: NSWindowController {
 
             // Queue ended naturally — restart from the first item in current display order.
             if self.queueEndedNaturally && !self.displayOrder.isEmpty {
-                self.queueEndedNaturally = false
-                self.currentDisplayIndex = 0
-                DebugConsoleController.log("playback", "queue-restart: source=play-button items=\(self.displayOrder.count)")
-                NSLog("[dwb-playback] queueRestart: source=play-button displayIdx=0/%d queueMode=%@ loop=%d",
-                      self.displayOrder.count,
-                      self.configuredQueueOrderMode.rawValue,
-                      self.configuredLoopQueueEnabled ? 1 : 0)
-                self.playCurrentItem(startReason: "queue-restart",
-                                     expectPlaybackHandshake: true,
-                                     preserveCompletionSequence: false,
-                                     transitionStrategy: .freshPlayer)
+                self.restartQueueFromFirstItem(source: "play-button")
                 finish()
                 return
             }
@@ -2698,6 +2710,24 @@ class PlayerWindowController: NSWindowController {
             }
             finish()
         }
+    }
+
+    /// The one restart path: the first item in the current display order plays on a fresh player.
+    /// Play after the queue ended and Start From Top both run it, inside a playback command. The
+    /// queue order, queue order mode, Loop Queue, and Skim settings are not touched.
+    private func restartQueueFromFirstItem(source: String) {
+        queueEndedNaturally = false
+        currentDisplayIndex = StartFromTop.targetDisplayIndex(displayOrderCount: displayOrder.count) ?? 0
+        DebugConsoleController.log("playback", "queue-restart: source=\(source) items=\(displayOrder.count)")
+        NSLog("[dwb-playback] queueRestart: source=%@ displayIdx=0/%d queueMode=%@ loop=%d",
+              source,
+              displayOrder.count,
+              configuredQueueOrderMode.rawValue,
+              configuredLoopQueueEnabled ? 1 : 0)
+        playCurrentItem(startReason: "queue-restart",
+                        expectPlaybackHandshake: true,
+                        preserveCompletionSequence: false,
+                        transitionStrategy: .freshPlayer)
     }
 
     private func pausePlayerSession(source: String) {
@@ -5957,7 +5987,7 @@ extension PlayerWindowController: QueuePageViewDelegate {
             if shouldAdvanceAfterRename {
                 DebugConsoleController.log("rename", "prefixAdvance: skipped reason=\(PrefixAdvanceSkipReason.renameFailed.rawValue)")
             }
-            presentRenameAlert(title: "Cannot Rename", message: message, window: win)
+            presentRenameAlert(title: DWBMessageText.cannotRename, message: message, window: win)
 
         case .success(let planned):
             guard !planned.isEmpty else {
@@ -6056,7 +6086,7 @@ extension PlayerWindowController: QueuePageViewDelegate {
     }
 
     func queuePageDidRequestRescan(_ view: QueuePageView) {
-        guard let win = window else { return }
+        guard window != nil else { return }
 
         // Determine folders to scan: explicit tracked folders, else fallback to parent dirs of queue items.
         var foldersToScan: [URL] = sourceFolderURLs
@@ -6072,12 +6102,12 @@ extension PlayerWindowController: QueuePageViewDelegate {
         }
 
         guard !foldersToScan.isEmpty else {
-            let a = NSAlert()
-            a.messageText = "Rescan Folder"
-            a.informativeText = "No folder context found for this queue. Open or drop a folder to enable folder rescan."
-            a.alertStyle = .informational
-            a.addButton(withTitle: "OK")
-            a.beginSheetModal(for: win)
+            // A short notice that needs no decision: a Status HUD (design system 9.10, rule 2).
+            showStatusHUD(symbol: "folder",
+                          tint: DWBColor.cautionText,
+                          title: DWBMessageText.noFolderToRescanTitle,
+                          detail: DWBMessageText.noFolderToRescanDetail,
+                          hold: DWBMotion.windowLimitHold)
             return
         }
 
@@ -6124,12 +6154,12 @@ extension PlayerWindowController: QueuePageViewDelegate {
                     DebugConsoleController.log(level: .error,
                                                category: "rescan",
                                                message: "rescanAsync failed: \(error.localizedDescription)")
-                    let alert = NSAlert()
-                    alert.messageText = "Rescan Folder"
-                    alert.informativeText = "Could not rescan folder contents."
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    if let window = self.window { alert.beginSheetModal(for: window) }
+                    // The queue is not changed on this path: `applyFolderRescan` runs only on success.
+                    if let window = self.window {
+                        MessageSheetController.present(title: DWBMessageText.couldNotRescanTitle,
+                                                       message: DWBMessageText.couldNotRescanMessage,
+                                                       on: window)
+                    }
                 }
             }
         }

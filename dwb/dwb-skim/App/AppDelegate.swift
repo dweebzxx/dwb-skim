@@ -255,24 +255,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenu
         DebugConsoleController.log(level: .warning,
                                    category: "window",
                                    message: "windowCapDenied: context=\(context) cap=\(maxPlayerWindowCount) current=\(windowControllers.count)")
-        // A non-modal status HUD on the key player window. The alert remains only for
-        // the case where no player window is visible to show it on.
+        // Design system 9.10: a non-modal Status HUD on a visible player window; otherwise a message
+        // sheet on the key or main dwb window; a native alert only when no dwb window is open.
         let hudWindow = (NSApp.keyWindow?.windowController as? PlayerWindowController)
             ?? orderedPlayerWindowControllers().first(where: { $0.window?.isVisible == true })
-        if let hudWindow, hudWindow.window?.isVisible == true {
-            hudWindow.showWindowLimitHUD(maxPlayerWindows: maxPlayerWindowCount)
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Window limit reached"
-        alert.informativeText = "dwb skim supports up to \(maxPlayerWindowCount) player windows."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        if let sheetWindow = NSApp.keyWindow ?? NSApp.mainWindow {
-            alert.beginSheetModal(for: sheetWindow)
-        } else {
+        let sheetHost = Self.sheetHostWindow()
+        switch WindowLimitSurface.choose(playerWindowVisible: hudWindow?.window?.isVisible == true,
+                                         otherDwbWindowOpen: sheetHost != nil) {
+        case .statusHUD:
+            hudWindow?.showWindowLimitHUD(maxPlayerWindows: maxPlayerWindowCount)
+        case .messageSheet:
+            guard let sheetHost else { return }
+            MessageSheetController.present(title: DWBMessageText.windowLimitReached,
+                                           message: DWBMessageText.windowLimitMessage(maxPlayerWindows: maxPlayerWindowCount),
+                                           on: sheetHost)
+        case .nativeAlert:
+            let alert = NSAlert()
+            alert.messageText = DWBMessageText.windowLimitReached
+            alert.informativeText = DWBMessageText.windowLimitMessage(maxPlayerWindows: maxPlayerWindowCount)
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
             alert.runModal()
         }
+    }
+
+    /// The key or main window a message sheet can attach to: a visible dwb window that is not a panel.
+    /// A sheet that is key stands for the window it hangs from.
+    private static func sheetHostWindow() -> NSWindow? {
+        for candidate in [NSApp.keyWindow, NSApp.mainWindow] {
+            guard let candidate else { continue }
+            let host = candidate.sheetParent ?? candidate
+            if host.isVisible, !(host is NSPanel) { return host }
+        }
+        return nil
     }
 
     private func orderedPlayerWindowControllers() -> [PlayerWindowController] {

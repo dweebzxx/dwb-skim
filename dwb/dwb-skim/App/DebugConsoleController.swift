@@ -308,12 +308,12 @@ final class DebugConsoleController: NSWindowController {
             do {
                 try text.write(to: url, atomically: true, encoding: .utf8)
             } catch {
-                let alert = NSAlert()
-                alert.messageText = "Export Failed"
-                alert.informativeText = "The debug log could not be written to the selected location.\n\n\(error.localizedDescription)"
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
+                if let window = self.window {
+                    MessageSheetController.present(
+                        title: DWBMessageText.exportFailed,
+                        message: "The debug log could not be written to the selected location.\n\n\(error.localizedDescription)",
+                        on: window)
+                }
             }
         }
     }

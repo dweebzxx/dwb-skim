@@ -4,7 +4,7 @@ import AppKit
 //
 // Each sheet is a borderless panel presented with `beginSheet`, so it hangs under the
 // title bar. The window's content is dimmed with black at 45% while a sheet is up.
-// The rename and batch sheets are 400 and 420 pt wide, the confirm sheet 380 pt, all
+// The rename and batch sheets are 400 and 420 pt wide, the confirm and message sheets 380 pt, all
 // `surfaceElevated` with a 1 pt `border` and a 10 pt bottom radius.
 
 // MARK: - Panel and chrome
@@ -638,5 +638,74 @@ final class ConfirmSheetController: NSObject {
     @objc private func confirm() {
         DWBSheet.dismiss(panel, response: .OK)
         onConfirm()
+    }
+}
+
+// MARK: - Message sheet
+
+/// The error message sheet (design system `MessageSheet`, 9.10): the confirm sheet's chrome with an
+/// `exclamationmark.triangle.fill` icon in `errorText`, a title, a message, and one right-aligned
+/// "OK" button. OK is the default button, so Return closes it; Esc closes it too.
+final class MessageSheetController: NSObject {
+    static let width: CGFloat = 380
+
+    /// Keeps the controller alive while its sheet is up.
+    private var retainedSelf: AnyObject?
+    private let panel: DWBSheetPanel
+    private let okButton: DWBButton
+
+    init(title: String, message: String) {
+        let chrome = DWBSheetChromeView(width: Self.width)
+        let inner = Self.width - 40
+
+        let icon = NSImageView()
+        icon.image = NSImage.dwbSymbol("exclamationmark.triangle.fill", pointSize: 18, color: DWBColor.errorText)
+        icon.setAccessibilityElement(false)
+        let titleLabel = DWBSheet.wrappingLabel(title, size: 13.5, weight: .semibold, tone: .primary, width: inner - 28)
+        let header = NSStackView(views: [icon, titleLabel])
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.spacing = 10
+
+        let messageLabel = DWBSheet.wrappingLabel(message, size: 11.5, tone: .secondary, width: inner)
+
+        okButton = DWBButton(title: "OK", style: .primary)
+        let buttons = DWBSheet.buttonRow([okButton])
+
+        chrome.stack.addArrangedSubview(header)
+        chrome.stack.addArrangedSubview(messageLabel)
+        chrome.stack.addArrangedSubview(buttons)
+        chrome.stack.spacing = 10
+        chrome.stack.setCustomSpacing(18, after: messageLabel)
+        buttons.widthAnchor.constraint(equalTo: chrome.stack.widthAnchor).isActive = true
+
+        panel = DWBSheet.makePanel(chrome: chrome)
+        super.init()
+
+        okButton.target = self
+        okButton.action = #selector(close)
+        okButton.keyEquivalent = "\r"
+        panel.onCancel = { [weak self] in self?.close() }
+        panel.initialFirstResponder = okButton
+        chrome.setAccessibilityLabel(title)
+        chrome.setAccessibilityRole(.group)
+    }
+
+    /// Shows the message sheet under `window`.
+    static func present(title: String, message: String, on window: NSWindow) {
+        MessageSheetController(title: title, message: message).present(on: window)
+    }
+
+    func present(on window: NSWindow) {
+        retainedSelf = self
+        DWBSheet.present(panel, on: window) { [weak self] _ in self?.retainedSelf = nil }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.panel.makeFirstResponder(self.okButton)
+        }
+    }
+
+    @objc private func close() {
+        DWBSheet.dismiss(panel, response: .OK)
     }
 }

@@ -11,7 +11,7 @@ import Foundation
 enum ShortcutCommandID: String, CaseIterable {
     case playPause, seekBackward, seekForward, volumeUp, volumeDown
     case toggleSkim, nextSkimSegment
-    case previousItem, nextItem
+    case previousItem, nextItem, startQueueFromTop
     case openFile, renameFile, togglePrimaryPrefix, toggleSecondaryPrefix, undoPrefixChange, undoTyping, redoTyping, cut, copy, paste, selectAll, revealInFinder
     case moveBetweenSettingsPages
     case toggleBookmark
@@ -145,6 +145,9 @@ enum ShortcutCommandTable {
             keys: [.bare(",")], keyHandler: player, note: typingNote),
         cmd(.nextItem, "Next item", .navigation,
             keys: [.bare(".")], keyHandler: player, note: typingNote),
+        cmd(.startQueueFromTop, "Start queue from top", .navigation,
+            keys: [.bare("p")], keyHandler: player,
+            note: "Restarts the queue from the top. \(typingNote)"),
         cmd(.moveBetweenSettingsPages, "Move between Settings pages", .navigation,
             keys: [.bare(ShortcutKey.upArrow), .bare(ShortcutKey.downArrow)],
             keyHandler: .settingsSidebar, editable: false,

@@ -57,18 +57,33 @@ final class VolumeOverlayPresentationTests: XCTestCase {
         }
         XCTAssertEqual(VideoVolumeMeterPresentation.regularSegmentCount, 7)
         XCTAssertEqual(VideoVolumeMeterPresentation.boostSegmentCount, 4)
+        // SD-039: the lit count rounds up. Normal segments light at 1, 15, 29, 43, 58, 72, and 86%;
+        // boost segments at 101, 126, 151, and 176%.
         XCTAssertTrue(lit(0) == (0, 0))
-        XCTAssertTrue(lit(14) == (0, 0))
-        XCTAssertTrue(lit(15) == (1, 0))
-        XCTAssertTrue(lit(50) == (3, 0))
-        XCTAssertTrue(lit(99) == (6, 0))
+        XCTAssertTrue(lit(1) == (1, 0))
+        XCTAssertTrue(lit(14) == (1, 0))
+        XCTAssertTrue(lit(15) == (2, 0))
+        XCTAssertTrue(lit(28) == (2, 0))
+        XCTAssertTrue(lit(29) == (3, 0))
+        XCTAssertTrue(lit(42) == (3, 0))
+        XCTAssertTrue(lit(43) == (4, 0))
+        XCTAssertTrue(lit(57) == (4, 0))
+        XCTAssertTrue(lit(58) == (5, 0))
+        XCTAssertTrue(lit(71) == (5, 0))
+        XCTAssertTrue(lit(72) == (6, 0))
+        XCTAssertTrue(lit(85) == (6, 0))
+        XCTAssertTrue(lit(86) == (7, 0))
         XCTAssertTrue(lit(100) == (7, 0))
-        XCTAssertTrue(lit(124) == (7, 0))
+        XCTAssertTrue(lit(101) == (7, 1))
         XCTAssertTrue(lit(125) == (7, 1))
+        XCTAssertTrue(lit(126) == (7, 2))
         XCTAssertTrue(lit(150) == (7, 2))
+        XCTAssertTrue(lit(151) == (7, 3))
         XCTAssertTrue(lit(175) == (7, 3))
+        XCTAssertTrue(lit(176) == (7, 4))
         XCTAssertTrue(lit(200) == (7, 4))
         XCTAssertTrue(lit(150, muted: true) == (0, 0))
+        XCTAssertTrue(lit(1, muted: true) == (0, 0))
     }
 
     func testHeatStartsAt150AndReachesFullStrengthAt200() {

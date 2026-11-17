@@ -16,6 +16,7 @@ import AppKit
 /// | --- | ----------------------------- |
 /// | `,` | Previous Video                |
 /// | `.` | Next Video                     |
+/// | `p` | Start queue from top          |
 /// | `n` | Primary Prefix Rename         |
 /// | `m` | Secondary Prefix Rename       |
 /// | `r` | Rename sheet                  |
@@ -36,6 +37,7 @@ enum SkimKeyboardShortcut: Equatable, CaseIterable {
     case toggleBookmark
     case previousVideo
     case nextVideo
+    case startQueueFromTop
     case primaryPrefixRename
     case secondaryPrefixRename
     case toggleQueuePanel
@@ -58,6 +60,7 @@ enum SkimKeyboardShortcut: Equatable, CaseIterable {
         case .toggleBookmark: return .toggleBookmark
         case .previousVideo: return .previousItem
         case .nextVideo: return .nextItem
+        case .startQueueFromTop: return .startQueueFromTop
         case .primaryPrefixRename: return .togglePrimaryPrefix
         case .secondaryPrefixRename: return .toggleSecondaryPrefix
         case .toggleQueuePanel: return .toggleQueuePanel

@@ -36,7 +36,33 @@ struct PlaybackDurationPresentation: Equatable {
 }
 
 enum PlaybackBarPresentation {
-    static let controlOrder = ["Queue", "Skim", "Previous", "Play/Pause", "Next", "Volume", "Fullscreen"]
+    /// The rail, left to right (design system 9.8): the left group is Queue; the center group is
+    /// Skim, Start From Top, Previous, Play or Pause, Next, Advance Segment, Volume; the right
+    /// group is the "dwb+ on" label (when shown), Bookmark, Settings, Fullscreen.
+    static let controlOrder = ["Queue",
+                               "Skim", "Start From Top", "Previous", "Play/Pause", "Next", "Advance Segment", "Volume",
+                               "dwb+ on", "Bookmark", "Settings", "Fullscreen"]
+
+    /// The center group holds six 30 pt buttons and the 36 pt Play button, with six gaps between them.
+    static let centerButtonCount = 6
+
+    /// The "dwb+ on" label shows only while this window's background track is playing. It is removed
+    /// (not dimmed) when the track is paused, off, or not available.
+    static func showsBackgroundAudioLabel(for state: BackgroundAudioPlaybackState) -> Bool {
+        if case .playing = state { return true }
+        return false
+    }
+
+    /// Which right-group items fit. `centerEndX` is where the center group ends, including its trailing
+    /// gap. An item hides when it would start left of that point. The label sits left of Bookmark, so it
+    /// is the first to hide; Bookmark hides by its own test, and always after the label.
+    static func rightGroupVisibility(labelWanted: Bool,
+                                     labelX: CGFloat,
+                                     bookmarkX: CGFloat,
+                                     centerEndX: CGFloat) -> RailRightGroupVisibility {
+        RailRightGroupVisibility(showsBackgroundAudioLabel: labelWanted && labelX >= centerEndX && bookmarkX >= centerEndX,
+                                 showsBookmark: bookmarkX >= centerEndX)
+    }
 
     static func markers(settings: SkimSettingsSnapshot) -> [PlaybackBarMarker] {
         let clipText: String
@@ -59,9 +85,10 @@ enum PlaybackBarPresentation {
         let edgeInset: CGFloat = 16
         let minimumGap: CGFloat = 2
         let preferredGap: CGFloat = 8
-        let middleWidth = buttonSize * 4 + playSize
-        let availableGap = max(minimumGap, min(preferredGap, (width - middleWidth) / 4))
-        let centeredWidth = middleWidth + availableGap * 4
+        let buttonCount = CGFloat(centerButtonCount)
+        let middleWidth = buttonSize * buttonCount + playSize
+        let availableGap = max(minimumGap, min(preferredGap, (width - middleWidth) / buttonCount))
+        let centeredWidth = middleWidth + availableGap * buttonCount
         let railWidth = max(0, width - edgeInset * 2)
         let cellWidth = railWidth / 4
         let markerCells = (0..<4).map {
@@ -107,6 +134,18 @@ enum PlaybackBarPresentation {
     private static func formatTime(_ seconds: Int) -> String {
         String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
+}
+
+/// Start From Top plays the first item in the current display order. An empty queue has none.
+enum StartFromTop {
+    static func targetDisplayIndex(displayOrderCount: Int) -> Int? {
+        displayOrderCount > 0 ? 0 : nil
+    }
+}
+
+struct RailRightGroupVisibility: Equatable {
+    let showsBackgroundAudioLabel: Bool
+    let showsBookmark: Bool
 }
 
 struct PlaybackBarLayout: Equatable {

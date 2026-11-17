@@ -3,7 +3,83 @@ import XCTest
 final class PlaybackBarPresentationTests: XCTestCase {
     func testControlOrderMatchesAccessibilityAndVisualContract() {
         XCTAssertEqual(PlaybackBarPresentation.controlOrder,
-                       ["Queue", "Skim", "Previous", "Play/Pause", "Next", "Volume", "Fullscreen"])
+                       ["Queue",
+                        "Skim", "Start From Top", "Previous", "Play/Pause", "Next", "Advance Segment", "Volume",
+                        "dwb+ on", "Bookmark", "Settings", "Fullscreen"])
+    }
+
+    func testLayoutCountsSixButtonsOnePlayButtonAndSixGaps() {
+        // 980 pt: the gap is capped at 8, so the group is 6 * 30 + 36 + 6 * 8 = 264, centered.
+        let layout = PlaybackBarPresentation.layout(width: 980)
+        XCTAssertEqual(PlaybackBarPresentation.centerButtonCount, 6)
+        XCTAssertEqual(layout.gap, 8, accuracy: 0.001)
+        XCTAssertEqual(layout.centeredWidth, 264, accuracy: 0.001)
+        XCTAssertEqual((980 - layout.centeredWidth) / 2, 358, accuracy: 0.001)
+
+        let wide = PlaybackBarPresentation.layout(width: 2560)
+        XCTAssertEqual(wide.gap, 8, accuracy: 0.001)
+        XCTAssertEqual(wide.centeredWidth, 264, accuracy: 0.001)
+        XCTAssertEqual((2560 - wide.centeredWidth) / 2 + wide.centeredWidth / 2, 1280, accuracy: 0.001)
+    }
+
+    func testLayoutGapIsClampedToTwoThroughEightPoints() {
+        // (width - 216) / 6 is 5 at 246 pt, below 2 at 200 pt, and above 8 at 300 pt.
+        XCTAssertEqual(PlaybackBarPresentation.layout(width: 246).gap, 5, accuracy: 0.001)
+        XCTAssertEqual(PlaybackBarPresentation.layout(width: 246).centeredWidth, 246, accuracy: 0.001)
+        XCTAssertEqual(PlaybackBarPresentation.layout(width: 200).gap, 2, accuracy: 0.001)
+        XCTAssertEqual(PlaybackBarPresentation.layout(width: 200).centeredWidth, 228, accuracy: 0.001)
+        XCTAssertEqual(PlaybackBarPresentation.layout(width: 300).gap, 8, accuracy: 0.001)
+    }
+
+    func testEveryRailItemFitsAtTheMinimumWidthWithTheLabelShown() {
+        // The geometry `BottomRailView.layout()` builds at 980 pt, with a label wider than the real one.
+        let width: CGFloat = 980
+        let layout = PlaybackBarPresentation.layout(width: width)
+        let button: CGFloat = 30, play: CGFloat = 36, gap = layout.gap
+        let centerStart = (width - layout.centeredWidth) / 2
+        let centerEndX = centerStart + play + button * 6 + gap * 7
+        let fullscreenX = width - layout.edgeInset - button
+        let settingsX = fullscreenX - gap - button
+        let bookmarkX = settingsX - gap - button
+        let labelWidth: CGFloat = 60
+        let labelX = bookmarkX - gap - labelWidth
+        let visibility = PlaybackBarPresentation.rightGroupVisibility(labelWanted: true, labelX: labelX,
+                                                                      bookmarkX: bookmarkX, centerEndX: centerEndX)
+        XCTAssertEqual(visibility, RailRightGroupVisibility(showsBackgroundAudioLabel: true, showsBookmark: true))
+        XCTAssertGreaterThan(labelX, centerEndX)
+        XCTAssertLessThan(layout.edgeInset + button, centerStart)
+    }
+
+    func testBackgroundAudioLabelShowsOnlyWhileTheTrackPlays() {
+        let url = URL(fileURLWithPath: "/tmp/track.mp3")
+        XCTAssertTrue(PlaybackBarPresentation.showsBackgroundAudioLabel(for: .playing(url)))
+        XCTAssertFalse(PlaybackBarPresentation.showsBackgroundAudioLabel(for: .paused(url)))
+        XCTAssertFalse(PlaybackBarPresentation.showsBackgroundAudioLabel(for: .inactive))
+        XCTAssertFalse(PlaybackBarPresentation.showsBackgroundAudioLabel(for: .unavailable("No track")))
+    }
+
+    func testNarrowRailHidesTheLabelBeforeBookmark() {
+        func visibility(labelX: CGFloat, bookmarkX: CGFloat, wanted: Bool = true) -> RailRightGroupVisibility {
+            PlaybackBarPresentation.rightGroupVisibility(labelWanted: wanted, labelX: labelX,
+                                                         bookmarkX: bookmarkX, centerEndX: 500)
+        }
+        XCTAssertEqual(visibility(labelX: 520, bookmarkX: 600),
+                       RailRightGroupVisibility(showsBackgroundAudioLabel: true, showsBookmark: true))
+        // The label would overlap the center group; Bookmark still fits.
+        XCTAssertEqual(visibility(labelX: 460, bookmarkX: 510),
+                       RailRightGroupVisibility(showsBackgroundAudioLabel: false, showsBookmark: true))
+        // Bookmark would overlap too: both hide.
+        XCTAssertEqual(visibility(labelX: 440, bookmarkX: 490),
+                       RailRightGroupVisibility(showsBackgroundAudioLabel: false, showsBookmark: false))
+        // A label that is not wanted never shows.
+        XCTAssertEqual(visibility(labelX: 520, bookmarkX: 600, wanted: false),
+                       RailRightGroupVisibility(showsBackgroundAudioLabel: false, showsBookmark: true))
+    }
+
+    func testStartFromTopTargetsTheFirstItemOrNothing() {
+        XCTAssertEqual(StartFromTop.targetDisplayIndex(displayOrderCount: 1), 0)
+        XCTAssertEqual(StartFromTop.targetDisplayIndex(displayOrderCount: 40), 0)
+        XCTAssertNil(StartFromTop.targetDisplayIndex(displayOrderCount: 0))
     }
 
     func testLayoutKeepsEdgeRegionsSeparateAndMiddleCentered() {

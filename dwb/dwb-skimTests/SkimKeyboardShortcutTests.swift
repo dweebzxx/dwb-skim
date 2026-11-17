@@ -11,6 +11,8 @@ final class SkimKeyboardShortcutTests: XCTestCase {
 
     func testPeriodMapsToNextVideo() {
         XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "."), .nextVideo)
+        XCTAssertEqual(SkimKeyboardShortcut(unmodifiedKey: "p"), .startQueueFromTop)
+        XCTAssertEqual(SkimKeyboardShortcut.startQueueFromTop.commandID, .startQueueFromTop)
     }
 
     func testNMapsToPrimaryPrefixRename() {
@@ -188,7 +190,8 @@ final class SkimKeyboardShortcutTests: XCTestCase {
     func testEveryDefaultKeyRunsTheSameActionAsBefore() {
         let (store, _, _) = makeShortcutStore()
         let expected: [(String, SkimKeyboardShortcut)] = [
-            (",", .previousVideo), (".", .nextVideo), ("n", .primaryPrefixRename), ("m", .secondaryPrefixRename),
+            (",", .previousVideo), (".", .nextVideo), ("p", .startQueueFromTop),
+            ("n", .primaryPrefixRename), ("m", .secondaryPrefixRename),
             ("r", .renameSheet), ("b", .toggleBookmark), ("q", .toggleQueuePanel), (" ", .togglePlayPause),
             ("f", .toggleFullScreen),
         ]
@@ -245,10 +248,10 @@ final class SkimKeyboardShortcutTests: XCTestCase {
 
     func testMovingTheSegmentKeyLeavesTheSeekOnTheRightArrow() {
         let (store, _, _) = makeShortcutStore()
-        store.replaceKey(.bare(arrowRight), with: .bare("p"), for: .nextSkimSegment)
-        XCTAssertEqual(resolve("p", skim: true, session: true, canAdvance: true, store: store)?.arrow,
+        store.replaceKey(.bare(arrowRight), with: .bare("j"), for: .nextSkimSegment)
+        XCTAssertEqual(resolve("j", skim: true, session: true, canAdvance: true, store: store)?.arrow,
                        .advanceProgressiveRandomSkimSegment)
-        XCTAssertNil(resolve("p", store: store))
+        XCTAssertNil(resolve("j", store: store))
         XCTAssertEqual(resolve(arrowRight, store: store)?.arrow, .seek(seconds: 10))
         XCTAssertNil(resolve(arrowRight, skim: true, session: true, canAdvance: true, store: store))
     }

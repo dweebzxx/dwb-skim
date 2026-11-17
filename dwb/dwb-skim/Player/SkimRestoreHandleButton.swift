@@ -3,8 +3,8 @@ import Cocoa
 /// The Skim restore handle: just a `chevron.down` at the top edge of the content area, shown while
 /// the settings strip is collapsed. It has no fill or edge, so it never shows two tones where it
 /// straddles the letterbox and the video; the chevron keeps its contrast from the brightest text role
-/// and a soft black shadow, the design system's treatment for a layer floating over video. The 36 × 24
-/// hit area and the 13 pt chevron mirror the strip's 24 pt collapse control (9.8 gives 30 × 20 and 11 pt).
+/// and a soft black shadow, the design system's treatment for a layer floating over video. The 40 × 24
+/// hit area and the 13 pt chevron are the design system's (9.8).
 final class SkimRestoreHandleButton: NSButton {
     static let size = NSSize(width: SkimRestoreHandleGeometry.size.width,
                              height: SkimRestoreHandleGeometry.size.height)

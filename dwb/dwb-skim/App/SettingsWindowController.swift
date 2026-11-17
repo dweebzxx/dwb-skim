@@ -1408,7 +1408,7 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
             try BackgroundAudioSettingsStore.shared.select(url)
             syncUIFromDefaults()
         } catch {
-            presentError(title: "Unsupported Audio Track", message: error.localizedDescription)
+            presentError(title: DWBMessageText.unsupportedAudioTrack, message: error.localizedDescription)
         }
     }
 
@@ -1500,12 +1500,8 @@ final class SettingsWindowController: NSWindowController, NSTextFieldDelegate {
     }
 
     private func presentError(title: String, message: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        if let window { alert.beginSheetModal(for: window) }
+        guard let window else { return }
+        MessageSheetController.present(title: title, message: message, on: window)
     }
 
     @objc private func openRepository(_ sender: Any) {

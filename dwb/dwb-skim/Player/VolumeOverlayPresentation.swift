@@ -35,19 +35,21 @@ extension VideoVolumeMeterPresentation {
     /// Heat starts here and reaches full strength at `maximumVolume`.
     static let heatStartVolume = 150
 
-    /// Lit segments in the 0–100% group: segment `i` (0-based) lights at `(i + 1) * 100 / 7` percent.
+    /// Lit segments in the 0–100% group. The lit count rounds up (suite rule SD-039): segment `i`
+    /// (0-based) lights once the volume passes `i * 100 / 7` percent, so the segments light at
+    /// 1, 15, 29, 43, 58, 72, and 86%. 100% lights all seven.
     var litRegularSegments: Int {
         guard !isMuted else { return 0 }
-        let step = Double(Self.regularVolumeMaximum) / Double(Self.regularSegmentCount)
-        return (0..<Self.regularSegmentCount).filter { Double(volume) >= Double($0 + 1) * step - 0.01 }.count
+        let scaled = min(volume, Self.regularVolumeMaximum) * Self.regularSegmentCount
+        return (scaled + Self.regularVolumeMaximum - 1) / Self.regularVolumeMaximum
     }
 
-    /// Lit segments in the boost group: segment `i` lights at `100 + (i + 1) * 25` percent.
+    /// Lit segments in the boost group. The lit count rounds up (suite rule SD-039): the boost segments
+    /// light at 101, 126, 151, and 176%. 200% lights all four.
     var litBoostSegments: Int {
         guard !isMuted else { return 0 }
-        return (0..<Self.boostSegmentCount).filter {
-            volume >= Self.regularVolumeMaximum + ($0 + 1) * Self.boostStepPercent
-        }.count
+        let boost = max(0, volume - Self.regularVolumeMaximum)
+        return min(Self.boostSegmentCount, (boost + Self.boostStepPercent - 1) / Self.boostStepPercent)
     }
 
     /// 0 up to 150%, then (volume − 150) / 50: 0.5 at 175%, 1 at 200%.

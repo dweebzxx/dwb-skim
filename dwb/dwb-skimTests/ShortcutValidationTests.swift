@@ -133,7 +133,7 @@ final class ShortcutValidationTests: XCTestCase {
     }
 
     func testPlayPauseAcceptsSpaceAndTwoModifiedKeys() {
-        XCTAssertEqual(evaluate(.bare("p"), for: .playPause), .valid)
+        XCTAssertEqual(evaluate(.bare("j"), for: .playPause), .valid)
         XCTAssertEqual(evaluate(ShortcutKey(modifiers: [.control], key: "p"), for: .playPause), .valid)
         XCTAssertEqual(evaluate(ShortcutKey(modifiers: [.option], key: "p"), for: .playPause), .valid)
     }

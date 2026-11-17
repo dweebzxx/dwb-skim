@@ -12,13 +12,13 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         static let labelToControl: CGFloat = 4
         static let controlGap: CGFloat = 6
         static let smallControl: CGFloat = 20
+        /// `DWBSegmentedControl` small: 20 pt segments plus its 2 pt frame on each side.
+        static let segmentedControl: CGFloat = 24
         static let numberField: CGFloat = 44
         static let numberFieldWithStepper: CGFloat = 58
         static let popUp: CGFloat = 104
         static let collapseButton = SkimStripLayoutPlan.Metrics.collapseControl
         static let overflowButton = SkimStripLayoutPlan.Metrics.overflowControl
-        static let popoverInset: CGFloat = 14
-        static let popoverGroupGap: CGFloat = 14
     }
 
     /// One strip group, in row order. `divider` is the rule drawn before it when it starts a cluster.
@@ -40,12 +40,12 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
     /// notifications that came from Settings or another window.
     var onSettingCommitted: ((SkimStripConfirmation) -> Void)?
     private let store: SkimSettingsStore
-    private let durationMode = NSSegmentedControl(labels: ["Fixed", "Random"], trackingMode: .selectOne, target: nil, action: nil)
+    private let durationMode = SkimSettingsStripView.makeSegmented(["Fixed", "Random"])
     private let fixedDuration = SkimNumberField()
     private let randomMinimum = SkimNumberField()
     private let randomMaximum = SkimNumberField()
     private let randomRangeSeparator = NSTextField(labelWithString: "-")
-    private let startPosition = NSSegmentedControl(labels: ["Beginning", "Random"], trackingMode: .selectOne, target: nil, action: nil)
+    private let startPosition = SkimSettingsStripView.makeSegmented(["Beginning", "Random"])
     private let skipIntro = SkimNumberField()
     private let imageDuration = SkimNumberField()
     private let imageDurationStepper = NSStepper()
@@ -55,8 +55,8 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
     private let loopQueue = NSSwitch()
     private let progressiveRandomSkim = NSSwitch()
     private let collapseButton = NSButton()
-    private let overflowButton = NSButton()
-    private let overflowPopover = NSPopover()
+    private let overflowButton = RailButton()
+    private var overflowPopover: DWBPopover!
     private let overflowStack = NSStackView()
     private let rowStack = NSStackView()
     private let bottomEdge = NSView()
@@ -245,14 +245,12 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
 
         overflowStack.orientation = .vertical
         overflowStack.alignment = .leading
-        overflowStack.spacing = Metrics.popoverGroupGap
-        overflowStack.edgeInsets = NSEdgeInsets(top: Metrics.popoverInset, left: Metrics.popoverInset,
-                                                bottom: Metrics.popoverInset, right: Metrics.popoverInset)
-        let overflowController = NSViewController()
-        overflowController.view = overflowStack
-        overflowPopover.contentViewController = overflowController
-        overflowPopover.behavior = .transient
-        overflowPopover.appearance = NSAppearance(named: .darkAqua)
+        overflowStack.spacing = DWBPopoverGeometry.groupGap
+        overflowStack.edgeInsets = NSEdgeInsets(top: DWBPopoverGeometry.inset, left: DWBPopoverGeometry.inset,
+                                                bottom: DWBPopoverGeometry.inset, right: DWBPopoverGeometry.inset)
+        // The design system's popover: a transient `surfaceElevated` panel with an arrow to the button.
+        overflowPopover = DWBPopover(content: overflowStack, accessibilityName: "More Skim settings")
+        overflowPopover.onClose = { [weak self] in self?.overflowButton.isToggled = false }
 
         // The chevron and, when needed, the overflow button live in a trailing slot outside the
         // row, so no width the groups need can push them past the visible right edge.
@@ -287,15 +285,11 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
     }
 
     private func configureOverflowButton() {
-        overflowButton.isBordered = false
-        overflowButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More Skim settings")?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: DWBRailIcon.size(for: "ellipsis"),
-                                                                 weight: .medium))
-        overflowButton.imageScaling = .scaleProportionallyDown
-        overflowButton.contentTintColor = StripColor.supportingText
+        // A 24 pt circle with the rail button states: hover, pressed, and open (toggled).
+        overflowButton.railStyle = .popoverTrigger
+        overflowButton.configureSymbol("ellipsis", accessibilityLabel: "More Skim settings", help: "More Skim settings")
         overflowButton.target = self
         overflowButton.action = #selector(overflowTapped(_:))
-        overflowButton.setAccessibilityLabel("More Skim settings")
         overflowButton.widthAnchor.constraint(equalToConstant: Metrics.overflowButton).isActive = true
         overflowButton.heightAnchor.constraint(equalToConstant: Metrics.overflowButton).isActive = true
     }
@@ -316,7 +310,10 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
                                         isFirst: index == 0)
         }
         let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: bounds.width)
-        guard plan != appliedPlan else { return }
+        guard plan != appliedPlan else {
+            applySpacing(plan: plan, advances: advances)
+            return
+        }
         appliedPlan = plan
         if overflowPopover.isShown { overflowPopover.close() }
         for entry in groups {
@@ -331,10 +328,31 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
                 overflowStack.addArrangedSubview(entry.view)
             }
         }
+        applySpacing(plan: plan, advances: advances)
         overflowButton.isHidden = !plan.hasOverflow
         let names = groups[plan.visibleCount...].map { $0.setting.name }.joined(separator: ", ")
         overflowButton.toolTip = plan.hasOverflow ? "More Skim settings: \(names)" : nil
         overflowButton.setAccessibilityHelp(plan.hasOverflow ? "Opens \(names)." : nil)
+    }
+
+    /// Spreads the visible groups across the strip: the spare width is shared equally between the
+    /// groups, and a divider sits in the middle of its gap (design system 9.8).
+    private func applySpacing(plan: SkimStripLayoutPlan, advances: [CGFloat]) {
+        let share = plan.spareShare(advances: advances, stripWidth: bounds.width)
+        for (index, entry) in groups.enumerated() where index < plan.visibleCount {
+            if let divider = entry.divider, index > 0 {
+                rowStack.setCustomSpacing(Metrics.groupGap + share / 2, after: divider)
+            }
+            let followsWithDivider = index + 1 < groups.count && groups[index + 1].divider != nil
+            let visibleNext = index + 1 < plan.visibleCount
+            if !visibleNext {
+                rowStack.setCustomSpacing(NSStackView.useDefaultSpacing, after: entry.view)
+            } else if followsWithDivider {
+                rowStack.setCustomSpacing(Metrics.groupGap + share / 2, after: entry.view)
+            } else {
+                rowStack.setCustomSpacing(Metrics.groupGap + share, after: entry.view)
+            }
+        }
     }
 
     @objc private func overflowTapped(_ sender: NSButton) {
@@ -342,25 +360,28 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
             overflowPopover.close()
             return
         }
-        overflowStack.layoutSubtreeIfNeeded()
-        overflowPopover.contentSize = overflowStack.fittingSize
-        overflowPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        overflowButton.isToggled = true
+        overflowPopover.show(relativeTo: sender)
     }
 
     @objc private func accessibilityOptionsChanged() {
         bottomEdge.layer?.backgroundColor = StripColor.line.cgColor
         collapseButton.contentTintColor = StripColor.supportingText
-        overflowButton.contentTintColor = StripColor.supportingText
         randomRangeSeparator.textColor = StripColor.supportingText
         applyLabelColors()
     }
 
-    private func configureSegmented(_ control: NSSegmentedControl, action: Selector) {
+    /// The design system's segmented control at its small size: 20 pt segments in a 2 pt frame.
+    private static func makeSegmented(_ labels: [String]) -> DWBSegmentedControl {
+        let control = DWBSegmentedControl(size: .small)
+        control.segmentCount = labels.count
+        for (index, label) in labels.enumerated() { control.setLabel(label, forSegment: index) }
+        return control
+    }
+
+    private func configureSegmented(_ control: DWBSegmentedControl, action: Selector) {
         control.target = self
         control.action = action
-        control.segmentStyle = .smallSquare
-        control.controlSize = .small
-        control.heightAnchor.constraint(equalToConstant: Metrics.smallControl).isActive = true
     }
 
     private func configureNumberField(_ field: SkimNumberField,
@@ -401,10 +422,17 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
     private func group(_ title: String, _ control: NSView, setting: SkimStripSetting) -> NSView {
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 10, weight: .medium)
-        label.textColor = StripColor.supportingText
+        label.textColor = StripColor.groupLabel
         label.setAccessibilityElement(false)
         groupLabels.append((setting, label))
-        let stack = NSStackView(views: [label, control])
+        // Every control sits in a slot as tall as the segmented control (20 pt segments in a 2 pt
+        // frame), so every group has the same height and all the labels share one line.
+        let slot = NSStackView(views: [control])
+        slot.orientation = .horizontal
+        slot.alignment = .centerY
+        slot.spacing = 0
+        slot.heightAnchor.constraint(equalToConstant: Metrics.segmentedControl).isActive = true
+        let stack = NSStackView(views: [label, slot])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = Metrics.labelToControl
@@ -444,7 +472,7 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
 
     private func applyLabelColors() {
         for entry in groupLabels {
-            entry.label.textColor = activity.isActive(entry.setting) ? StripColor.supportingText : DWBColor.textDisabled
+            entry.label.textColor = activity.isActive(entry.setting) ? StripColor.groupLabel : DWBColor.textDisabled
         }
     }
 
@@ -498,7 +526,8 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         func apply(_ controls: [NSView], active: Bool) {
             for control in controls {
                 (control as? NSControl)?.isEnabled = active
-                control.alphaValue = active ? 1 : DWBMetrics.disabledAlpha
+                // The design-system segmented control dims itself when disabled.
+                control.alphaValue = active || control is DWBSegmentedControl ? 1 : DWBMetrics.disabledAlpha
             }
         }
         apply([durationMode, fixedDuration, randomMinimum, randomMaximum, startPosition],
@@ -520,7 +549,7 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         }
     }
 
-    @objc private func durationModeChanged(_ sender: NSSegmentedControl) {
+    @objc private func durationModeChanged(_ sender: DWBSegmentedControl) {
         guard !isSynchronizing else { return }
         commit(.clipDuration) {
             store.setPreviewDurationMode(sender.selectedSegment == 0
@@ -529,7 +558,7 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         }
     }
 
-    @objc private func startPositionChanged(_ sender: NSSegmentedControl) {
+    @objc private func startPositionChanged(_ sender: DWBSegmentedControl) {
         guard !isSynchronizing else { return }
         commit(.startPosition) {
             store.setStartPositionMode(sender.selectedSegment == 0
@@ -582,10 +611,14 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
     }
 }
 
-/// Semantic roles for the strip's quiet chrome: `gridLine` ("faint rules") and `textTertiary`
-/// (supporting labels). Increase Contrast uses the stronger `border` and the `textSecondary` step.
+/// Semantic roles for the strip's chrome (design system 9.8). The divider between groups is `border`
+/// and the active group labels are `textSecondary`; under Increase Contrast they take the stronger
+/// `borderStrong` and `textPrimary` steps. The strip's bottom edge stays `gridLine` (`border` under
+/// Increase Contrast). Supporting marks (the chevrons and the range dash) stay `textTertiary`.
 private enum StripColor {
+    static var divider: NSColor { DWBAccessibility.border }
     static var line: NSColor { DWBAccessibility.increaseContrast ? DWBAccessibility.border : DWBColor.gridLine }
+    static var groupLabel: NSColor { DWBAccessibility.textSecondary }
     static var supportingText: NSColor { DWBAccessibility.textTertiary }
 }
 
@@ -609,7 +642,7 @@ private final class StripSeparator: NSView {
     @objc private func accessibilityOptionsChanged() { applyColor() }
 
     private func applyColor() {
-        layer?.backgroundColor = StripColor.line.cgColor
+        layer?.backgroundColor = StripColor.divider.cgColor
     }
 }
 

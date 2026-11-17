@@ -129,3 +129,47 @@ final class SkimRestoreHandleGeometryTests: XCTestCase {
         XCTAssertEqual(frame.maxY, 320)
     }
 }
+
+final class SkimStripSpareWidthTests: XCTestCase {
+    private typealias Metrics = SkimStripLayoutPlan.Metrics
+
+    func testSpareWidthIsSharedEquallyBetweenVisibleGroups() {
+        // Three groups: advances 100, 118, 118 (natural widths 100 with the 18 pt gaps).
+        let advances: [CGFloat] = [100, 118, 118]
+        let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: 1000)
+        XCTAssertEqual(plan.visibleCount, 3)
+        // room = 1000 - (16 + 14 + 24 + 18) = 928; used = 336; two gaps share 592.
+        XCTAssertEqual(plan.spareShare(advances: advances, stripWidth: 1000), 296, accuracy: 0.001)
+    }
+
+    func testTheRowEndsEighteenBeforeTheTrailingSlot() {
+        let advances: [CGFloat] = [100, 118, 118]
+        let width: CGFloat = 1000
+        let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: width)
+        let share = plan.spareShare(advances: advances, stripWidth: width)
+        let rowEnd = Metrics.leadingInset + advances.reduce(0, +) + share * 2
+        XCTAssertEqual(rowEnd, width - Metrics.trailingInset - Metrics.collapseControl - Metrics.trailingGap, accuracy: 0.001)
+    }
+
+    func testNoSpareWidthWhenTheRowIsFullOrHasOneGroup() {
+        let advances: [CGFloat] = [100, 118, 118]
+        // 336 pt of groups plus the 72 pt of insets and trailing slot fill a 408 pt strip exactly.
+        let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: 408)
+        XCTAssertEqual(plan.visibleCount, 3)
+        XCTAssertEqual(plan.spareShare(advances: advances, stripWidth: 408), 0, accuracy: 0.001)
+        let single = SkimStripLayoutPlan(visibleCount: 1, totalCount: 3)
+        XCTAssertEqual(single.spareShare(advances: advances, stripWidth: 2000), 0, accuracy: 0.001)
+    }
+
+    func testOverflowButtonSlotIsReservedBeforeSharingSpareWidth() {
+        let advances: [CGFloat] = [300, 318, 318]
+        let width: CGFloat = 800
+        let plan = SkimStripLayoutPlan.make(advances: advances, stripWidth: width)
+        XCTAssertTrue(plan.hasOverflow)
+        let share = plan.spareShare(advances: advances, stripWidth: width)
+        let rowEnd = Metrics.leadingInset + advances.prefix(plan.visibleCount).reduce(0, +) + share * CGFloat(plan.visibleCount - 1)
+        let limit = width - Metrics.trailingInset - Metrics.collapseControl - Metrics.trailingGap
+            - Metrics.overflowControl - Metrics.trailingControlGap
+        XCTAssertLessThanOrEqual(rowEnd, limit + 0.001)
+    }
+}

@@ -24,12 +24,17 @@ final class BottomRailView: NSView {
     private let bookmarkButton = RailButton()
     private let settingsButton = RailButton()
     private let manualAdvanceButton = RailButton()
+    private let startFromTopButton = RailButton()
+    private let backgroundAudioLabel = RailBackgroundAudioLabel()
     private let durationLabel = NSTextField(labelWithString: "")
     private var markerLabels: [NSTextField] = []
     private var pendingSeekPosition: Float?
     private var pendingSeekDate: Date?
     private var isScrubbing = false
     private var bookmarkButtonState: (enabled: Bool, bookmarked: Bool)?
+    /// Whether this window's background track is playing. The layout still hides the label when
+    /// the rail is too narrow to show it.
+    private var wantsBackgroundAudioLabel = false
 
     static let bookmarkIdentifier = "skim.rail.bookmark"
 
@@ -58,6 +63,8 @@ final class BottomRailView: NSView {
         previousButton.updateHelp(ShortcutHints.help("Previous item", for: .previousItem))
         playPauseButton.updateHelp(ShortcutHints.help("Play or Pause", for: .playPause))
         nextButton.updateHelp(ShortcutHints.help("Next item", for: .nextItem))
+        startFromTopButton.updateHelp(ShortcutHints.help("Restart the queue from the top", for: .startQueueFromTop))
+        manualAdvanceButton.updateHelp(ShortcutHints.help("Advance to the next Progressive Random Skim segment", for: .nextSkimSegment))
         fullscreenButton.updateHelp(ShortcutHints.help("Toggle Fullscreen", for: .toggleFullScreen))
         bookmarkButton.updateHelp(ShortcutHints.help("Bookmark", for: .toggleBookmark))
     }
@@ -100,22 +107,31 @@ final class BottomRailView: NSView {
         configure(bookmarkButton, symbol: "bookmark", label: "Bookmark", help: ShortcutHints.help("Bookmark", for: .toggleBookmark), action: #selector(bookmarkTapped))
         configure(settingsButton, symbol: "gearshape", label: "Settings", help: "Open Settings", action: #selector(settingsTapped))
         configure(manualAdvanceButton, symbol: "forward.frame.fill", label: "Advance Segment",
-                 help: "Manually advance to the next Progressive Random Skim segment (active only when Progressive Random Skim is on)",
+                 help: ShortcutHints.help("Advance to the next Progressive Random Skim segment", for: .nextSkimSegment),
                  action: #selector(manualAdvanceTapped))
+        configure(startFromTopButton, symbol: "backward.frame.fill", label: "Start From Top",
+                  help: ShortcutHints.help("Restart the queue from the top", for: .startQueueFromTop),
+                  action: #selector(startFromTopTapped))
         previousButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.previousIdentifier)
         skimButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.toggleIdentifier)
         queueButton.identifier = NSUserInterfaceItemIdentifier(SkimControlAccessibility.queueIdentifier)
         bookmarkButton.identifier = NSUserInterfaceItemIdentifier(Self.bookmarkIdentifier)
         bookmarkButton.railStyle = .bookmark
-        queueButton.nextKeyView = manualAdvanceButton
-        manualAdvanceButton.nextKeyView = skimButton
-        skimButton.nextKeyView = previousButton
+        // Tab order: Queue, Skim, Start From Top, Previous, Play or Pause, Next, Advance Segment,
+        // Volume, then the right group. The "dwb+ on" label is text and is not in the chain.
+        queueButton.nextKeyView = skimButton
+        skimButton.nextKeyView = startFromTopButton
+        startFromTopButton.nextKeyView = previousButton
         previousButton.nextKeyView = playPauseButton
         playPauseButton.nextKeyView = nextButton
-        nextButton.nextKeyView = volumeButton
+        nextButton.nextKeyView = manualAdvanceButton
+        manualAdvanceButton.nextKeyView = volumeButton
         volumeButton.nextKeyView = fullscreenButton
         fullscreenButton.nextKeyView = bookmarkButton
         bookmarkButton.nextKeyView = settingsButton
+
+        backgroundAudioLabel.isHidden = true
+        addSubview(backgroundAudioLabel)
 
         durationLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
         durationLabel.alignment = .center
@@ -163,25 +179,35 @@ final class BottomRailView: NSView {
         var x = (width - geometry.centeredWidth) / 2
         let y: CGFloat = 3
         queueButton.frame = NSRect(x: side, y: y + 3, width: button, height: button)
-        manualAdvanceButton.frame = NSRect(x: side + button + gap, y: y + 3, width: button, height: button)
         fullscreenButton.frame = NSRect(x: max(side, width - side - button), y: y + 3, width: button, height: button)
         settingsButton.frame = NSRect(x: max(side, fullscreenButton.frame.minX - gap - button), y: y + 3, width: button, height: button)
-        for control in [skimButton, previousButton] {
+        for control in [skimButton, startFromTopButton, previousButton] {
             control.frame = NSRect(x: x, y: y + 3, width: button, height: button)
             x += button + gap
         }
         playPauseButton.frame = NSRect(x: x, y: y, width: play, height: play)
         x += play + gap
-        for control in [nextButton, volumeButton] {
+        for control in [nextButton, manualAdvanceButton, volumeButton] {
             control.frame = NSRect(x: x, y: y + 3, width: button, height: button)
             x += button + gap
         }
-        // Bookmark sits immediately before Settings. It is the first rail
-        // button to hide: when the rail is too narrow, it would overlap the
-        // centered transport group, so it is hidden instead.
+        // Bookmark sits immediately before Settings, and the "dwb+ on" label immediately before
+        // Bookmark. When the rail is too narrow, an item that would overlap the centered transport
+        // group is hidden instead: the label first, then Bookmark.
         let bookmarkX = settingsButton.frame.minX - gap - button
         bookmarkButton.frame = NSRect(x: bookmarkX, y: y + 3, width: button, height: button)
-        bookmarkButton.isHidden = bookmarkX < x
+        let labelSize = backgroundAudioLabel.contentSize
+        let labelX = bookmarkX - gap - labelSize.width
+        backgroundAudioLabel.frame = NSRect(x: labelX,
+                                            y: y + 3 + (button - labelSize.height) / 2,
+                                            width: labelSize.width,
+                                            height: labelSize.height)
+        let visibility = PlaybackBarPresentation.rightGroupVisibility(labelWanted: wantsBackgroundAudioLabel,
+                                                                      labelX: labelX,
+                                                                      bookmarkX: bookmarkX,
+                                                                      centerEndX: x)
+        bookmarkButton.isHidden = !visibility.showsBookmark
+        backgroundAudioLabel.isHidden = !visibility.showsBackgroundAudioLabel
 
         for (label, cell) in zip(markerLabels, geometry.markerCells) {
             label.frame = cell
@@ -206,6 +232,8 @@ final class BottomRailView: NSView {
         previousButton.isEnabled = controller?.hasPrevious ?? false
         nextButton.isEnabled = controller?.hasNext ?? false
         manualAdvanceButton.isEnabled = controller?.canManuallyAdvanceProgressiveRandomSkimSegment ?? false
+        startFromTopButton.isEnabled = controller?.canStartQueueFromTop ?? false
+        updateBackgroundAudioLabel()
         updateSkimButton()
         updateBookmarkButton()
         let isShowingDuration = updateDurationLabel()
@@ -306,6 +334,14 @@ final class BottomRailView: NSView {
                                      help: "Mute or Unmute")
     }
 
+    /// The "dwb+ on" label shows only while this window's background track is playing.
+    private func updateBackgroundAudioLabel() {
+        let wanted = PlaybackBarPresentation.showsBackgroundAudioLabel(for: controller?.backgroundAudioState ?? .inactive)
+        guard wanted != wantsBackgroundAudioLabel else { return }
+        wantsBackgroundAudioLabel = wanted
+        needsLayout = true
+    }
+
     private func updateBookmarkButton() {
         let url = controller?.currentMediaURL
         let state = (enabled: url != nil,
@@ -353,11 +389,67 @@ final class BottomRailView: NSView {
     @objc private func skimTapped() { controller?.toggleSkimEnabled(source: "top-bar") }
     @objc private func playPauseTapped() { controller?.togglePlayPause() }
     @objc private func nextTapped() { controller?.playNext() }
+    @objc private func startFromTopTapped() { controller?.startQueueFromTop() }
     @objc private func volumeTapped() { controller?.toggleMuteFromTransport() }
     @objc private func fullscreenTapped() { window?.toggleFullScreen(nil) }
     @objc private func bookmarkTapped() { controller?.toggleBookmark() }
     @objc private func settingsTapped() { SettingsWindowController.shared.openSettings() }
     @objc private func manualAdvanceTapped() { controller?.manuallyAdvanceProgressiveRandomSkimSegment() }
+}
+
+/// The rail's "dwb+ on" label (design system 9.8): plain 11 pt text, "dwb+" semibold `textSecondary`
+/// then "on" regular `textTertiary`, 4 pt apart. It is not a button and not in the Tab order. The rail
+/// shows it only while this window's background track plays.
+final class RailBackgroundAudioLabel: NSView {
+    static let spokenText = "dwb+ on"
+    private static let gap: CGFloat = 4
+
+    private let brandFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    private let stateFont = NSFont.systemFont(ofSize: 11, weight: .regular)
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        toolTip = "dwb+ background audio is playing"
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(Self.spokenText)
+        DWBAccessibility.observe(self, selector: #selector(accessibilityDidChange))
+    }
+
+    convenience init() { self.init(frame: .zero) }
+
+    required init?(coder: NSCoder) { fatalError("programmatic only") }
+
+    private func attributes(font: NSFont, color: NSColor) -> [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: color]
+    }
+
+    private var brandAttributes: [NSAttributedString.Key: Any] {
+        attributes(font: brandFont, color: DWBAccessibility.textSecondary)
+    }
+
+    private var stateAttributes: [NSAttributedString.Key: Any] {
+        attributes(font: stateFont, color: DWBAccessibility.textTertiary)
+    }
+
+    var contentSize: NSSize {
+        let brand = ("dwb+" as NSString).size(withAttributes: [.font: brandFont])
+        let state = ("on" as NSString).size(withAttributes: [.font: stateFont])
+        return NSSize(width: ceil(brand.width) + Self.gap + ceil(state.width),
+                      height: ceil(max(brand.height, state.height)))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let brand = ("dwb+" as NSString)
+        let brandSize = brand.size(withAttributes: brandAttributes)
+        brand.draw(at: NSPoint(x: 0, y: floor((bounds.height - brandSize.height) / 2)), withAttributes: brandAttributes)
+        let state = ("on" as NSString)
+        let stateSize = state.size(withAttributes: stateAttributes)
+        state.draw(at: NSPoint(x: ceil(brandSize.width) + Self.gap, y: floor((bounds.height - stateSize.height) / 2)),
+                   withAttributes: stateAttributes)
+    }
+
+    @objc private func accessibilityDidChange() { needsDisplay = true }
 }
 
 /// One planned Progressive Random Skim segment on the scrub bar, as fractions (0...1) of the media.

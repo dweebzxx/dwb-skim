@@ -20,6 +20,7 @@ final class ShortcutCommandTableTests: XCTestCase {
         "nextSkimSegment|Next Progressive Random Skim segment|Skim|right|editable|player/notEditing/on|-",
         "previousItem|Previous item|Navigation|,|editable|player/notEditing/any|-",
         "nextItem|Next item|Navigation|.|editable|player/notEditing/any|-",
+        "startQueueFromTop|Start queue from top|Navigation|p|editable|player/notEditing/any|-",
         "moveBetweenSettingsPages|Move between Settings pages|Navigation|up down|fixed|settings/notEditing/any|-",
         "openFile|Open\u{2026}|File actions|command+o|editable|player/notEditing/any|any/any/any",
         "renameFile|Rename file|File actions|r|editable|player/notEditing/any|any/any/any",
@@ -92,6 +93,27 @@ final class ShortcutCommandTableTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testStartQueueFromTopIsAnEditableNavigationCommandAfterNextItem() {
+        let command = ShortcutCommandTable.command(.startQueueFromTop)
+        XCTAssertEqual(command.name, "Start queue from top")
+        XCTAssertEqual(command.group, .navigation)
+        XCTAssertEqual(command.defaultKeys, [.bare("p")])
+        XCTAssertTrue(command.isEditable)
+        XCTAssertEqual(command.keyHandlerContext, .playerKey)
+        XCTAssertNil(command.menuContext)
+        XCTAssertEqual(command.contextText,
+                       "Restarts the queue from the top. Does nothing while a text field is being edited.")
+        let ids = ShortcutCommandTable.all.map(\.id)
+        XCTAssertEqual(ids.firstIndex(of: .startQueueFromTop), ids.firstIndex(of: .nextItem).map { $0 + 1 })
+    }
+
+    func testNoOtherCommandClaimsPInAnOverlappingContext() {
+        let claimants = ShortcutCommandTable.all.filter { $0.defaultKeys.contains(.bare("p")) }.map(\.id)
+        XCTAssertEqual(claimants, [.startQueueFromTop])
+        // The existing overlap check (every shared default key must be in contexts that never overlap)
+        // is `testNoDefaultKeyIsUsedByTwoCommandsThatCanBeActiveTogether`.
     }
 
     func testTheSharedDefaultKeysAreTheSeekAndSegmentArrowAndTheTwoUndos() {

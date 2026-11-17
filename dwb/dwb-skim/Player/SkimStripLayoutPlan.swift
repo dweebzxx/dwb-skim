@@ -33,6 +33,19 @@ struct SkimStripLayoutPlan: Equatable {
         return width
     }
 
+    /// The spare width each gap between visible groups gains so the row spans the whole strip
+    /// (design system 9.8: every group keeps its natural size and the spare width is shared equally
+    /// between the groups). `advances` are the natural advances of all groups, in order. A gap that
+    /// holds a divider splits its share on both sides of the divider, so the divider stays centered.
+    func spareShare(advances: [CGFloat], stripWidth: CGFloat) -> CGFloat {
+        let gaps = visibleCount - 1
+        guard gaps > 0, advances.count >= visibleCount else { return 0 }
+        var room = stripWidth - Metrics.leadingInset - Metrics.trailingInset - Metrics.collapseControl - Metrics.trailingGap
+        if hasOverflow { room -= Metrics.overflowControl + Metrics.trailingControlGap }
+        let used = advances.prefix(visibleCount).reduce(0, +)
+        return max(0, (room - used) / CGFloat(gaps))
+    }
+
     /// Keeps as many leading groups as fit. Everything fits in the full row at wide sizes; when it
     /// does not, the overflow button's slot is reserved and the trailing groups move into the popover.
     static func make(advances: [CGFloat], stripWidth: CGFloat) -> SkimStripLayoutPlan {
