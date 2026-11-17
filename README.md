@@ -1,122 +1,143 @@
+<p align="center">
+  <img src="docs/images/dwb-skim-icon.png" alt="dwb skim app icon" width="144">
+</p>
+
 <h1 align="center">dwb skim</h1>
 
 <p align="center">
-  A native macOS skim-review application for rapidly reviewing local media queues.
+  A native macOS app for quickly reviewing local videos with short previews, alongside images and GIFs.
+</p>
+
+<p align="center">
+  <img src="docs/images/queue-review.png" alt="dwb skim main window with a video preview playing, the Skim strip above it, and the queue panel on the right" width="900">
 </p>
 
 ## Overview
 
-`dwb skim` is a focused Swift/AppKit application for reviewing local video, image, and GIF files on macOS 13 and newer. It uses VLCKit for video playback, keeps playback and background-audio ownership per window, and performs all review/file operations locally.
+dwb skim is a native Swift/AppKit app for macOS 13 and newer, built for going through a pile of local media fast. Each video plays a short preview, then the queue moves on. While a file is on screen, one key adds a prefix to its name, right in your folder. Playback is powered by VLCKit.
 
-The app does not stream, sync to a cloud service, transcode media, or copy selected background-audio files.
+It is local-only: no streaming, cloud library, accounts, telemetry, transcoding, or editing.
 
-## Review Workflow
+> **Current version:** v1.2.4 (build 65). See [CHANGELOG.md](CHANGELOG.md) for what is new.
 
-- Open or drop files and folders; supported folders expand recursively while retaining the original root in the queue panel.
-- Configure video preview duration and start behavior, still-image duration in seconds, GIF loop count, Sequential/Shuffle/Weighted queue order, and Loop Queue from the responsive strip above the player.
-- Relocate the active preview range by clicking or dragging the full-duration scrubber.
-- Apply `keep_` with `K`, apply the filename-only `delete_` action with `D`, rename with `R`, and undo the last review rename with `Z`.
-- Use **Delete Selected** in the queue footer to move media to Trash. This is intentionally separate from the `delete_` filename prefix.
+## Features
 
-Review renames happen immediately in the source directory. Custom rename preserves the original extension, and every app-owned rename updates the existing queue item in place: the complete Sequential, Shuffle, or Weighted lineup, current item, and queue selection stay where they were. Filename styling uses Periwinkle `#4C62A8` for `keep_`, Dark Teal `#254F58` for Rename and configured custom-rename prefixes, and Burnt Orange `#8F4218` for `delete_`.
+**Skim previews**
+- A Skim strip above the video sets the clip length (fixed, or random between a minimum and a maximum), the start point (beginning or random), and Skip Intro. The strip also holds image duration, GIF loops, queue order, Loop Queue, and Progressive Random Skim. Change any value there and a short message confirms it.
+- **Progressive Random Skim** samples several parts of one video, in order, before moving to the next file. Coverage runs from Light to Max, and ticks on the scrubber show where each part starts. **→** jumps to the next part.
+- Turn Skim on and off with the Skim button or a double-tap of either **Option** key. With Skim off, the video plays in full.
+- Drag or click the scrubber to move the preview to a different part of the video.
+- Play/Pause stops the whole session, including preview timers and background audio, and resumes with the time that was left.
 
-## Player And Queue
+**Playback**
+- Local video (`mp4`, `m4v`, `mov`, `avi`, `mkv`, `wmv`, `ts`, `mts`, `mpg`, `ogv`, and more), still images (`jpg`, `png`, `heic`, `webp`, `tiff`, `bmp`), and animated GIFs. Settings controls which types the queue accepts.
+- Drag and drop, File > Open, Finder Open With for video, and recursive folder import. Dropping a folder switches the queue to Shuffle.
+- Play/pause, previous/next, 10-second jumps with Skim off, Start From Top, speed, Fit/Fill/Stretch, and fullscreen.
+- Per-window volume (up to 200%) with a volume meter, speed, and opacity. An optional **Normalize video audio** setting evens out loudness and never touches your background track.
+- Media that cannot be played shows a short message and the queue moves on to the next item.
 
-The player overlay’s logical order is **Queue → Skim → Previous → Play/Pause → Next → Volume → Fullscreen**. Queue remains at the far left and Fullscreen at the far right; Skim through Volume are independently centered as a group. Compact status markers above the controls show Clip Duration, Start Position, Skip Intro, and Queue Order. Clip Duration and Start Position remain visible but muted when Skim is off. The top Skim controls can be hidden with their chevron and restored from the small top-edge handle without changing settings or playback. The Skim button exposes an explicit On/Off state and shares its action with the application-local **Double-tap Option** shortcut; either Option key works only while the app and a player window are active. Option-modified typing and commands remain untouched. Scrolling over video still adjusts video volume and briefly shows a non-interactive level/mute meter; there is no persistent player-page volume slider. The full-duration scrubber highlights and relocates the active video preview range without a persistent timestamp row. Removed controls such as Replay, standalone Shuffle, and fixed-duration rewind/fast-forward commands are not exposed or persisted.
+**Queue**
+- A queue panel with search, sorting (name, size, duration, or manual drag order), bookmarks and a bookmark filter, and total duration.
+- **Sequential**, **Shuffle**, and **Weighted** order, which favors the media that has waited longest since it played. **Loop Queue** starts the queue again when it ends.
+- Reveal in Finder, rename, remove from the queue, rescan folders, and Clear Queue. Removing an item from the queue never touches its file.
+- A resizable panel: drag its edge to make it narrower.
 
-Clicking the Dock icon while `dwb skim` is already running brings the current player window forward instead of opening a duplicate: the key player window is preferred, otherwise the most recently active one, and a minimized or hidden window is restored in place with its window state, queue, and playback intact. A Dock click creates a player window only when no player window exists at all. **File > New Window** still opens an additional player window on demand.
+**File markers**
+- Two prefixes you choose in Settings, for example `keep_` and `delete_`. **N** applies the primary and **M** the secondary. Press the same key again to remove the prefix, or the other key to swap it.
+- The same prefix buttons sit in the queue panel footer and work on every selected row. A confirmation sheet lists the files before a batch rename.
+- **⌘Z** undoes the last prefix change, with an Undo button in the toast. If a file has moved, undo stops and tells you.
+- An optional **Advance after prefix** setting plays the next item after a prefix is added.
+- **R** renames the current file and keeps its extension.
+- **dwb skim never deletes files or moves them to the Trash.** Every file action is a rename inside the file's own folder.
 
-Skip Intro excludes the configured number of seconds from the beginning of every video. With Beginning selected, playback starts at that boundary; with Random selected, the boundary becomes the lower limit of a random range whose upper limit leaves room for the chosen fixed or random preview duration. Each video session retains one media-bound start intent until VLCKit confirms the requested offset, with bounded same-session retries if a reused or fresh player resets to zero.
+**dwb+ background audio**
+- Play one MP3 or M4A track on a loop, across every item in the window. The app remembers where the file is and never copies it.
+- Play the track alone while the video audio is off, or mix it with the video audio. Background volume is separate from video volume.
+- A small "dwb+ on" label on the rail shows when the track is playing.
+- A missing or unreadable track shows an unavailable state and never interrupts your review.
 
-Turning Skim off cancels only Skim-owned preview timing and lets the current media continue at its existing position. Subsequent video assignments use normal full playback until Skim is enabled again; enabling it does not seek or restart the current item, and preserved Clip Duration and Start Position settings apply to the next assignment. Clip Duration and Start Position controls are gray and unavailable while Skim is off; Skip Intro and unrelated player controls remain available.
+**Windows and controls**
+- Up to five independent player windows, each with its own queue, VLCKit player, volume, and speed, and a Command-4 Four Window Grid.
+- A playback rail along the bottom of the video, with Queue, Skim, Start From Top, Previous, Play/Pause, Next, Advance Segment, and Volume in the middle. Bookmark, Settings, and Fullscreen sit on the right. Optional auto-hide keeps the rail out of the way.
+- The Skim strip hides with a chevron. In a narrow window, the last settings move into a "More Skim settings" menu.
+- Window > Keep Window On Top, Hide Title Bar (Complete Video Mode), and optional title bar auto-hide.
+- Clicking the Dock icon brings your existing window forward and restores it if it was minimized.
+- A standard Edit menu with Undo, Redo, Cut, Copy, Paste, and Select All for text fields.
+- A Debug Console that keeps recent warnings and errors in memory even when it is closed.
 
-Play/Pause controls the complete window-owned session. Pausing freezes video, still-image and GIF progression, Skim+ audio, preview deadlines, and pending automatic advancement. Navigation remains available while paused, but the selected item and its countdown stay suspended until resume, which continues with the remaining duration.
+**Settings and shortcuts**
+- Settings has eight pages in three groups: Playback, Appearance & Controls, Queue & Files, Shortcuts, Skim Preview, dwb+, Advanced, and About.
+- **Customizable keyboard shortcuts.** Settings > Shortcuts lists every shortcut, with a keyboard map and search. Click a key to change or remove it, add more keys to an action, or assign an unassigned action. Keys that conflict with another action, or that cannot be delivered reliably, are refused. Command-X, C, V, A, Z, and Shift-Command-Z stay reserved for text editing.
+- Shortcut changes apply to dwb skim only. They update the menus and tooltips, persist across launches, and are cleared by Restore Defaults on the Shortcuts page or by Restore Default Settings on the Advanced page.
+- The Advanced page holds the debug console toggle, Clear All Bookmarks, and Restore Default Settings. About shows the version, license, minimum macOS, and the VLCKit and VLC backend versions.
 
-The hideable right queue panel uses a flat compact list with filename, duration, and file size, separated from the media by a restrained divider only while the queue is visible. The current item remains in that list with an active background, left indicator, and play indicator. Search, sorting, bookmark filtering, manual reorder, folder rescan, Clear Queue, and immediate review renames remain available.
+## Default keys
 
-Queue order modes are:
+| Key | What it does |
+| :--- | :--- |
+| **N** / **M** | Add, remove, or swap the primary / secondary prefix |
+| **⌘Z** | Undo the last prefix change |
+| **R** | Rename the current file |
+| **B** | Add or remove a bookmark |
+| **,** / **.** | Previous / next item |
+| **P** | Start the queue again from the top |
+| **Space** | Play or pause |
+| **← / →** | Skim off: jump 10 seconds. Progressive Random Skim on: **→** goes to the next part |
+| **Q** | Show or hide the queue panel |
+| **F** | Fullscreen |
+| **⌘N** / **⌘4** | New window / Four Window Grid |
+| **Option, twice** | Turn Skim on or off |
 
-- **Sequential**: current manual/sorted traversal order.
-- **Shuffle**: randomized queue cycles.
-- **Weighted**: prioritizes media that has waited longest since playback.
+Scroll over the video to change the volume. Double-click the video for fullscreen.
 
-## Skim+
+## Screenshots
 
-Settings > Skim+ accepts one MP3 or M4A background track using a macOS security-scoped bookmark. Each player window owns an independent continuously looping audio player. The track continues across queue transitions and over video, images, and GIFs.
+<p align="center">
+  <img src="docs/images/empty-queue.png" alt="dwb skim before any media is added, with an empty queue and an Add Media button" width="900">
+</p>
 
-The two mix modes are:
+<p align="center">
+  <img src="docs/images/settings-skim-preview.png" alt="dwb skim Settings window showing the Skim Preview page" width="560">
+</p>
 
-- **Uploaded Audio Only**: video playback continues while video audio is temporarily suppressed.
-- **Video + Uploaded Audio**: video and uploaded audio play together.
+<p align="center">
+  <img src="docs/images/settings-playback.png" alt="dwb skim Settings window showing the Playback page" width="440">
+  &nbsp;
+  <img src="docs/images/settings-dwb-plus.png" alt="dwb skim Settings window showing the dwb+ page" width="440">
+</p>
 
-Background-audio volume is independent from video volume and is available only on the Skim+ page. Missing, moved, unsupported, or inaccessible files produce an unavailable state without interrupting normal media review.
+## Download
 
-## Settings
+There is no packaged download yet. Build the app from source (below).
 
-The dark Settings window uses this sidebar order:
+## Build From Source
 
-1. Playback
-2. Skim Preview
-3. Skim+
-4. Controls
-5. Queue & Files
-6. Shortcuts
-7. Advanced
-8. About
-
-The Settings window restores the last selected category and uses one trailing-label, leading-control form grid per scrollable detail pane; controls retain their existing immediate persistence and notification behavior. The inline strip and Settings window share the same normalized `UserDefaults` state and notification path, so Skim enabled state, image seconds, GIF loops, queue order, and the native Loop queue switches synchronize across existing player windows. Playback Settings also provides persistent, default-off **Normalize video audio**, which adapts VLCKit video gain in real time and never processes or changes Skim+ background audio. The four read-only playback markers span the full playback rail between Queue and Fullscreen, sharing its horizontal bounds while the five middle controls remain centered.
-
-## Requirements
-
-- macOS 13 or newer
-- Xcode with command line tools
-- Swift 5.9-compatible toolchain
-- Network access for Swift Package Manager on the first build
-- `xcodegen` to regenerate `dwb/dwb-skim.xcodeproj` from `dwb/project.yml`
-
-## Build And Test
-
-From the repository root:
+Requirements: macOS 13 or newer, Xcode with command line tools, `xcodegen`, and a Swift 5.9-compatible toolchain. The first build needs network access so Swift Package Manager can fetch the VLCKit package (`vlckit-spm` 3.6.0 or newer).
 
 ```sh
-dwb/tools/generate-project.zsh
-dwb/tools/clean-build-app.zsh
-dwb/tools/clean-test.zsh
+./dwb/scripts/clean-build-app.zsh
 ```
 
-`clean-build-app.zsh` copies the verified app to `dist/dwb skim.app`. The canonical direct app build is:
+The app is written to `dist/dwb skim.app`. To regenerate the Xcode project after editing `dwb/project.yml`:
 
 ```sh
-xcodebuild -project dwb/dwb-skim.xcodeproj -scheme dwb-skim -configuration Debug -destination 'platform=macOS' build
+./dwb/scripts/generate-project.zsh
 ```
 
-### Video audio normalizer verification
-
-Run this deterministic, fixture-free check from the repository root:
+To run the unit tests:
 
 ```sh
-./dwb/tools/verify-volume-normalizer.zsh
+./dwb/scripts/clean-test.zsh
 ```
 
-It compiles and evaluates the production normalization policy with synthetic LUFS measurements, printing quiet/target/loud gain decisions plus clamp, bypass, invalid-measurement, and repeatability checks. It verifies the policy and equalizer gain command that the app applies, not decoded or speaker-rendered acoustic output.
+## Release and Signing
 
-## Project Structure
+dwb skim has no release builds yet. Local builds are not code signed, notarized, or sandboxed.
 
-```text
-dwb/
-  project.yml
-  dwb-skim.xcodeproj/
-  dwb-skim/
-    App/
-    Player/
-    Resources/
-  dwb-skimTests/
-docs/
-  skim-m1-plan.md
-```
+## Help and Feedback
 
-`dist/`, `.tmp/`, DerivedData, build logs, archives, signing material, and local user state are ignored by git.
+Found a problem? [Report an issue](https://github.com/dweebzxx/dwb-skim/issues).
 
 ## License
 
-This repository is licensed under the MIT License; VLCKit, libVLC, and other third-party dependencies retain their own licenses.
+MIT. See [LICENSE](LICENSE). The license covers this app's source code, not VLCKit, libVLC, or other third-party dependencies.

@@ -15,7 +15,9 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         /// `DWBSegmentedControl` small: 20 pt segments plus its 2 pt frame on each side.
         static let segmentedControl: CGFloat = 24
         static let numberField: CGFloat = 44
-        static let numberFieldWithStepper: CGFloat = 58
+        /// Field, gap, and stepper.
+        static let numberFieldWithStepper: CGFloat = 68
+        static let numberFieldStepperGap: CGFloat = 10
         static let popUp: CGFloat = 104
         static let collapseButton = SkimStripLayoutPlan.Metrics.collapseControl
         static let overflowButton = SkimStripLayoutPlan.Metrics.overflowControl
@@ -447,12 +449,12 @@ final class SkimSettingsStripView: NSView, NSTextFieldDelegate {
         return stack
     }
 
-    /// A number field with its stepper attached: 58 pt wide in all (44 pt field plus stepper).
+    /// A number field with its stepper beside it: 68 pt wide in all (44 pt field, 10 pt gap, stepper).
     private func numberField(_ field: SkimNumberField, stepper: NSStepper) -> NSView {
         let stack = NSStackView(views: [field, stepper])
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 0
+        stack.spacing = Metrics.numberFieldStepperGap
         stack.widthAnchor.constraint(equalToConstant: Metrics.numberFieldWithStepper).isActive = true
         return stack
     }

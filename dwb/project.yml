@@ -36,7 +36,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: dwb-skim/Resources/Info.plist
-        MARKETING_VERSION: "1.2.1"
+        MARKETING_VERSION: "1.2.4"
         CURRENT_PROJECT_VERSION: "65"
         PRODUCT_BUNDLE_IDENTIFIER: com.dwb.skim
         PRODUCT_NAME: "dwb skim"
